@@ -186,6 +186,36 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     info!("Seeded 32 freelancer companies with startup loans, mine facilities, and Iron Ore deposits.");
 
+    // 9. Seed one consumer company per city representing local population demand.
+    //    Each consumer is funded by a per-capita city treasury (population × 10 credits).
+    //    They don't receive loans — they represent collective purchasing power.
+    for &city_id in &city_ids {
+        // Fetch city population for this city_id
+        let (pop,): (i64,) = sqlx::query_as("SELECT population FROM cities WHERE id = $1")
+            .bind(city_id)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        let treasury = pop as f64 * 10.0; // starting credits = population × 10
+        let company_name = format!("City {} Consumers", city_id);
+
+        sqlx::query(
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        )
+        .bind(&company_name)
+        .bind("consumer")
+        .bind(city_id)
+        .bind(treasury)
+        .bind(0.0_f64)
+        .bind("A") // consumers are always good for their purchases
+        .bind(1_i64)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    info!("Seeded 32 consumer companies (one per city).");
+
     tx.commit().await?;
     info!("Seeding complete! Universe is ready.");
 

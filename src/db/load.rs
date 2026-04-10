@@ -162,5 +162,15 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.recipes.len(), "Loaded recipes.");
 
+    // ── Consumer company index ────────────────────────────────────────────────
+    // Build a fast city_id → company_id map for the consumption phase.
+    for (id, company) in &state.companies {
+        if company.company_type == "consumer" {
+            state.city_consumer_ids.insert(company.home_city_id, *id);
+        }
+    }
+
+    info!(count = state.city_consumer_ids.len(), "Indexed consumer companies.");
+
     Ok(state)
 }
