@@ -135,6 +135,9 @@ pub struct SimState {
     /// In-memory buffer of market history deltas — flushed every N ticks.
     pub market_history_buffer: Vec<MarketHistory>,
 
+    /// Maps city_id → consumer company_id for fast lookup in the consumption phase.
+    pub city_consumer_ids: HashMap<i32, i32>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 }
@@ -158,6 +161,7 @@ impl SimState {
             recipes: HashMap::new(),
             market_orders: HashMap::new(),
             market_history_buffer: Vec::new(),
+            city_consumer_ids: HashMap::new(),
             next_order_id: 1,
         }
     }
