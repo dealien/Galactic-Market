@@ -42,6 +42,13 @@ impl SimState {
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
             let summary = self.generate_summary();
+            let ingots_fmt = summary
+                .ingot_prices
+                .iter()
+                .map(|(name, price)| format!("{}: {:.2}", name, price))
+                .collect::<Vec<_>>()
+                .join(", ");
+
             info!(
                 tick = summary.tick,
                 cash = %format!("{:.0}", summary.total_cash),
@@ -50,7 +57,7 @@ impl SimState {
                 orders = summary.active_orders,
                 volume = summary.trade_volume,
                 ore_price = %format!("{:.2}", summary.avg_ore_price),
-                ingot_price = %format!("{:.2}", summary.avg_ingot_price),
+                ingots = %ingots_fmt,
                 "=== Economic Pulse ==="
             );
             self.flush(pool).await?;

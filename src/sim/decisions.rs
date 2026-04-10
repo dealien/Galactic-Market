@@ -64,28 +64,41 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         // ─── Consumer AI ──────────────────────────────────────────────────────
         if company_type == "consumer" {
-            // Consumers represent the population. They buy end products.
+            // Consumers represent the population. They buy refined products and consumer goods.
             let cash = state.companies.get(&company_id).unwrap().cash;
-            if cash > 10.0 {
-                let r_id = 4; // Iron Ingots (Iron Ore is 1, Iron Ingot is 4)
-                let target_price = last_prices.get(&(city_id, r_id)).copied().unwrap_or(20.0);
 
-                // Cap the maximum willingness to pay to prevent runaway inflation
-                let max_willingness_to_pay = 150.0;
-                let bid_price = (target_price * 1.02).min(max_willingness_to_pay);
+            // Target all available refined or consumer products
+            let target_ids: Vec<i32> = state
+                .resource_types
+                .values()
+                .filter(|r| r.category == "Refined Material" || r.category == "Consumer Good")
+                .map(|r| r.id)
+                .collect();
 
-                let qty = ((cash * 0.5) / bid_price) as i64;
-                if qty > 0 {
-                    orders_to_post.push(MarketOrder {
-                        id: 0, // Assigned later
-                        city_id,
-                        company_id,
-                        resource_type_id: r_id,
-                        order_type: "buy".into(),
-                        price: bid_price,
-                        quantity: qty,
-                        created_tick: current_tick,
-                    });
+            if cash > 10.0 && !target_ids.is_empty() {
+                // Split budget among all products
+                let budget_per_product = (cash * 0.5) / target_ids.len() as f64;
+
+                for &r_id in &target_ids {
+                    let target_price = last_prices.get(&(city_id, r_id)).copied().unwrap_or(20.0);
+
+                    // Cap the maximum willingness to pay to prevent runaway inflation
+                    let max_willingness_to_pay = 250.0;
+                    let bid_price = (target_price * 1.02).min(max_willingness_to_pay);
+
+                    let qty = (budget_per_product / bid_price) as i64;
+                    if qty > 0 {
+                        orders_to_post.push(MarketOrder {
+                            id: 0,
+                            city_id,
+                            company_id,
+                            resource_type_id: r_id,
+                            order_type: "buy".into(),
+                            price: bid_price,
+                            quantity: qty,
+                            created_tick: current_tick,
+                        });
+                    }
                 }
             }
         }
@@ -151,11 +164,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     && inv.quantity > 0
                 {
                     // Cost-disciplined pricing:
-                    let base_ask = cost * 1.2;
+                    let base_ask = cost * 1.15;
                     let market_price = last_prices
                         .get(&(city_id, res_id))
                         .copied()
-                        .unwrap_or(base_ask);
+                        .unwrap_or(base_ask * 1.5);
 
                     let facility_capacity = state
                         .facilities
@@ -164,10 +177,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .unwrap_or(10);
 
                     // Desperation Logic: If inventory is high, discount aggressively to liquidate.
-                    let ask_price = if inv.quantity > (facility_capacity * 2) as i64 {
-                        cost * 1.08 // Liquidate quickly
+                    // If margin is razor thin, we be extra aggressive on clearing stock.
+                    let ask_price = if inv.quantity > (facility_capacity * 5) as i64 {
+                        cost * 1.01 // Clear it out near cost
+                    } else if inv.quantity > (facility_capacity * 2) as i64 {
+                        base_ask.min(market_price * 0.90) // Under-cut heavily
                     } else if inv.quantity > facility_capacity as i64 {
-                        base_ask.min(market_price * 0.92) // Keep undercutting
+                        base_ask.min(market_price * 0.95) // Keep undercutting
                     } else {
                         base_ask.max(market_price)
                     };

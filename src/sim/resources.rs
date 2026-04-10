@@ -105,15 +105,19 @@ pub fn run_extraction(state: &mut SimState) {
             .unwrap_or(deposit.extraction_cost_per_unit * 1.5);
 
         // Dynamic Throttle: Stop producing if profit margins are extremely low and we have a moderate surplus.
-        if market_price <= deposit.extraction_cost_per_unit * 1.1
-            && current_inv > (capacity * 5) as i64
+        // Or if inventory is actually full (10x capacity).
+        if market_price <= deposit.extraction_cost_per_unit * 1.05
+            && current_inv > (capacity * 2) as i64
         {
-            debug!("Throttling extraction due to low profit vs surplus");
+            debug!(
+                company_id,
+                current_inv, "Throttling extraction due to near-zero profit vs surplus"
+            );
             continue;
         }
 
         if current_inv > (capacity * 10) as i64 {
-            debug!(current_inv, "Skipping extraction due to full stockpile");
+            debug!(current_inv, "Skipping extraction due to massive stockpile");
             continue;
         }
 

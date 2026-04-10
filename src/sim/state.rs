@@ -10,6 +10,14 @@ pub struct City {
     pub population: i64,
 }
 
+/// A resource type in the simulation.
+#[derive(Debug, Clone)]
+pub struct ResourceType {
+    pub id: i32,
+    pub name: String,
+    pub category: String,
+}
+
 /// An economic actor (freelancer, company, corp, megacorp).
 #[derive(Debug, Clone)]
 pub struct Company {
@@ -147,6 +155,9 @@ pub struct SimState {
     /// Exponential Moving Average (EMA) price cache.
     pub ema_prices: HashMap<(i32, i32), f64>,
 
+    /// Metadata for all resource types.
+    pub resource_types: HashMap<i32, ResourceType>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 }
@@ -173,6 +184,7 @@ impl SimState {
             city_consumer_ids: HashMap::new(),
             price_cache: HashMap::new(),
             ema_prices: HashMap::new(),
+            resource_types: HashMap::new(),
             next_order_id: 1,
         }
     }
@@ -195,7 +207,7 @@ pub struct TickSummary {
     pub active_orders: usize,
     pub trade_volume: i64,
     pub avg_ore_price: f64,
-    pub avg_ingot_price: f64,
+    pub ingot_prices: HashMap<String, f64>,
 }
 
 impl SimState {
@@ -216,9 +228,24 @@ impl SimState {
             summary.total_inventory += inv.quantity;
         }
 
-        // Use the persistent price cache for averages
-        summary.avg_ore_price = self.price_cache.get(&(1, 1)).copied().unwrap_or(0.0); // Simple proxy for first city
-        summary.avg_ingot_price = self.price_cache.get(&(1, 4)).copied().unwrap_or(0.0);
+        // Use the persistent price cache for averages across all cities
+        let mut ore_total = 0.0;
+        let mut ore_count = 0;
+
+        for (&(_city_id, res_id), &price) in &self.price_cache {
+            if let Some(res) = self.resource_types.get(&res_id) {
+                if res.category == "Raw Material" {
+                    ore_total += price;
+                    ore_count += 1;
+                } else if res.category == "Refined Material" {
+                    summary.ingot_prices.insert(res.name.clone(), price);
+                }
+            }
+        }
+
+        if ore_count > 0 {
+            summary.avg_ore_price = ore_total / ore_count as f64;
+        }
 
         // Volume from the latest buffer entries
         summary.trade_volume = self.market_history_buffer.iter().map(|h| h.volume).sum();
