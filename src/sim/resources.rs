@@ -1,4 +1,4 @@
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::sim::state::{Inventory, SimState};
 
@@ -51,11 +51,11 @@ pub fn run_extraction(state: &mut SimState) {
     }
 
     for (_facility_id, city_id, company_id, capacity, target_resource_id) in active_mines {
-        info!(city_id, company_id, "Processing miner info");
+        debug!(city_id, company_id, "Processing miner info");
         let planet_id = match state.cities.get(&city_id) {
             Some(c) => c.body_id,
             None => {
-                info!(city_id = city_id, "City not found for facility");
+                debug!(city_id = city_id, "City not found for facility");
                 continue;
             }
         };
@@ -67,11 +67,9 @@ pub fn run_extraction(state: &mut SimState) {
         });
 
         if deposit.is_none() {
-             info!(
-                city_id, 
-                planet_id, 
-                target_resource_id, 
-                "No eligible deposit found for miner"
+            debug!(
+                city_id,
+                planet_id, target_resource_id, "No eligible deposit found for miner"
             );
         }
 
@@ -80,7 +78,7 @@ pub fn run_extraction(state: &mut SimState) {
             None => continue,
         };
 
-        info!(deposit_id = deposit.id, "Deposit found for miner");
+        debug!(deposit_id = deposit.id, "Deposit found for miner");
 
         // Add to company inventory at its home city
         let key = Inventory::key(company_id, city_id, deposit.resource_type_id);
@@ -93,12 +91,12 @@ pub fn run_extraction(state: &mut SimState) {
         let company = match state.companies.get_mut(&company_id) {
             Some(c) => c,
             None => {
-                info!(company_id, "Company not found for miner");
+                debug!(company_id, "Company not found for miner");
                 continue;
             }
         };
 
-        info!("Company found for miner");
+        debug!("Company found for miner");
 
         let market_price = state
             .ema_prices
@@ -107,18 +105,20 @@ pub fn run_extraction(state: &mut SimState) {
             .unwrap_or(deposit.extraction_cost_per_unit * 1.5);
 
         // Dynamic Throttle: Stop producing if profit margins are extremely low and we have a moderate surplus.
-        if market_price <= deposit.extraction_cost_per_unit * 1.1 && current_inv > (capacity * 5) as i64 {
-            info!("Throttling extraction due to low profit vs surplus");
+        if market_price <= deposit.extraction_cost_per_unit * 1.1
+            && current_inv > (capacity * 5) as i64
+        {
+            debug!("Throttling extraction due to low profit vs surplus");
             continue;
         }
 
         if current_inv > (capacity * 10) as i64 {
-             info!(current_inv, "Skipping extraction due to full stockpile");
-             continue;
+            debug!(current_inv, "Skipping extraction due to full stockpile");
+            continue;
         }
-        
+
         if company.debt > 1000.0 {
-            info!(debt = company.debt, "Skipping extraction due to high debt");
+            debug!(debt = company.debt, "Skipping extraction due to high debt");
             continue;
         }
 
@@ -144,7 +144,7 @@ pub fn run_extraction(state: &mut SimState) {
         deposit.size_remaining -= extract_qty;
         extraction_count += 1;
 
-        info!(
+        debug!(
             company_id,
             city_id,
             extracted = extract_qty,
@@ -163,7 +163,7 @@ pub fn run_extraction(state: &mut SimState) {
     }
 
     if extraction_count > 0 || facilities_processed > 0 {
-        info!(
+        debug!(
             facilities_processed,
             extraction_count, "Extraction phase complete"
         );

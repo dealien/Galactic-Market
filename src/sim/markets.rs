@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tracing::{debug, info};
+use tracing::debug;
 
 use crate::sim::state::{MarketHistory, MarketOrder, SimState};
 
@@ -58,9 +58,10 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut sell_idx = 0;
 
         if !sells.is_empty() && !buys.is_empty() {
-             // Use tracing at DEBUG level for specific market states
-             debug!(
-                city_id, resource_type_id,
+            // Use tracing at DEBUG level for specific market states
+            debug!(
+                city_id,
+                resource_type_id,
                 best_ask = sells[0].price,
                 ask_qty = sells[0].quantity,
                 best_bid = buys[0].price,
@@ -72,10 +73,10 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         while sell_idx < sells.len() && buy_idx < buys.len() {
             let sell_id = sells[sell_idx].id;
             let buy_id = buys[buy_idx].id;
-            
+
             let sell_company_id = sells[sell_idx].company_id;
             let buy_company_id = buys[buy_idx].company_id;
-            
+
             let sell_city_id = sells[sell_idx].city_id;
             let buy_city_id = buys[buy_idx].city_id;
 
@@ -94,14 +95,30 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let clearing_price = (buy_price + sell_price) / 2.0;
 
             // Verify buyer actually has cash
-            let actual_buyer_cash = state.companies.get(&buy_company_id).map(|c| c.cash).unwrap_or(0.0);
-            let affordable_qty = if clearing_price > 0.0 { (actual_buyer_cash / clearing_price).floor() as i64 } else { i64::MAX };
-            
-            // Verify seller actually has inventory
-            let sell_key = crate::sim::state::Inventory::key(sell_company_id, sell_city_id, resource_type_id);
-            let actual_seller_inventory = state.inventories.get(&sell_key).map(|i| i.quantity).unwrap_or(0);
+            let actual_buyer_cash = state
+                .companies
+                .get(&buy_company_id)
+                .map(|c| c.cash)
+                .unwrap_or(0.0);
+            let affordable_qty = if clearing_price > 0.0 {
+                (actual_buyer_cash / clearing_price).floor() as i64
+            } else {
+                i64::MAX
+            };
 
-            let qty = sell_quantity.min(buy_quantity).min(affordable_qty).min(actual_seller_inventory);
+            // Verify seller actually has inventory
+            let sell_key =
+                crate::sim::state::Inventory::key(sell_company_id, sell_city_id, resource_type_id);
+            let actual_seller_inventory = state
+                .inventories
+                .get(&sell_key)
+                .map(|i| i.quantity)
+                .unwrap_or(0);
+
+            let qty = sell_quantity
+                .min(buy_quantity)
+                .min(affordable_qty)
+                .min(actual_seller_inventory);
 
             if qty <= 0 {
                 // Determine fault and void the order
@@ -111,16 +128,20 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 if affordable_qty <= 0 {
                     buys[buy_idx].quantity = 0;
                 }
-                
+
                 if sells[sell_idx].quantity <= 0 {
-                    if let Some(global_sell) = state.market_orders.get_mut(&sell_id) { global_sell.quantity = 0; }
+                    if let Some(global_sell) = state.market_orders.get_mut(&sell_id) {
+                        global_sell.quantity = 0;
+                    }
                     sell_idx += 1;
                 }
                 if buys[buy_idx].quantity <= 0 {
-                    if let Some(global_buy) = state.market_orders.get_mut(&buy_id) { global_buy.quantity = 0; }
+                    if let Some(global_buy) = state.market_orders.get_mut(&buy_id) {
+                        global_buy.quantity = 0;
+                    }
                     buy_idx += 1;
                 }
-                
+
                 // Infinite loop breakout fallback
                 if qty <= 0 && sells[sell_idx].quantity > 0 && buys[buy_idx].quantity > 0 {
                     sell_idx += 1;
@@ -163,7 +184,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             prices_this_tick.push(clearing_price);
             volume += qty;
 
-            info!(
+            debug!(
                 city_id,
                 resource_type_id, qty, clearing_price, "Trade matched"
             );
@@ -229,7 +250,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     }
 
     // Expire empty orders or very old orders (e.g. older than 100 ticks)
-    state.market_orders.retain(|_, order| order.quantity > 0 && order.created_tick + 100 > current_tick);
+    state
+        .market_orders
+        .retain(|_, order| order.quantity > 0 && order.created_tick + 100 > current_tick);
 }
 
 // ─── Unit Tests ────────────────────────────────────────────────────────────────
