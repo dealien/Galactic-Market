@@ -15,6 +15,10 @@ struct Args {
     /// Seed the initial galaxy before running
     #[arg(short, long)]
     seed: bool,
+
+    /// Wipe the database before running (drops and recreates the public schema)
+    #[arg(long)]
+    clear: bool,
 }
 
 #[tokio::main]
@@ -38,6 +42,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Connected to PostgreSQL.");
 
+    // Optionally wipe the DB before running migrations
+    if args.clear {
+        db::utils::clear_database(&pool).await?;
+    }
+
     // Run migrations
     info!("Running migrations...");
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -45,6 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.seed {
         db::seed::run_seed(&pool).await?;
     }
+
 
     // Load full simulation state from DB into memory
     info!("Loading simulation state from database...");
