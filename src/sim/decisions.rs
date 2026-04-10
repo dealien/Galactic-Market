@@ -165,13 +165,9 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     }
 }
 
-/// Returns the last clearing price per (city_id, resource_type_id) from history.
+/// Returns the last clearing price per (city_id, resource_type_id) from the state's persistent cache.
 fn last_known_prices(state: &SimState) -> std::collections::HashMap<(i32, i32), f64> {
-    let mut prices = std::collections::HashMap::new();
-    for h in &state.market_history_buffer {
-        prices.insert((h.city_id, h.resource_type_id), h.close);
-    }
-    prices
+    state.price_cache.clone()
 }
 
 /// Returns a representative extraction cost for the deposit linked to a city's planet.
