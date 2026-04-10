@@ -54,6 +54,9 @@ fn make_extraction_state(num_companies: usize) -> SimState {
                 company_id: i,
                 facility_type: "mine".into(),
                 capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
             },
         );
     }
@@ -197,6 +200,9 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 company_id: i,
                 facility_type: "refinery".into(),
                 capacity: 5,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
             },
         );
     }

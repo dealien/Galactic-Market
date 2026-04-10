@@ -5,10 +5,10 @@ pub mod production;
 pub mod resources;
 pub mod state;
 
-use sqlx::PgPool;
-use tracing::info;
 use comfy_table::Table;
 use comfy_table::presets::UTF8_FULL_CONDENSED;
+use sqlx::PgPool;
+use tracing::info;
 
 // Re-export the primary state type for ergonomic use by callers
 pub use state::SimState;
@@ -51,10 +51,16 @@ impl SimState {
             table.add_row(vec!["Tick", &summary.tick.to_string()]);
             table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
             table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
-            table.add_row(vec!["Total Inventory", &summary.total_inventory.to_string()]);
+            table.add_row(vec![
+                "Total Inventory",
+                &summary.total_inventory.to_string(),
+            ]);
             table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
             table.add_row(vec!["Trade Volume", &summary.trade_volume.to_string()]);
-            table.add_row(vec!["Avg Ore Price", &format!("{:.2}", summary.avg_ore_price)]);
+            table.add_row(vec![
+                "Avg Ore Price",
+                &format!("{:.2}", summary.avg_ore_price),
+            ]);
 
             for (name, price) in &summary.ingot_prices {
                 table.add_row(vec![&format!("Price: {}", name), &format!("{:.2}", price)]);
