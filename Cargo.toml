@@ -1,0 +1,20 @@
+[package]
+name = "galactic-market"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+sqlx = { version = "0.7", features = ["postgres", "runtime-tokio-rustls", "macros", "migrate"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+clap = { version = "4", features = ["derive"] }
+dotenvy = "0.15"
+
+[dev-dependencies]
+divan = "0.1"
+
+[[bench]]
+name = "sim_bench"
+harness = false
+
