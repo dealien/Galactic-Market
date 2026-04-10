@@ -238,28 +238,42 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             .execute(&mut *tx).await?;
         }
 
-        // Create a mine facility for this company in its home city. Default to mining Iron Ore.
+        // Create a mine facility for each resource type for this company in its home city.
         sqlx::query(
             "INSERT INTO facilities (city_id, company_id, facility_type, capacity, target_resource_id) VALUES ($1, $2, $3, $4, $5)"
         )
         .bind(city_id).bind(company_id).bind("mine").bind(10).bind(iron_ore_id)
         .execute(&mut *tx).await?;
 
+        sqlx::query(
+            "INSERT INTO facilities (city_id, company_id, facility_type, capacity, target_resource_id) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(city_id).bind(company_id).bind("mine").bind(10).bind(copper_ore_id)
+        .execute(&mut *tx).await?;
+
+        sqlx::query(
+            "INSERT INTO facilities (city_id, company_id, facility_type, capacity, target_resource_id) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(city_id).bind(company_id).bind("mine").bind(10).bind(tin_ore_id)
+        .execute(&mut *tx).await?;
+
         // Sector capitals also get a refinery (owned by the local company in this seed)
         if sector_capital_indices.contains(&idx) {
             let initial_ratios = serde_json::json!({
-                iron_recipe_id.to_string(): 1.0
+                iron_recipe_id.to_string(): 0.34,
+                copper_recipe_id.to_string(): 0.33,
+                tin_recipe_id.to_string(): 0.33
             });
             sqlx::query(
                 "INSERT INTO facilities (city_id, company_id, facility_type, capacity, production_ratios) VALUES ($1, $2, $3, $4, $5)"
             )
-            .bind(city_id).bind(company_id).bind("refinery").bind(5).bind(initial_ratios)
+            .bind(city_id).bind(company_id).bind("refinery").bind(15).bind(initial_ratios)
             .execute(&mut *tx).await?;
         }
     }
 
     info!(
-        "Seeded 32 freelancer companies with startup loans, mine facilities, and Iron Ore deposits."
+        "Seeded 32 freelancer companies with startup loans, mine facilities, and Ore deposits (Iron, Copper, Tin)."
     );
 
     // 9. Seed one consumer company per city representing local population demand.

@@ -129,13 +129,13 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     buys[buy_idx].quantity = 0;
                 }
 
-                if sells[sell_idx].quantity <= 0 {
+                if sell_idx < sells.len() && sells[sell_idx].quantity <= 0 {
                     if let Some(global_sell) = state.market_orders.get_mut(&sell_id) {
                         global_sell.quantity = 0;
                     }
                     sell_idx += 1;
                 }
-                if buys[buy_idx].quantity <= 0 {
+                if buy_idx < buys.len() && buys[buy_idx].quantity <= 0 {
                     if let Some(global_buy) = state.market_orders.get_mut(&buy_id) {
                         global_buy.quantity = 0;
                     }
@@ -143,7 +143,12 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 }
 
                 // Infinite loop breakout fallback
-                if qty <= 0 && sells[sell_idx].quantity > 0 && buys[buy_idx].quantity > 0 {
+                if qty <= 0
+                    && sell_idx < sells.len()
+                    && buy_idx < buys.len()
+                    && sells[sell_idx].quantity > 0
+                    && buys[buy_idx].quantity > 0
+                {
                     sell_idx += 1;
                     buy_idx += 1;
                 }
