@@ -14,6 +14,18 @@
             "preLaunchTask": "Prepare for Debugging"
         },
         {
+            "name": "Reset & Seed (CodeLLDB)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/galactic-market.exe",
+            "args": [
+                "--clear",
+                "--seed"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Prepare for Debugging"
+        },
+        {
             "name": "Debug tests (CodeLLDB)",
             "type": "lldb",
             "request": "launch",
