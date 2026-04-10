@@ -218,7 +218,7 @@ impl SimState {
 
         // Use the persistent price cache for averages
         summary.avg_ore_price = self.price_cache.get(&(1, 1)).copied().unwrap_or(0.0); // Simple proxy for first city
-        summary.avg_ingot_price = self.price_cache.get(&(1, 2)).copied().unwrap_or(0.0);
+        summary.avg_ingot_price = self.price_cache.get(&(1, 4)).copied().unwrap_or(0.0);
 
         // Volume from the latest buffer entries
         summary.trade_volume = self.market_history_buffer.iter().map(|h| h.volume).sum();

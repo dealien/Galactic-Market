@@ -3,17 +3,17 @@ use tracing::debug;
 use crate::sim::state::{MarketOrder, SimState};
 
 /// Iron Ingot resource type ID (hardcoded for Stage 1; will be data-driven in Stage 2).
-const IRON_INGOT_RESOURCE_ID: i32 = 2;
+const IRON_INGOT_RESOURCE_ID: i32 = 4;
 
 /// Credits earned per citizen per tick (represents wages, taxes, etc.)
-const INCOME_PER_CAPITA_PER_TICK: f64 = 0.001;
+const INCOME_PER_CAPITA_PER_TICK: f64 = 0.005; // Increased from 0.001 to ensure consumption can keep up with production
 
 /// Ingots demanded per 10,000 citizens per tick.
 const DEMAND_PER_10K_POPULATION: i64 = 1;
 
 /// Maximum price consumers are willing to pay for an iron ingot.
 /// This is deliberately above extraction + refining cost to ensure trades clear.
-const CONSUMER_WILLINGNESS_TO_PAY: f64 = 20.0;
+const CONSUMER_WILLINGNESS_TO_PAY: f64 = 25.0; // Raised from 20.0 to be safe
 
 /// Phase 3: Population consumption.
 ///

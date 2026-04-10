@@ -23,8 +23,10 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    // Initialize tracing from RUST_LOG environment variable, defaulting to INFO
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env().add_directive(tracing::Level::INFO.into()))
+        .init();
 
     // Load .env file configurations
     dotenvy::dotenv().ok();

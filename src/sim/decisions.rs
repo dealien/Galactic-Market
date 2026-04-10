@@ -46,6 +46,10 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         .collect();
 
     for company_id in due {
+        // Clear all outstanding orders for this company before making new ones.
+        // This ensures the market book doesn't bloat with obsolete strategies.
+        state.market_orders.retain(|_, order| order.company_id != company_id);
+
         let (city_id, company_type) = {
             let company = state.companies.get_mut(&company_id).unwrap();
             let (min_interval, max_interval) = eval_interval_range(&company.company_type);
@@ -61,7 +65,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             // Consumers represent the population. They buy end products.
             let cash = state.companies.get(&company_id).unwrap().cash;
             if cash > 10.0 {
-                let r_id = 2; // Iron Ingots
+                let r_id = 4; // Iron Ingots (Iron Ore is 1, Iron Ingot is 4)
                 let target_price = last_prices.get(&(city_id, r_id)).copied().unwrap_or(20.0);
                 
                 // Cap the maximum willingness to pay to prevent runaway inflation
@@ -123,9 +127,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             if let Some(best_id) = best_ore_id {
                 let facility = state.facilities.get_mut(&facility_id).unwrap();
                 if facility.target_resource_id != Some(best_id) {
+                    let old_target = facility.target_resource_id;
                     facility.target_resource_id = Some(best_id);
-                    facility.setup_ticks_remaining = 3;
-                    state.companies.get_mut(&company_id).unwrap().cash -= 100.0;
+                    
+                    if old_target.is_some() {
+                        facility.setup_ticks_remaining = 2;
+                        state.companies.get_mut(&company_id).unwrap().cash -= 50.0;
+                    }
                     debug!(
                         company_id,
                         new_target = best_id,
@@ -141,19 +149,19 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     && inv.quantity > 0
                 {
                     // Cost-disciplined pricing:
-                    // Start with a healthy margin over extraction cost (e.g. 20%)
                     let base_ask = cost * 1.2;
-
-                    // Look at the market clearing price
-                    let market_price = last_prices
-                        .get(&(city_id, res_id))
-                        .copied()
-                        .unwrap_or(base_ask);
-
-                    // We want to sell, so we might drop our price slightly below market
-                    // BUT never below our profitable base_ask.
-                    // This creates a "gravity" effect towards cost-plus pricing.
-                    let ask_price = base_ask.max(market_price * 0.98);
+                    let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(base_ask);
+                    
+                    let facility_capacity = state.facilities.get(&facility_id).map(|f| f.capacity).unwrap_or(10);
+                    
+                    // Desperation Logic: If inventory is high, discount aggressively to liquidate.
+                    let ask_price = if inv.quantity > (facility_capacity * 2) as i64 {
+                        cost * 1.08 // Liquidate quickly
+                    } else if inv.quantity > facility_capacity as i64 {
+                        base_ask.min(market_price * 0.92) // Keep undercutting
+                    } else {
+                        base_ask.max(market_price)
+                    };
 
                     orders_to_post.push(MarketOrder {
                         id: 0,
@@ -243,8 +251,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                 if significant_change {
                     facility.production_ratios = Some(new_ratios.clone());
-                    facility.setup_ticks_remaining = 5;
-                    state.companies.get_mut(&company_id).unwrap().cash -= 500.0;
+                    // Only incur penalty if we were already producing.
+                    if facility.production_ratios.is_some() {
+                        facility.setup_ticks_remaining = 3;
+                        state.companies.get_mut(&company_id).unwrap().cash -= 200.0;
+                    }
                     debug!(company_id, "Refinery switched production ratios");
                 }
 
@@ -255,9 +266,16 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     if let Some(inv) = state.inventories.get(&out_key).cloned()
                         && inv.quantity > 0
                     {
-                        // Price ingots at cost + 30% margin, gravity towards market price
+                        // Price ingots at cost + 30% margin
                         let base_ask = cost_basis * 1.3;
-                        let ask_price = base_ask.max(out_price * 0.98);
+                        
+                        // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
+                        // If inventory > capacity, we are overproducing; drop price.
+                        let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
+                            cost_basis * 1.05 // Sell near cost to clear stockpile
+                        } else {
+                            base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
+                        };
 
                         orders_to_post.push(MarketOrder {
                             id: 0,
@@ -291,8 +309,20 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 - labor_margin)
                                 / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
                             
+                            // Check raw material inventory to gauge desperation
+                            let in_key = Inventory::key(company_id, city_id, input.resource_type_id);
+                            let raw_inv_qty = state.inventories.get(&in_key).map(|i| i.quantity).unwrap_or(0);
+                            
                             // Try to buy at a tiny discount to market, but be willing to bid up to market
-                            let target_bid = in_price * 0.98;
+                            // Desperation logic: If starving for raw materials, bid aggressively.
+                            let target_bid = if raw_inv_qty == 0 {
+                                in_price * 1.05 // Aggressive bid to jumpstart production
+                            } else if raw_inv_qty > (capacity * input.quantity * 10) as i64 {
+                                in_price * 0.90 // Plenty of stock, bid low
+                            } else {
+                                in_price * 0.98 // Standard tiny discount
+                            };
+                            
                             let bid_price = target_bid.min(max_affordable);
 
                             if bid_price > 0.0 {

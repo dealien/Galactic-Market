@@ -1,4 +1,4 @@
-use tracing::debug;
+use tracing::{debug, info};
 
 use crate::sim::state::{Inventory, SimState};
 
@@ -41,15 +41,21 @@ pub fn run_extraction(state: &mut SimState) {
                 facility.capacity,
                 target_id,
             ));
+        } else {
+            debug!(facility_id = facility.id, "Mine has no target_resource_id");
         }
     }
 
+    if !active_mines.is_empty() {
+        debug!(count = active_mines.len(), "Found active mines to process");
+    }
+
     for (_facility_id, city_id, company_id, capacity, target_resource_id) in active_mines {
-        // Find a discovered deposit on the same planet as this facility's city
+        info!(city_id, company_id, "Processing miner info");
         let planet_id = match state.cities.get(&city_id) {
             Some(c) => c.body_id,
             None => {
-                debug!(city_id = city_id, "City not found for facility");
+                info!(city_id = city_id, "City not found for facility");
                 continue;
             }
         };
@@ -60,10 +66,21 @@ pub fn run_extraction(state: &mut SimState) {
                 && d.size_remaining > 0
         });
 
+        if deposit.is_none() {
+             info!(
+                city_id, 
+                planet_id, 
+                target_resource_id, 
+                "No eligible deposit found for miner"
+            );
+        }
+
         let deposit = match deposit {
             Some(d) => d,
             None => continue,
         };
+
+        info!(deposit_id = deposit.id, "Deposit found for miner");
 
         // Add to company inventory at its home city
         let key = Inventory::key(company_id, city_id, deposit.resource_type_id);
@@ -71,14 +88,37 @@ pub fn run_extraction(state: &mut SimState) {
         // Check current inventory levels
         let current_inv = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
 
-        // Stop extracting if we have a significant stockpile (e.g. 10x capacity)
+        // Stop extracting if we have a massive stockpile (e.g. 10x capacity)
         // or if the company is deep in debt (e.g. > 1000 credits).
         let company = match state.companies.get_mut(&company_id) {
             Some(c) => c,
-            None => continue,
+            None => {
+                info!(company_id, "Company not found for miner");
+                continue;
+            }
         };
 
-        if current_inv > (capacity * 10) as i64 || company.debt > 1000.0 {
+        info!("Company found for miner");
+
+        let market_price = state
+            .ema_prices
+            .get(&(city_id, deposit.resource_type_id))
+            .copied()
+            .unwrap_or(deposit.extraction_cost_per_unit * 1.5);
+
+        // Dynamic Throttle: Stop producing if profit margins are extremely low and we have a moderate surplus.
+        if market_price <= deposit.extraction_cost_per_unit * 1.1 && current_inv > (capacity * 5) as i64 {
+            info!("Throttling extraction due to low profit vs surplus");
+            continue;
+        }
+
+        if current_inv > (capacity * 10) as i64 {
+             info!(current_inv, "Skipping extraction due to full stockpile");
+             continue;
+        }
+        
+        if company.debt > 1000.0 {
+            info!(debt = company.debt, "Skipping extraction due to high debt");
             continue;
         }
 
@@ -104,12 +144,11 @@ pub fn run_extraction(state: &mut SimState) {
         deposit.size_remaining -= extract_qty;
         extraction_count += 1;
 
-        debug!(
-            company_id = company_id,
-            city_id = city_id,
+        info!(
+            company_id,
+            city_id,
             extracted = extract_qty,
-            deposit_remaining = deposit.size_remaining,
-            "Extraction complete"
+            "Resource extracted"
         );
 
         // Add to company inventory at its home city
@@ -124,7 +163,7 @@ pub fn run_extraction(state: &mut SimState) {
     }
 
     if extraction_count > 0 || facilities_processed > 0 {
-        debug!(
+        info!(
             facilities_processed,
             extraction_count, "Extraction phase complete"
         );
