@@ -140,7 +140,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         )
         .bind(&company_name).bind("freelancer").bind(city_id)
         .bind(0.0_f64)   // cash = 0; funded by loan
-        .bind(startup_loan_amount)
+        .bind(0.0_f64)   // debt = 0; they start clean
         .bind("B")
         .bind(1_i64)
         .fetch_one(&mut *tx).await?.0;

@@ -113,7 +113,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             let ingot_price = last_prices
                 .get(&(city_id, ingot_resource_id))
                 .copied()
-                .unwrap_or(10.0); // default consumer-level price
+                .unwrap_or(20.0); // default consumer-level price
 
             // Sell ingots if we have any in inventory
             let ingot_key = Inventory::key(company_id, city_id, ingot_resource_id);
@@ -144,8 +144,17 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             }
 
             // Buy ore if the ingot margin is profitable (1 ingot = 3 ore + labor)
-            let labor_margin = 1.5;
-            if ingot_price > ore_price * 3.0 + labor_margin {
+            let labor_margin = 1.0;
+            if ingot_price > (ore_price * 3.0) + labor_margin {
+                // Find refinery facility to check capacity
+                let capacity = state.facilities.values()
+                    .find(|f| f.company_id == company_id && f.city_id == city_id && f.facility_type == "refinery")
+                    .map(|f| f.capacity)
+                    .unwrap_or(5);
+
+                // Buy enough for 5 ticks of production
+                let buy_qty = (capacity * 3 * 5) as i64;
+
                 let order_id = state.next_order_id();
                 state.market_orders.insert(
                     order_id,
@@ -155,8 +164,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         company_id,
                         resource_type_id: ore_resource_id,
                         order_type: "buy".into(),
-                        price: ore_price * 1.1, // pay up to 10% over last price for ore
-                        quantity: 30,            // buy in batches
+                        price: ore_price * 1.2, // be more aggressive in bidding
+                        quantity: buy_qty,
                         created_tick: current_tick,
                     },
                 );
