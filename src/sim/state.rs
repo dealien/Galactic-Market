@@ -138,6 +138,9 @@ pub struct SimState {
     /// Maps city_id → consumer company_id for fast lookup in the consumption phase.
     pub city_consumer_ids: HashMap<i32, i32>,
 
+    /// Cached last clearing prices per (city_id, resource_type_id).
+    pub price_cache: HashMap<(i32, i32), f64>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 }
@@ -162,6 +165,7 @@ impl SimState {
             market_orders: HashMap::new(),
             market_history_buffer: Vec::new(),
             city_consumer_ids: HashMap::new(),
+            price_cache: HashMap::new(),
             next_order_id: 1,
         }
     }
