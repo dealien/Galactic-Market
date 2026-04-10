@@ -17,7 +17,11 @@ use crate::sim::state::{Inventory, SimState};
 /// run_extraction(&mut state);
 /// ```
 pub fn run_extraction(state: &mut SimState) {
+    let mut facilities_processed = 0;
+    let mut extraction_count = 0;
+
     for facility in state.facilities.values() {
+        facilities_processed += 1;
         // Only mine facilities participate in Phase 1
         if facility.facility_type != "mine" {
             continue;
@@ -26,7 +30,10 @@ pub fn run_extraction(state: &mut SimState) {
         // Find a discovered deposit on the same planet as this facility's city
         let planet_id = match state.cities.get(&facility.city_id) {
             Some(c) => c.body_id,
-            None => continue,
+            None => {
+                debug!(city_id = facility.city_id, "City not found for facility");
+                continue;
+            }
         };
 
         let deposit = state
@@ -39,6 +46,23 @@ pub fn run_extraction(state: &mut SimState) {
             None => continue,
         };
 
+        // Add to company inventory at its home city
+        let key = Inventory::key(facility.company_id, facility.city_id, deposit.resource_type_id);
+
+        // Check current inventory levels
+        let current_inv = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
+        
+        // Stop extracting if we have a significant stockpile (e.g. 10x capacity)
+        // or if the company is deep in debt (e.g. > 1000 credits).
+        let company = match state.companies.get_mut(&facility.company_id) {
+            Some(c) => c,
+            None => continue,
+        };
+
+        if current_inv > (facility.capacity * 10) as i64 || company.debt > 1000.0 {
+            continue;
+        }
+
         // Extract up to capacity units
         let extract_qty = facility.capacity.min(deposit.size_remaining as i32) as i64;
         if extract_qty <= 0 {
@@ -47,10 +71,6 @@ pub fn run_extraction(state: &mut SimState) {
 
         // Debit extraction cost from company
         let cost = extract_qty as f64 * deposit.extraction_cost_per_unit;
-        let company = match state.companies.get_mut(&facility.company_id) {
-            Some(c) => c,
-            None => continue,
-        };
 
         if company.cash >= cost {
             company.cash -= cost;
@@ -63,6 +83,7 @@ pub fn run_extraction(state: &mut SimState) {
 
         // Deplete the deposit
         deposit.size_remaining -= extract_qty;
+        extraction_count += 1;
 
         debug!(
             company_id = facility.company_id,
@@ -81,6 +102,10 @@ pub fn run_extraction(state: &mut SimState) {
             quantity: 0,
         });
         entry.quantity += extract_qty;
+    }
+
+    if extraction_count > 0 || facilities_processed > 0 {
+        debug!(facilities_processed, extraction_count, "Extraction phase complete");
     }
 }
 
@@ -176,12 +201,24 @@ mod tests {
     }
 
     #[test]
-    fn extraction_rolls_into_debt_when_cash_insufficient() {
+    fn extraction_skips_if_inventory_too_high() {
         let mut state = make_state();
-        state.companies.get_mut(&1).unwrap().cash = 5.0; // only enough for 2.5 units
+        // Set inventory to 110 (capacity 10 * 11)
+        state.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 110 },
+        );
         run_extraction(&mut state);
-        // cost is 20.0; cash covers 5.0, so 15.0 goes to debt
-        assert!((state.companies[&1].debt - 15.0).abs() < f64::EPSILON);
-        assert_eq!(state.companies[&1].cash, 0.0);
+        // Quantity should NOT change
+        assert_eq!(state.inventories[&Inventory::key(1, 1, 1)].quantity, 110);
+    }
+
+    #[test]
+    fn extraction_skips_if_debt_too_high() {
+        let mut state = make_state();
+        state.companies.get_mut(&1).unwrap().debt = 2000.0;
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
     }
 }
