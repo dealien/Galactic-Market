@@ -20,12 +20,15 @@ impl SimState {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log
-        if self.tick.is_multiple_of(100) || self.tick == 1 {
+        if self.tick % 100 == 0 || self.tick == 1 {
             info!("--- Tick {} ---", self.tick);
         }
 
         // ── Phase 1: Resource extraction ─────────────────────────────────────
         resources::run_extraction(self);
+
+        // ── Phase 6: Company AI decisions ─────────────────────────────────────
+        decisions::run_decisions(self, self.tick);
 
         // ── Phase 2: Production / refining ───────────────────────────────────
         production::run_production(self);
@@ -36,11 +39,20 @@ impl SimState {
         // ── Phase 4: Market clearing ────────────────────────────────────
         markets::clear_orders(self, self.tick);
 
-        // ── Phase 6: Company AI decisions ─────────────────────────────────────
-        decisions::run_decisions(self, self.tick);
-
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
+            let summary = self.generate_summary();
+            info!(
+                tick = summary.tick,
+                cash = %format!("{:.0}", summary.total_cash),
+                debt = %format!("{:.0}", summary.total_debt),
+                inventory = summary.total_inventory,
+                orders = summary.active_orders,
+                volume = summary.trade_volume,
+                ore_price = %format!("{:.2}", summary.avg_ore_price),
+                ingot_price = %format!("{:.2}", summary.avg_ingot_price),
+                "=== Economic Pulse ==="
+            );
             self.flush(pool).await?;
         }
 

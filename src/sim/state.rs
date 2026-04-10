@@ -177,3 +177,45 @@ impl SimState {
         id
     }
 }
+
+/// A high-level snapshot of the simulation state for debugging and logging.
+#[derive(Debug, Default)]
+pub struct TickSummary {
+    pub tick: u64,
+    pub total_cash: f64,
+    pub total_debt: f64,
+    pub total_inventory: i64,
+    pub active_orders: usize,
+    pub trade_volume: i64,
+    pub avg_ore_price: f64,
+    pub avg_ingot_price: f64,
+}
+
+impl SimState {
+    /// Calculate a summary of the current simulation state.
+    pub fn generate_summary(&self) -> TickSummary {
+        let mut summary = TickSummary {
+            tick: self.tick,
+            active_orders: self.market_orders.len(),
+            ..Default::default()
+        };
+
+        for c in self.companies.values() {
+            summary.total_cash += c.cash;
+            summary.total_debt += c.debt;
+        }
+
+        for inv in self.inventories.values() {
+            summary.total_inventory += inv.quantity;
+        }
+
+        // Use the persistent price cache for averages
+        summary.avg_ore_price = self.price_cache.get(&(1, 1)).copied().unwrap_or(0.0); // Simple proxy for first city
+        summary.avg_ingot_price = self.price_cache.get(&(1, 2)).copied().unwrap_or(0.0);
+
+        // Volume from the latest buffer entries
+        summary.trade_volume = self.market_history_buffer.iter().map(|h| h.volume).sum();
+
+        summary
+    }
+}
