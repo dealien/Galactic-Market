@@ -3,8 +3,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tracing::{Level, info};
 
-mod db;
-mod sim;
+use galactic_market::{db, sim};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]

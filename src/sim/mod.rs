@@ -5,6 +5,12 @@ pub struct SimState {
     pub tick: u64,
 }
 
+impl Default for SimState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SimState {
     pub fn new() -> Self {
         Self { tick: 0 }
