@@ -19,6 +19,7 @@ impl SimState {
     pub async fn run_tick(&mut self, _pool: &PgPool) -> Result<(), sqlx::Error> {
         self.tick += 1;
         info!("--- Tick {} ---", self.tick);
+        // TODO: Tick should only log every 100 ticks to avoid spamming the log
 
         // Phase 1-9 logic will go here
 
