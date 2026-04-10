@@ -396,9 +396,9 @@ Events are defined in a configuration file (TOML or JSON), not hard-coded. Each 
 
 ## 8. Development Roadmap
 
-This is a large project. Tackling it in phases prevents overengineering and ensures there is always a working (if simple) simulation to experiment with.
+This is a large project. Tackling it in stages prevents overengineering and ensures there is always a working (if simple) simulation to experiment with.
 
-### Phase 0 — Foundation
+### Stage 0 — Foundation
 
 **Goal:** Rust project boots, connects to Postgres, creates schema, seeds a tiny universe, runs a tick loop.
 
@@ -408,7 +408,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Implement tick loop: increment tick counter and log — nothing else yet
 - [ ] **Verify:** `cargo run -- --ticks 100` completes without error
 
-### Phase 1 — Basic Economy
+### Stage 1 — Basic Economy
 
 **Goal:** Resources flow through a single production chain; prices change.
 
@@ -419,7 +419,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Implement basic company AI: mine if `price > cost`; sell output
 - [ ] **Verify:** `market_history` fills with price data; `deposit.size_remaining` declines
 
-### Phase 2 — Company Lifecycle
+### Stage 2 — Company Lifecycle
 
 **Goal:** Companies grow, hire, invest, go bankrupt.
 
@@ -430,7 +430,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Implement acquisition logic (simple version: cash offer accepted if > book value)
 - [ ] **Verify:** observe a company growing from freelancer to corp over a long run
 
-### Phase 3 — Geography & Logistics
+### Stage 3 — Geography & Logistics
 
 **Goal:** Transport costs and times matter; arbitrage opportunities exist.
 
@@ -440,7 +440,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Implement arbitrage AI for trading companies
 - [ ] **Verify:** prices in isolated systems diverge from connected ones; traders equalize them
 
-### Phase 4 — Politics & Events
+### Stage 4 — Politics & Events
 
 **Goal:** Wars and events disrupt the economy in visible ways.
 
@@ -452,7 +452,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Implement lore seed pipeline: a script that parses markdown/JSON exports from a world-building tool (e.g., Obsidian) and generates Postgres `COPY`-compatible seed files for planets, factions, and resources — write lore naturally, not as hand-typed `INSERT` statements
 - [ ] **Verify:** declare war between two empires; observe trade collapse and price spikes
 
-### Phase 5 — Web UI
+### Stage 5 — Web UI
 
 **Goal:** A browser-based dashboard to watch the simulation in real time.
 
@@ -463,7 +463,7 @@ This is a large project. Tackling it in phases prevents overengineering and ensu
 - [ ] Add company explorer: net worth, production, trade routes
 - [ ] **Verify:** run simulation for 1000 ticks; explore results in browser
 
-### Phase 6 — God Mode
+### Stage 6 — God Mode
 
 **Goal:** Player can observe and intervene.
 
@@ -516,7 +516,7 @@ These are deliberate open questions — decisions to revisit as the simulation m
 | **Tick granularity** | 1 tick = 1 day vs. 1 week. Finer granularity = more realism but more ticks to simulate centuries. Start with 1 week. |
 | **Population as aggregate vs. individuals** | Aggregate (`city.population: u64`) is feasible. Individual agents (Victoria 3 style) is realistic but computationally expensive. Start aggregate. |
 | **Company AI sophistication** | Greedy local heuristics vs. simple planning vs. full MCTS. Greedy is fine for v1; add planning later. |
-| **Currency & exchange rates** | Single galactic currency (simplest) vs. faction currencies with exchange rates (richer but complex). Decide before Phase 1. |
+| **Currency & exchange rates** | Single galactic currency (simplest) vs. faction currencies with exchange rates (richer but complex). Decide before Stage 1. |
 | **Procedural world-gen vs. hand-crafted universe** | Hand-crafted gives more control; procedural enables multiple playthroughs. Start with a procedural world-gen, then add hand-crafted elements later. |
-| **Simulation speed target** | How many ticks/second? 1000 ticks/s would simulate ~19 simulated years/second at 1-week ticks. Benchmark after Phase 1. |
+| **Simulation speed target** | How many ticks/second? 1000 ticks/s would simulate ~19 simulated years/second at 1-week ticks. Benchmark after Stage 1. |
 | **Save / replay system** | Full tick snapshots are expensive. Consider event-sourcing: log all changes; replay from tick 0 to reconstruct any state. |

@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    info!("Starting Galactic Market Simulator (Phase 0)");
+    info!("Starting Galactic Market Simulator (Stage 0)");
 
     let database_url = env::var("DATABASE_URL")?;
 
