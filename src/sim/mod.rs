@@ -1,3 +1,4 @@
+pub mod consumption;
 pub mod decisions;
 pub mod markets;
 pub mod production;
@@ -29,7 +30,10 @@ impl SimState {
         // ── Phase 2: Production / refining ───────────────────────────────────
         production::run_production(self);
 
-        // ── Phase 4: Market clearing ──────────────────────────────────────────
+        // ── Phase 3: Population consumption ───────────────────────────────
+        consumption::run_consumption(self, self.tick);
+
+        // ── Phase 4: Market clearing ────────────────────────────────────
         markets::clear_orders(self, self.tick);
 
         // ── Phase 6: Company AI decisions ─────────────────────────────────────
