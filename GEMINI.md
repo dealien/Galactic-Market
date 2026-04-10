@@ -66,7 +66,7 @@ The simulation follows a **Research -> Strategy -> Execution** pattern with a fo
 - **Cargo First:** Use `cargo` for all development tasks.
 - **Async/Await:** Use `tokio` for concurrency and `sqlx` for database interactions.
 - **Error Handling:** Prefer `Result` and the `?` operator. Avoid `unwrap()` or `expect()` in production code.
-- **Formatting:** Code must be formatted with `cargo fmt` and pass `cargo clippy`.
+- **Formatting:** Code must be formatted with `cargo fmt` and pass `cargo clippy -- -D warnings`. Ensure compliance before completion.
 
 ### Simulation Principles
 

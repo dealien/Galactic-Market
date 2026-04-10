@@ -7,6 +7,8 @@ pub mod state;
 
 use sqlx::PgPool;
 use tracing::info;
+use comfy_table::Table;
+use comfy_table::presets::UTF8_FULL_CONDENSED;
 
 // Re-export the primary state type for ergonomic use by callers
 pub use state::SimState;
@@ -42,24 +44,23 @@ impl SimState {
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
             let summary = self.generate_summary();
-            let ingots_fmt = summary
-                .ingot_prices
-                .iter()
-                .map(|(name, price)| format!("{}: {:.2}", name, price))
-                .collect::<Vec<_>>()
-                .join(", ");
 
-            info!(
-                tick = summary.tick,
-                cash = %format!("{:.0}", summary.total_cash),
-                debt = %format!("{:.0}", summary.total_debt),
-                inventory = summary.total_inventory,
-                orders = summary.active_orders,
-                volume = summary.trade_volume,
-                ore_price = %format!("{:.2}", summary.avg_ore_price),
-                ingots = %ingots_fmt,
-                "=== Economic Pulse ==="
-            );
+            let mut table = Table::new();
+            table.load_preset(UTF8_FULL_CONDENSED);
+            table.set_header(vec!["Metric", "Value"]);
+            table.add_row(vec!["Tick", &summary.tick.to_string()]);
+            table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
+            table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
+            table.add_row(vec!["Total Inventory", &summary.total_inventory.to_string()]);
+            table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
+            table.add_row(vec!["Trade Volume", &summary.trade_volume.to_string()]);
+            table.add_row(vec!["Avg Ore Price", &format!("{:.2}", summary.avg_ore_price)]);
+
+            for (name, price) in &summary.ingot_prices {
+                table.add_row(vec![&format!("Price: {}", name), &format!("{:.2}", price)]);
+            }
+
+            info!("\n=== Economic Pulse ===\n{table}");
             self.flush(pool).await?;
         }
 
