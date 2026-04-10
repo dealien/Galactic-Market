@@ -59,16 +59,16 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         // ─── Consumer AI ──────────────────────────────────────────────────────
         if company_type == "consumer" {
             // Consumers represent the population. They buy end products.
-            // For now, we hardcode Food Rations (3) and maybe some Ingots if configured.
-            // For simplicity, we just want them to buy Food Rations or we rely on the specific
-            // consumer logic inside market consumption (if any). If there is no specific
-            // consumer AI logic here yet, we will just stub it.
-            // Let them spend half their cash on Food Rations (id: 3)
             let cash = state.companies.get(&company_id).unwrap().cash;
             if cash > 10.0 {
-                let r_id = 2; // Iron Ingots (changed from hardcoded 3)
+                let r_id = 2; // Iron Ingots
                 let target_price = last_prices.get(&(city_id, r_id)).copied().unwrap_or(20.0);
-                let qty = ((cash * 0.5) / target_price) as i64;
+                
+                // Cap the maximum willingness to pay to prevent runaway inflation
+                let max_willingness_to_pay = 150.0;
+                let bid_price = (target_price * 1.02).min(max_willingness_to_pay);
+                
+                let qty = ((cash * 0.5) / bid_price) as i64;
                 if qty > 0 {
                     orders_to_post.push(MarketOrder {
                         id: 0, // Assigned later
@@ -76,7 +76,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         company_id,
                         resource_type_id: r_id,
                         order_type: "buy".into(),
-                        price: target_price * 1.1,
+                        price: bid_price,
                         quantity: qty,
                         created_tick: current_tick,
                     });
@@ -287,11 +287,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 .unwrap_or(2.5);
 
                             // Profit-disciplined bidding:
-                            // We can afford to pay up to (out_price * output_qty - labor_margin) / total_input_qty
                             let max_affordable = (out_price * recipe.output_qty as f64
                                 - labor_margin)
                                 / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
-                            let bid_price = (in_price * 1.05).min(max_affordable);
+                            
+                            // Try to buy at a tiny discount to market, but be willing to bid up to market
+                            let target_bid = in_price * 0.98;
+                            let bid_price = target_bid.min(max_affordable);
 
                             if bid_price > 0.0 {
                                 orders_to_post.push(MarketOrder {
