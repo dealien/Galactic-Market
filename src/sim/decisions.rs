@@ -167,7 +167,7 @@ mod tests {
     fn make_state_with_miner() -> SimState {
         let mut s = SimState::new();
 
-        s.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into() });
+        s.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into(), population: 0 });
 
         s.companies.insert(
             1,

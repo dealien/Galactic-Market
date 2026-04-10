@@ -11,7 +11,7 @@ fn make_extraction_state(num_companies: usize) -> SimState {
     let mut state = SimState::new();
 
     for i in 1..=(num_companies as i32) {
-        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}") });
+        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}"), population: 0 });
 
         state.companies.insert(
             i,
@@ -55,7 +55,7 @@ fn make_extraction_state(num_companies: usize) -> SimState {
 
 fn make_market_state(num_orders: usize) -> SimState {
     let mut state = SimState::new();
-    state.cities.insert(1, City { id: 1, body_id: 1, name: "Market City".into() });
+    state.cities.insert(1, City { id: 1, body_id: 1, name: "Market City".into(), population: 0 });
 
     // One seller with lots of ore
     state.companies.insert(
@@ -115,7 +115,7 @@ fn make_production_state(num_refineries: usize) -> SimState {
     );
 
     for i in 1..=(num_refineries as i32) {
-        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}") });
+        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}"), population: 0 });
         state.companies.insert(
             i,
             Company {
@@ -143,7 +143,7 @@ fn make_decisions_state(num_companies: usize) -> SimState {
     let mut state = SimState::new();
 
     for i in 1..=(num_companies as i32) {
-        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}") });
+        state.cities.insert(i, City { id: i, body_id: i, name: format!("City {i}"), population: 0 });
         state.companies.insert(
             i,
             Company {

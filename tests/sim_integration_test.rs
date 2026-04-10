@@ -7,7 +7,7 @@ use galactic_market::sim::SimState;
 fn full_economy_state() -> SimState {
     let mut state = SimState::new();
 
-    state.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into() });
+    state.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into(), population: 0 });
 
     state.companies.insert(
         1,
@@ -116,7 +116,7 @@ fn test_refinery_consumes_ore_and_produces_ingots() {
 #[test]
 fn test_market_clearing_balances() {
     let mut state = SimState::new();
-    state.cities.insert(1, City { id: 1, body_id: 1, name: "C".into() });
+    state.cities.insert(1, City { id: 1, body_id: 1, name: "C".into(), population: 0 });
 
     state.companies.insert(
         1,

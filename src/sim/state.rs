@@ -6,6 +6,8 @@ pub struct City {
     pub id: i32,
     pub body_id: i32,
     pub name: String,
+    /// Resident population, used to calculate consumption demand.
+    pub population: i64,
 }
 
 /// An economic actor (freelancer, company, corp, megacorp).

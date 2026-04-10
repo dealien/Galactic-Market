@@ -95,6 +95,7 @@ mod tests {
                 id: 1,
                 body_id: 1,
                 name: "Test City".into(),
+                population: 0,
             },
         );
 
