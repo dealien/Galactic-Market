@@ -16,16 +16,16 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 
     // ── Cities ────────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String)>(
-        "SELECT c.id, cb.id AS body_id, c.name
+    let rows = sqlx::query_as::<_, (i32, i32, String, i64)>(
+        "SELECT c.id, cb.id AS body_id, c.name, c.population
          FROM cities c
          JOIN celestial_bodies cb ON cb.id = c.body_id",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, body_id, name) in rows {
-        state.cities.insert(id, City { id, body_id, name });
+    for (id, body_id, name, population) in rows {
+        state.cities.insert(id, City { id, body_id, name, population });
     }
 
     info!(count = state.cities.len(), "Loaded cities.");
