@@ -57,6 +57,9 @@ pub struct Facility {
     pub company_id: i32,
     pub facility_type: String,
     pub capacity: i32,
+    pub setup_ticks_remaining: u32,
+    pub target_resource_id: Option<i32>,
+    pub production_ratios: Option<HashMap<String, f64>>,
 }
 
 /// A recipe defining a production transformation.
@@ -141,6 +144,9 @@ pub struct SimState {
     /// Cached last clearing prices per (city_id, resource_type_id).
     pub price_cache: HashMap<(i32, i32), f64>,
 
+    /// Exponential Moving Average (EMA) price cache.
+    pub ema_prices: HashMap<(i32, i32), f64>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 }
@@ -166,6 +172,7 @@ impl SimState {
             market_history_buffer: Vec::new(),
             city_consumer_ids: HashMap::new(),
             price_cache: HashMap::new(),
+            ema_prices: HashMap::new(),
             next_order_id: 1,
         }
     }

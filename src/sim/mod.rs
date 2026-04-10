@@ -105,6 +105,23 @@ impl SimState {
             .await?;
         }
 
+        // ── Facilities ────────────────────────────────────────────────────────
+        for facility in self.facilities.values() {
+            let ratios_json = facility
+                .production_ratios
+                .as_ref()
+                .map(|r| sqlx::types::Json(r.clone()));
+            sqlx::query(
+                "UPDATE facilities SET setup_ticks_remaining = $1, target_resource_id = $2, production_ratios = $3 WHERE id = $4",
+            )
+            .bind(facility.setup_ticks_remaining as i32)
+            .bind(facility.target_resource_id)
+            .bind(ratios_json)
+            .bind(facility.id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
         // ── Market history ────────────────────────────────────────────────────
         for h in &self.market_history_buffer {
             sqlx::query(

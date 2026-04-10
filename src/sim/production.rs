@@ -19,19 +19,51 @@ pub fn run_production(state: &mut SimState) {
     // Collect the recipes by facility_type up front to avoid borrow conflicts
     let recipes: Vec<Recipe> = state.recipes.values().cloned().collect();
 
-    for facility in state.facilities.values() {
+    let mut active_refineries = Vec::new();
+
+    for facility in state.facilities.values_mut() {
         if facility.facility_type != "refinery" {
             continue;
         }
 
-        // Find all recipes that can run in this facility type
-        for recipe in recipes
-            .iter()
-            .filter(|r| r.facility_type == facility.facility_type)
-        {
-            // How many times can we run this recipe this tick? (up to capacity)
-            let runs = compute_max_runs(state, facility.company_id, facility.city_id, recipe);
-            let runs = runs.min(facility.capacity as i64);
+        if facility.setup_ticks_remaining > 0 {
+            facility.setup_ticks_remaining -= 1;
+            continue;
+        }
+
+        let ratios = match &facility.production_ratios {
+            Some(r) => r.clone(),
+            None => continue,
+        };
+
+        active_refineries.push((
+            facility.id,
+            facility.city_id,
+            facility.company_id,
+            facility.capacity,
+            ratios,
+        ));
+    }
+
+    for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
+        for (recipe_id_str, ratio) in ratios {
+            let recipe_id = match recipe_id_str.parse::<i32>() {
+                Ok(id) => id,
+                Err(_) => continue,
+            };
+
+            let recipe = match recipes.iter().find(|r| r.id == recipe_id) {
+                Some(r) => r,
+                None => continue,
+            };
+
+            let allocated_capacity = (capacity as f64 * ratio).round() as i64;
+            if allocated_capacity <= 0 {
+                continue;
+            }
+
+            let max_runs = compute_max_runs(state, company_id, city_id, recipe);
+            let runs = max_runs.min(allocated_capacity);
 
             if runs == 0 {
                 continue;
@@ -39,32 +71,24 @@ pub fn run_production(state: &mut SimState) {
 
             // Consume inputs
             for input in &recipe.inputs {
-                let key = Inventory::key(
-                    facility.company_id,
-                    facility.city_id,
-                    input.resource_type_id,
-                );
+                let key = Inventory::key(company_id, city_id, input.resource_type_id);
                 if let Some(inv) = state.inventories.get_mut(&key) {
                     inv.quantity -= input.quantity as i64 * runs;
                 }
             }
 
             // Produce outputs
-            let out_key = Inventory::key(
-                facility.company_id,
-                facility.city_id,
-                recipe.output_resource_id,
-            );
+            let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
             let entry = state.inventories.entry(out_key).or_insert(Inventory {
-                company_id: facility.company_id,
-                city_id: facility.city_id,
+                company_id,
+                city_id,
                 resource_type_id: recipe.output_resource_id,
                 quantity: 0,
             });
             entry.quantity += recipe.output_qty as i64 * runs;
 
             debug!(
-                company_id = facility.company_id,
+                company_id = company_id,
                 recipe = %recipe.name,
                 runs,
                 "Production run complete"
@@ -139,6 +163,9 @@ mod tests {
                 company_id: 1,
                 facility_type: "refinery".into(),
                 capacity: 5, // max 5 runs per tick
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: Some(std::collections::HashMap::from([("1".to_string(), 1.0)])),
             },
         );
 

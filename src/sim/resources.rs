@@ -20,26 +20,45 @@ pub fn run_extraction(state: &mut SimState) {
     let mut facilities_processed = 0;
     let mut extraction_count = 0;
 
-    for facility in state.facilities.values() {
-        facilities_processed += 1;
-        // Only mine facilities participate in Phase 1
+    let mut active_mines = Vec::new();
+
+    for facility in state.facilities.values_mut() {
         if facility.facility_type != "mine" {
             continue;
         }
+        facilities_processed += 1;
 
+        if facility.setup_ticks_remaining > 0 {
+            facility.setup_ticks_remaining -= 1;
+            continue;
+        }
+
+        if let Some(target_id) = facility.target_resource_id {
+            active_mines.push((
+                facility.id,
+                facility.city_id,
+                facility.company_id,
+                facility.capacity,
+                target_id,
+            ));
+        }
+    }
+
+    for (_facility_id, city_id, company_id, capacity, target_resource_id) in active_mines {
         // Find a discovered deposit on the same planet as this facility's city
-        let planet_id = match state.cities.get(&facility.city_id) {
+        let planet_id = match state.cities.get(&city_id) {
             Some(c) => c.body_id,
             None => {
-                debug!(city_id = facility.city_id, "City not found for facility");
+                debug!(city_id = city_id, "City not found for facility");
                 continue;
             }
         };
 
-        let deposit = state
-            .deposits
-            .values_mut()
-            .find(|d| d.body_id == planet_id && d.size_remaining > 0);
+        let deposit = state.deposits.values_mut().find(|d| {
+            d.body_id == planet_id
+                && d.resource_type_id == target_resource_id
+                && d.size_remaining > 0
+        });
 
         let deposit = match deposit {
             Some(d) => d,
@@ -47,28 +66,24 @@ pub fn run_extraction(state: &mut SimState) {
         };
 
         // Add to company inventory at its home city
-        let key = Inventory::key(
-            facility.company_id,
-            facility.city_id,
-            deposit.resource_type_id,
-        );
+        let key = Inventory::key(company_id, city_id, deposit.resource_type_id);
 
         // Check current inventory levels
         let current_inv = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
 
         // Stop extracting if we have a significant stockpile (e.g. 10x capacity)
         // or if the company is deep in debt (e.g. > 1000 credits).
-        let company = match state.companies.get_mut(&facility.company_id) {
+        let company = match state.companies.get_mut(&company_id) {
             Some(c) => c,
             None => continue,
         };
 
-        if current_inv > (facility.capacity * 10) as i64 || company.debt > 1000.0 {
+        if current_inv > (capacity * 10) as i64 || company.debt > 1000.0 {
             continue;
         }
 
         // Extract up to capacity units
-        let extract_qty = facility.capacity.min(deposit.size_remaining as i32) as i64;
+        let extract_qty = capacity.min(deposit.size_remaining as i32) as i64;
         if extract_qty <= 0 {
             continue;
         }
@@ -90,22 +105,18 @@ pub fn run_extraction(state: &mut SimState) {
         extraction_count += 1;
 
         debug!(
-            company_id = facility.company_id,
-            city_id = facility.city_id,
+            company_id = company_id,
+            city_id = city_id,
             extracted = extract_qty,
             deposit_remaining = deposit.size_remaining,
             "Extraction complete"
         );
 
         // Add to company inventory at its home city
-        let key = Inventory::key(
-            facility.company_id,
-            facility.city_id,
-            deposit.resource_type_id,
-        );
+        let key = Inventory::key(company_id, city_id, deposit.resource_type_id);
         let entry = state.inventories.entry(key).or_insert(Inventory {
-            company_id: facility.company_id,
-            city_id: facility.city_id,
+            company_id,
+            city_id,
             resource_type_id: deposit.resource_type_id,
             quantity: 0,
         });
@@ -182,6 +193,9 @@ mod tests {
                 company_id: 1,
                 facility_type: "mine".into(),
                 capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(1),
+                production_ratios: None,
             },
         );
 

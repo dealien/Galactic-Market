@@ -50,6 +50,9 @@ fn full_economy_state() -> SimState {
             company_id: 1,
             facility_type: "mine".into(),
             capacity: 10,
+            setup_ticks_remaining: 0,
+            target_resource_id: Some(1),
+            production_ratios: None,
         },
     );
 
@@ -61,6 +64,9 @@ fn full_economy_state() -> SimState {
             company_id: 1,
             facility_type: "refinery".into(),
             capacity: 5,
+            setup_ticks_remaining: 0,
+            target_resource_id: None,
+            production_ratios: Some(std::collections::HashMap::from([("1".to_string(), 1.0)])),
         },
     );
 

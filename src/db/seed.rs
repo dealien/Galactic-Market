@@ -23,10 +23,34 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     .bind("Iron Ore").bind("Raw Material").bind(100.0).bind(true)
     .fetch_one(&mut *tx).await?.0;
 
+    let copper_ore_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+    )
+    .bind("Copper Ore").bind("Raw Material").bind(120.0).bind(true)
+    .fetch_one(&mut *tx).await?.0;
+
+    let tin_ore_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+    )
+    .bind("Tin Ore").bind("Raw Material").bind(150.0).bind(true)
+    .fetch_one(&mut *tx).await?.0;
+
     let iron_ingot_id = sqlx::query_as::<_, (i32,)>(
         "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
     )
     .bind("Iron Ingot").bind("Refined Material").bind(150.0).bind(true)
+    .fetch_one(&mut *tx).await?.0;
+
+    let copper_ingot_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+    )
+    .bind("Copper Ingot").bind("Refined Material").bind(180.0).bind(true)
+    .fetch_one(&mut *tx).await?.0;
+
+    let tin_ingot_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+    )
+    .bind("Tin Ingot").bind("Refined Material").bind(220.0).bind(true)
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
@@ -108,8 +132,8 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     info!("Seeded geography: 2 empires, 4 systems, 8 planets, 32 cities.");
 
-    // 7. Iron Ingot recipe: 3 Iron Ore → 1 Iron Ingot
-    let recipe_id = sqlx::query_as::<_, (i32,)>(
+    // 7. Recipes
+    let iron_recipe_id = sqlx::query_as::<_, (i32,)>(
         "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
     .bind("Iron Ingot Smelting").bind(iron_ingot_id).bind(1).bind("refinery").bind(1)
@@ -118,8 +142,38 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     sqlx::query(
         "INSERT INTO recipe_inputs (recipe_id, resource_type_id, quantity) VALUES ($1, $2, $3)",
     )
-    .bind(recipe_id)
+    .bind(iron_recipe_id)
     .bind(iron_ore_id)
+    .bind(3)
+    .execute(&mut *tx)
+    .await?;
+
+    let copper_recipe_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+    )
+    .bind("Copper Ingot Smelting").bind(copper_ingot_id).bind(1).bind("refinery").bind(1)
+    .fetch_one(&mut *tx).await?.0;
+
+    sqlx::query(
+        "INSERT INTO recipe_inputs (recipe_id, resource_type_id, quantity) VALUES ($1, $2, $3)",
+    )
+    .bind(copper_recipe_id)
+    .bind(copper_ore_id)
+    .bind(3)
+    .execute(&mut *tx)
+    .await?;
+
+    let tin_recipe_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+    )
+    .bind("Tin Ingot Smelting").bind(tin_ingot_id).bind(1).bind("refinery").bind(1)
+    .fetch_one(&mut *tx).await?.0;
+
+    sqlx::query(
+        "INSERT INTO recipe_inputs (recipe_id, resource_type_id, quantity) VALUES ($1, $2, $3)",
+    )
+    .bind(tin_recipe_id)
+    .bind(tin_ore_id)
     .bind(3)
     .execute(&mut *tx)
     .await?;
@@ -162,7 +216,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             .execute(&mut *tx)
             .await?;
 
-        // Create an Iron Ore deposit on this planet (shared per planet, 1M units each)
+        // Create an Iron Ore, Copper Ore, and Tin Ore deposit on this planet
         // Only create once per planet (on the first company of each planet group)
         if idx % 4 == 0 {
             sqlx::query(
@@ -170,21 +224,36 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             )
             .bind(body_id).bind(iron_ore_id).bind(1_000_000_i64).bind(1_000_000_i64).bind(2.0_f64).bind(true)
             .execute(&mut *tx).await?;
+
+            sqlx::query(
+                "INSERT INTO deposits (body_id, resource_type_id, size_total, size_remaining, extraction_cost_per_unit, discovered) VALUES ($1, $2, $3, $4, $5, $6)"
+            )
+            .bind(body_id).bind(copper_ore_id).bind(750_000_i64).bind(750_000_i64).bind(2.5_f64).bind(true)
+            .execute(&mut *tx).await?;
+
+            sqlx::query(
+                "INSERT INTO deposits (body_id, resource_type_id, size_total, size_remaining, extraction_cost_per_unit, discovered) VALUES ($1, $2, $3, $4, $5, $6)"
+            )
+            .bind(body_id).bind(tin_ore_id).bind(500_000_i64).bind(500_000_i64).bind(3.0_f64).bind(true)
+            .execute(&mut *tx).await?;
         }
 
-        // Create a mine facility for this company in its home city
+        // Create a mine facility for this company in its home city. Default to mining Iron Ore.
         sqlx::query(
-            "INSERT INTO facilities (city_id, company_id, facility_type, capacity) VALUES ($1, $2, $3, $4)"
+            "INSERT INTO facilities (city_id, company_id, facility_type, capacity, target_resource_id) VALUES ($1, $2, $3, $4, $5)"
         )
-        .bind(city_id).bind(company_id).bind("mine").bind(10)
+        .bind(city_id).bind(company_id).bind("mine").bind(10).bind(iron_ore_id)
         .execute(&mut *tx).await?;
 
         // Sector capitals also get a refinery (owned by the local company in this seed)
         if sector_capital_indices.contains(&idx) {
+            let initial_ratios = serde_json::json!({
+                iron_recipe_id.to_string(): 1.0
+            });
             sqlx::query(
-                "INSERT INTO facilities (city_id, company_id, facility_type, capacity) VALUES ($1, $2, $3, $4)"
+                "INSERT INTO facilities (city_id, company_id, facility_type, capacity, production_ratios) VALUES ($1, $2, $3, $4, $5)"
             )
-            .bind(city_id).bind(company_id).bind("refinery").bind(5)
+            .bind(city_id).bind(company_id).bind("refinery").bind(5).bind(initial_ratios)
             .execute(&mut *tx).await?;
         }
     }

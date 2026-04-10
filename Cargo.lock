@@ -562,6 +562,8 @@ dependencies = [
  "codspeed-divan-compat",
  "dotenvy",
  "rand",
+ "serde",
+ "serde_json",
  "sqlx",
  "tokio",
  "tracing",

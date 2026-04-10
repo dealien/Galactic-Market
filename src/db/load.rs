@@ -89,13 +89,24 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.deposits.len(), "Loaded deposits.");
 
     // ── Facilities ────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, i32, String, i32)>(
-        "SELECT id, city_id, company_id, facility_type, capacity FROM facilities",
+    let rows = sqlx::query_as::<_, (i32, i32, i32, String, i32, i32, Option<i32>, Option<sqlx::types::Json<std::collections::HashMap<String, f64>>>)>(
+        "SELECT id, city_id, company_id, facility_type, capacity, setup_ticks_remaining, target_resource_id, production_ratios FROM facilities",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, city_id, company_id, facility_type, capacity) in rows {
+    for (
+        id,
+        city_id,
+        company_id,
+        facility_type,
+        capacity,
+        setup_ticks_remaining,
+        target_resource_id,
+        production_ratios,
+    ) in rows
+    {
+        let ratios = production_ratios.map(|json| json.0);
         state.facilities.insert(
             id,
             Facility {
@@ -104,6 +115,9 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 company_id,
                 facility_type,
                 capacity,
+                setup_ticks_remaining: setup_ticks_remaining as u32,
+                target_resource_id,
+                production_ratios: ratios,
             },
         );
     }

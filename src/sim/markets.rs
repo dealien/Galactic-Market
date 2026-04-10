@@ -141,6 +141,18 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
             // Update persistent price cache
             state.price_cache.insert((city_id, resource_type_id), close);
+
+            // Update EMA price cache for smoothed AI evaluation
+            let alpha = 0.1;
+            let current_ema = state
+                .ema_prices
+                .get(&(city_id, resource_type_id))
+                .copied()
+                .unwrap_or(close);
+            let next_ema = alpha * close + (1.0 - alpha) * current_ema;
+            state
+                .ema_prices
+                .insert((city_id, resource_type_id), next_ema);
         }
     }
 
