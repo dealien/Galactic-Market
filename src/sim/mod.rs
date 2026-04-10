@@ -62,7 +62,10 @@ impl SimState {
                 &format!("{:.2}", summary.avg_ore_price),
             ]);
 
-            for (name, price) in &summary.ingot_prices {
+            let mut ingot_prices: Vec<_> = summary.ingot_prices.iter().collect();
+            ingot_prices.sort_by_key(|(name, _)| *name);
+
+            for (name, price) in ingot_prices {
                 table.add_row(vec![&format!("Price: {}", name), &format!("{:.2}", price)]);
             }
 
