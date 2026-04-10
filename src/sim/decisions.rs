@@ -57,7 +57,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         company.next_eval_tick = current_tick + jitter;
 
         let city_id = company.home_city_id;
-        let company_type = company.company_type.clone();
 
         // --- Miner AI ---
         // If we have Iron Ore in inventory, post a sell order above extraction cost
@@ -98,25 +97,54 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
 
         // --- Refinery AI ---
-        // If we have a refinery in this city, try to buy ore if the margin is good
+        // Any company that owns a refinery should: sell ingots it has produced,
+        // and buy ore if the ingot margin makes it profitable.
+        let ingot_resource_id = 2; // Iron Ingot
         let has_refinery = state.facilities.values().any(|f| {
             f.company_id == company_id && f.city_id == city_id && f.facility_type == "refinery"
         });
 
-        if has_refinery && company_type != "freelancer" {
-            // Iron Ingot resource id = 2
-            let ingot_resource_id = 2;
+        if has_refinery {
             let ore_price = last_prices
                 .get(&(city_id, ore_resource_id))
                 .copied()
-                .unwrap_or(3.0);
+                .unwrap_or(2.5); // default just above extraction cost
+
             let ingot_price = last_prices
                 .get(&(city_id, ingot_resource_id))
                 .copied()
-                .unwrap_or(12.0);
+                .unwrap_or(10.0); // default consumer-level price
 
-            // Only buy if margin is positive: 1 ingot > 3 ore + labor margin
-            let labor_margin = 1.0;
+            // Sell ingots if we have any in inventory
+            let ingot_key = Inventory::key(company_id, city_id, ingot_resource_id);
+            if let Some(ingot_inv) = state.inventories.get(&ingot_key).cloned()
+                && ingot_inv.quantity > 0
+            {
+                // Price ingots at ore_cost × 3 (recipe ratio) + 30% margin
+                let cost_basis = ore_price * 3.0;
+                let ask_price = cost_basis * 1.3;
+                // But if market clearing price is higher, ride it
+                let ask_price = ask_price.max(ingot_price * 0.95);
+
+                let order_id = state.next_order_id();
+                state.market_orders.insert(
+                    order_id,
+                    MarketOrder {
+                        id: order_id,
+                        city_id,
+                        company_id,
+                        resource_type_id: ingot_resource_id,
+                        order_type: "sell".into(),
+                        price: ask_price,
+                        quantity: ingot_inv.quantity,
+                        created_tick: current_tick,
+                    },
+                );
+                debug!(company_id, city_id, qty = ingot_inv.quantity, price = ask_price, "Ingot sell order posted");
+            }
+
+            // Buy ore if the ingot margin is profitable (1 ingot = 3 ore + labor)
+            let labor_margin = 1.5;
             if ingot_price > ore_price * 3.0 + labor_margin {
                 let order_id = state.next_order_id();
                 state.market_orders.insert(
@@ -127,8 +155,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         company_id,
                         resource_type_id: ore_resource_id,
                         order_type: "buy".into(),
-                        price: ore_price * 1.1, // willing to pay 10% above last price
-                        quantity: 30,            // buy a batch
+                        price: ore_price * 1.1, // pay up to 10% over last price for ore
+                        quantity: 30,            // buy in batches
                         created_tick: current_tick,
                     },
                 );
