@@ -3,7 +3,7 @@ use sqlx::postgres::PgPoolOptions;
 use std::env;
 use tracing::{Level, info};
 
-use galactic_market::{db, sim};
+use galactic_market::db;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    info!("Starting Galactic Market Simulator (Stage 0)");
+    info!("Starting Galactic Market Simulator (Stage 1)");
 
     let database_url = env::var("DATABASE_URL")?;
 
@@ -46,8 +46,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db::seed::run_seed(&pool).await?;
     }
 
-    // Initialize Simulation State
-    let mut state = sim::SimState::new();
+    // Load full simulation state from DB into memory
+    info!("Loading simulation state from database...");
+    let mut state = db::load::load(&pool).await?;
 
     // Run tick loop
     for _ in 0..args.ticks {

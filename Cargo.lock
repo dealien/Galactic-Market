@@ -561,6 +561,7 @@ dependencies = [
  "clap",
  "codspeed-divan-compat",
  "dotenvy",
+ "rand",
  "sqlx",
  "tokio",
  "tracing",
