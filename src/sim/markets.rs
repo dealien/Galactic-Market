@@ -132,6 +132,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 close,
                 volume,
             });
+
+            // Update persistent price cache
+            state.price_cache.insert((city_id, resource_type_id), close);
         }
     }
 
