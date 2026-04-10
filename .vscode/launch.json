@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/target/debug/galactic-market.exe",
             "args": [],
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "rust: cargo build"
+            "preLaunchTask": "Prepare for Debugging"
         },
         {
             "name": "Debug tests (CodeLLDB)",
@@ -25,7 +25,8 @@
                 ]
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "Prepare for Debugging"
         },
         {
             "name": "Run All Checks (Lint, Format, Test)",
