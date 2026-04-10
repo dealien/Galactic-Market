@@ -55,7 +55,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db::seed::run_seed(&pool).await?;
     }
 
-
     // Load full simulation state from DB into memory
     info!("Loading simulation state from database...");
     let mut state = db::load::load(&pool).await?;

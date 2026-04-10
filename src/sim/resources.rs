@@ -47,11 +47,15 @@ pub fn run_extraction(state: &mut SimState) {
         };
 
         // Add to company inventory at its home city
-        let key = Inventory::key(facility.company_id, facility.city_id, deposit.resource_type_id);
+        let key = Inventory::key(
+            facility.company_id,
+            facility.city_id,
+            deposit.resource_type_id,
+        );
 
         // Check current inventory levels
         let current_inv = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
-        
+
         // Stop extracting if we have a significant stockpile (e.g. 10x capacity)
         // or if the company is deep in debt (e.g. > 1000 credits).
         let company = match state.companies.get_mut(&facility.company_id) {
@@ -94,7 +98,11 @@ pub fn run_extraction(state: &mut SimState) {
         );
 
         // Add to company inventory at its home city
-        let key = Inventory::key(facility.company_id, facility.city_id, deposit.resource_type_id);
+        let key = Inventory::key(
+            facility.company_id,
+            facility.city_id,
+            deposit.resource_type_id,
+        );
         let entry = state.inventories.entry(key).or_insert(Inventory {
             company_id: facility.company_id,
             city_id: facility.city_id,
@@ -105,7 +113,10 @@ pub fn run_extraction(state: &mut SimState) {
     }
 
     if extraction_count > 0 || facilities_processed > 0 {
-        debug!(facilities_processed, extraction_count, "Extraction phase complete");
+        debug!(
+            facilities_processed,
+            extraction_count, "Extraction phase complete"
+        );
     }
 }
 
@@ -206,7 +217,12 @@ mod tests {
         // Set inventory to 110 (capacity 10 * 11)
         state.inventories.insert(
             Inventory::key(1, 1, 1),
-            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 110 },
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 110,
+            },
         );
         run_extraction(&mut state);
         // Quantity should NOT change

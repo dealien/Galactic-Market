@@ -25,7 +25,15 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .await?;
 
     for (id, body_id, name, population) in rows {
-        state.cities.insert(id, City { id, body_id, name, population });
+        state.cities.insert(
+            id,
+            City {
+                id,
+                body_id,
+                name,
+                population,
+            },
+        );
     }
 
     info!(count = state.cities.len(), "Loaded cities.");
@@ -170,7 +178,10 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         }
     }
 
-    info!(count = state.city_consumer_ids.len(), "Indexed consumer companies.");
+    info!(
+        count = state.city_consumer_ids.len(),
+        "Indexed consumer companies."
+    );
 
     Ok(state)
 }

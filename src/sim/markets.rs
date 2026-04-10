@@ -76,21 +76,24 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             }
 
             // Transfer inventory: seller loses, buyer gains
-            let sell_key = crate::sim::state::Inventory::key(sell.company_id, sell.city_id, resource_type_id);
+            let sell_key =
+                crate::sim::state::Inventory::key(sell.company_id, sell.city_id, resource_type_id);
             if let Some(inv) = state.inventories.get_mut(&sell_key) {
                 inv.quantity -= qty;
             }
 
-            let buy_key = crate::sim::state::Inventory::key(buy.company_id, buy.city_id, resource_type_id);
-            let buy_inv = state
-                .inventories
-                .entry(buy_key)
-                .or_insert(crate::sim::state::Inventory {
-                    company_id: buy.company_id,
-                    city_id: buy.city_id,
-                    resource_type_id,
-                    quantity: 0,
-                });
+            let buy_key =
+                crate::sim::state::Inventory::key(buy.company_id, buy.city_id, resource_type_id);
+            let buy_inv =
+                state
+                    .inventories
+                    .entry(buy_key)
+                    .or_insert(crate::sim::state::Inventory {
+                        company_id: buy.company_id,
+                        city_id: buy.city_id,
+                        resource_type_id,
+                        quantity: 0,
+                    });
             buy_inv.quantity += qty;
 
             prices_this_tick.push(clearing_price);
@@ -98,10 +101,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
             debug!(
                 city_id,
-                resource_type_id,
-                qty,
-                clearing_price,
-                "Market trade executed"
+                resource_type_id, qty, clearing_price, "Market trade executed"
             );
 
             // Advance exhausted orders
@@ -119,8 +119,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         if !prices_this_tick.is_empty() {
             let open = *prices_this_tick.first().unwrap();
             let close = *prices_this_tick.last().unwrap();
-            let high = prices_this_tick.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-            let low = prices_this_tick.iter().cloned().fold(f64::INFINITY, f64::min);
+            let high = prices_this_tick
+                .iter()
+                .cloned()
+                .fold(f64::NEG_INFINITY, f64::max);
+            let low = prices_this_tick
+                .iter()
+                .cloned()
+                .fold(f64::INFINITY, f64::min);
 
             state.market_history_buffer.push(MarketHistory {
                 city_id,
@@ -164,31 +170,52 @@ mod tests {
     #[test]
     fn clearing_transfers_cash_and_inventory() {
         let mut state = SimState::new();
-        state.companies.insert(1, make_company(1, 0.0));   // seller
-        state.companies.insert(2, make_company(2, 100.0));  // buyer
+        state.companies.insert(1, make_company(1, 0.0)); // seller
+        state.companies.insert(2, make_company(2, 100.0)); // buyer
 
         // Seller has 10 ore
         state.inventories.insert(
             Inventory::key(1, 1, 1),
-            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 10 },
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
         );
 
         // Sell 5 @ 8.0, Buy 5 @ 10.0 — should match at clearing price 9.0
-        state.market_orders.insert(1, MarketOrder {
-            id: 1, city_id: 1, company_id: 1,
-            resource_type_id: 1, order_type: "sell".into(),
-            price: 8.0, quantity: 5, created_tick: 0,
-        });
-        state.market_orders.insert(2, MarketOrder {
-            id: 2, city_id: 1, company_id: 2,
-            resource_type_id: 1, order_type: "buy".into(),
-            price: 10.0, quantity: 5, created_tick: 0,
-        });
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                price: 8.0,
+                quantity: 5,
+                created_tick: 0,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                price: 10.0,
+                quantity: 5,
+                created_tick: 0,
+            },
+        );
 
         clear_orders(&mut state, 1);
 
         let clearing = 9.0; // midpoint of 8 and 10
-        assert!((state.companies[&1].cash - clearing * 5.0).abs() < 0.01);   // seller received
+        assert!((state.companies[&1].cash - clearing * 5.0).abs() < 0.01); // seller received
         assert!((state.companies[&2].cash - (100.0 - clearing * 5.0)).abs() < 0.01); // buyer paid
         assert_eq!(state.inventories[&Inventory::key(1, 1, 1)].quantity, 5); // seller's ore
         assert_eq!(state.inventories[&Inventory::key(2, 1, 1)].quantity, 5); // buyer's ore
@@ -201,18 +228,39 @@ mod tests {
         state.companies.insert(2, make_company(2, 1000.0));
         state.inventories.insert(
             Inventory::key(1, 1, 1),
-            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 10 },
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
         );
-        state.market_orders.insert(1, MarketOrder {
-            id: 1, city_id: 1, company_id: 1,
-            resource_type_id: 1, order_type: "sell".into(),
-            price: 5.0, quantity: 10, created_tick: 0,
-        });
-        state.market_orders.insert(2, MarketOrder {
-            id: 2, city_id: 1, company_id: 2,
-            resource_type_id: 1, order_type: "buy".into(),
-            price: 5.0, quantity: 10, created_tick: 0,
-        });
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
 
         clear_orders(&mut state, 42);
 
@@ -229,18 +277,39 @@ mod tests {
         state.companies.insert(2, make_company(2, 100.0));
         state.inventories.insert(
             Inventory::key(1, 1, 1),
-            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 10 },
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
         );
-        state.market_orders.insert(1, MarketOrder {
-            id: 1, city_id: 1, company_id: 1,
-            resource_type_id: 1, order_type: "sell".into(),
-            price: 10.0, quantity: 5, created_tick: 0,
-        });
-        state.market_orders.insert(2, MarketOrder {
-            id: 2, city_id: 1, company_id: 2,
-            resource_type_id: 1, order_type: "buy".into(),
-            price: 5.0, quantity: 5, created_tick: 0,
-        });
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                price: 10.0,
+                quantity: 5,
+                created_tick: 0,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                price: 5.0,
+                quantity: 5,
+                created_tick: 0,
+            },
+        );
 
         clear_orders(&mut state, 1);
 

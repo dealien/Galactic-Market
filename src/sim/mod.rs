@@ -20,7 +20,7 @@ impl SimState {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log
-        if self.tick % 100 == 0 || self.tick == 1 {
+        if self.tick.is_multiple_of(100) || self.tick == 1 {
             info!("--- Tick {} ---", self.tick);
         }
 
@@ -69,13 +69,11 @@ impl SimState {
 
         // ── Deposits ──────────────────────────────────────────────────────────
         for deposit in self.deposits.values() {
-            sqlx::query(
-                "UPDATE deposits SET size_remaining = $1 WHERE id = $2",
-            )
-            .bind(deposit.size_remaining)
-            .bind(deposit.id)
-            .execute(&mut *tx)
-            .await?;
+            sqlx::query("UPDATE deposits SET size_remaining = $1 WHERE id = $2")
+                .bind(deposit.size_remaining)
+                .bind(deposit.id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // ── Inventories ───────────────────────────────────────────────────────

@@ -116,10 +116,13 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
-        "INSERT INTO recipe_inputs (recipe_id, resource_type_id, quantity) VALUES ($1, $2, $3)"
+        "INSERT INTO recipe_inputs (recipe_id, resource_type_id, quantity) VALUES ($1, $2, $3)",
     )
-    .bind(recipe_id).bind(iron_ore_id).bind(3)
-    .execute(&mut *tx).await?;
+    .bind(recipe_id)
+    .bind(iron_ore_id)
+    .bind(3)
+    .execute(&mut *tx)
+    .await?;
 
     // 8. Seed one freelancer mining company per city + startup loan + mine + deposit
     //    Sector capital cities (first city of first planet per system) also get a refinery.
@@ -154,8 +157,10 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
         // Seed the loan proceeds into cash
         sqlx::query("UPDATE companies SET cash = $1 WHERE id = $2")
-            .bind(startup_loan_amount).bind(company_id)
-            .execute(&mut *tx).await?;
+            .bind(startup_loan_amount)
+            .bind(company_id)
+            .execute(&mut *tx)
+            .await?;
 
         // Create an Iron Ore deposit on this planet (shared per planet, 1M units each)
         // Only create once per planet (on the first company of each planet group)
@@ -184,7 +189,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         }
     }
 
-    info!("Seeded 32 freelancer companies with startup loans, mine facilities, and Iron Ore deposits.");
+    info!(
+        "Seeded 32 freelancer companies with startup loans, mine facilities, and Iron Ore deposits."
+    );
 
     // 9. Seed one consumer company per city representing local population demand.
     //    Each consumer is funded by a per-capita city treasury (population × 10 credits).

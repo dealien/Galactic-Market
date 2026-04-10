@@ -89,12 +89,7 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
             },
         );
 
-        debug!(
-            city_id,
-            population,
-            demand_qty,
-            "Consumer buy order posted"
-        );
+        debug!(city_id, population, demand_qty, "Consumer buy order posted");
     }
 }
 
@@ -148,7 +143,10 @@ mod tests {
         let mut state = make_consumer_state(1_000_000, 10_000.0);
         run_consumption(&mut state, 1);
         let orders: Vec<_> = state.market_orders.values().collect();
-        assert!(!orders.is_empty(), "Should have posted at least one buy order");
+        assert!(
+            !orders.is_empty(),
+            "Should have posted at least one buy order"
+        );
         assert_eq!(orders[0].resource_type_id, IRON_INGOT_RESOURCE_ID);
         assert_eq!(orders[0].order_type, "buy");
         assert_eq!(orders[0].price, CONSUMER_WILLINGNESS_TO_PAY);
@@ -165,7 +163,10 @@ mod tests {
         let small_qty = small.market_orders.values().next().unwrap().quantity;
         let large_qty = large.market_orders.values().next().unwrap().quantity;
 
-        assert!(large_qty > small_qty, "Larger city should demand more ingots");
+        assert!(
+            large_qty > small_qty,
+            "Larger city should demand more ingots"
+        );
     }
 
     #[test]

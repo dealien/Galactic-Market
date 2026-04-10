@@ -1,13 +1,21 @@
+use galactic_market::sim::SimState;
 use galactic_market::sim::state::{
     City, Company, Deposit, Facility, Inventory, MarketOrder, Recipe, RecipeInput,
 };
-use galactic_market::sim::SimState;
 
 /// Build a minimal SimState with one miner + deposit + refinery for integration tests.
 fn full_economy_state() -> SimState {
     let mut state = SimState::new();
 
-    state.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into(), population: 0 });
+    state.cities.insert(
+        1,
+        City {
+            id: 1,
+            body_id: 1,
+            name: "Test City".into(),
+            population: 0,
+        },
+    );
 
     state.companies.insert(
         1,
@@ -64,7 +72,10 @@ fn full_economy_state() -> SimState {
             output_resource_id: 2,
             output_qty: 1,
             facility_type: "refinery".into(),
-            inputs: vec![RecipeInput { resource_type_id: 1, quantity: 3 }],
+            inputs: vec![RecipeInput {
+                resource_type_id: 1,
+                quantity: 3,
+            }],
         },
     );
 
@@ -104,32 +115,59 @@ fn test_refinery_consumes_ore_and_produces_ingots() {
 
     let ingot_key = Inventory::key(1, 1, 2);
     assert!(
-        state.inventories.get(&ingot_key).map(|i| i.quantity).unwrap_or(0) > 0,
+        state
+            .inventories
+            .get(&ingot_key)
+            .map(|i| i.quantity)
+            .unwrap_or(0)
+            > 0,
         "Iron Ingots should have been produced"
     );
 
     let ore_key = Inventory::key(1, 1, 1);
-    let ore_remaining = state.inventories.get(&ore_key).map(|i| i.quantity).unwrap_or(0);
+    let ore_remaining = state
+        .inventories
+        .get(&ore_key)
+        .map(|i| i.quantity)
+        .unwrap_or(0);
     assert!(ore_remaining < 100, "Iron Ore should have been consumed");
 }
 
 #[test]
 fn test_market_clearing_balances() {
     let mut state = SimState::new();
-    state.cities.insert(1, City { id: 1, body_id: 1, name: "C".into(), population: 0 });
+    state.cities.insert(
+        1,
+        City {
+            id: 1,
+            body_id: 1,
+            name: "C".into(),
+            population: 0,
+        },
+    );
 
     state.companies.insert(
         1,
         Company {
-            id: 1, name: "Seller".into(), company_type: "freelancer".into(),
-            home_city_id: 1, cash: 0.0, debt: 0.0, next_eval_tick: 1,
+            id: 1,
+            name: "Seller".into(),
+            company_type: "freelancer".into(),
+            home_city_id: 1,
+            cash: 0.0,
+            debt: 0.0,
+            next_eval_tick: 1,
         },
     );
     state.companies.insert(
         2,
         Company {
-            id: 2, name: "Buyer".into(), company_type: "freelancer".into(),
-            home_city_id: 1, cash: 500.0, debt: 0.0, next_eval_tick: 1,
+            id: 2,
+            name: "Buyer".into(),
+            company_type: "freelancer".into(),
+            home_city_id: 1,
+            cash: 500.0,
+            debt: 0.0,
+            next_eval_tick: 1,
         },
     );
 
@@ -138,23 +176,38 @@ fn test_market_clearing_balances() {
     // 10 ore for the seller
     state.inventories.insert(
         Inventory::key(1, 1, 1),
-        Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 10 },
+        Inventory {
+            company_id: 1,
+            city_id: 1,
+            resource_type_id: 1,
+            quantity: 10,
+        },
     );
 
     state.market_orders.insert(
         1,
         MarketOrder {
-            id: 1, city_id: 1, company_id: 1,
-            resource_type_id: 1, order_type: "sell".into(),
-            price: 8.0, quantity: 10, created_tick: 0,
+            id: 1,
+            city_id: 1,
+            company_id: 1,
+            resource_type_id: 1,
+            order_type: "sell".into(),
+            price: 8.0,
+            quantity: 10,
+            created_tick: 0,
         },
     );
     state.market_orders.insert(
         2,
         MarketOrder {
-            id: 2, city_id: 1, company_id: 2,
-            resource_type_id: 1, order_type: "buy".into(),
-            price: 10.0, quantity: 10, created_tick: 0,
+            id: 2,
+            city_id: 1,
+            company_id: 2,
+            resource_type_id: 1,
+            order_type: "buy".into(),
+            price: 10.0,
+            quantity: 10,
+            created_tick: 0,
         },
     );
 

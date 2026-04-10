@@ -39,14 +39,22 @@ pub fn run_production(state: &mut SimState) {
 
             // Consume inputs
             for input in &recipe.inputs {
-                let key = Inventory::key(facility.company_id, facility.city_id, input.resource_type_id);
+                let key = Inventory::key(
+                    facility.company_id,
+                    facility.city_id,
+                    input.resource_type_id,
+                );
                 if let Some(inv) = state.inventories.get_mut(&key) {
                     inv.quantity -= input.quantity as i64 * runs;
                 }
             }
 
             // Produce outputs
-            let out_key = Inventory::key(facility.company_id, facility.city_id, recipe.output_resource_id);
+            let out_key = Inventory::key(
+                facility.company_id,
+                facility.city_id,
+                recipe.output_resource_id,
+            );
             let entry = state.inventories.entry(out_key).or_insert(Inventory {
                 company_id: facility.company_id,
                 city_id: facility.city_id,
@@ -171,7 +179,11 @@ mod tests {
     fn refinery_limited_by_inventory() {
         let mut state = make_state();
         // Only 6 ore available → max 2 runs
-        state.inventories.get_mut(&Inventory::key(1, 1, 1)).unwrap().quantity = 6;
+        state
+            .inventories
+            .get_mut(&Inventory::key(1, 1, 1))
+            .unwrap()
+            .quantity = 6;
         run_production(&mut state);
 
         let ingot_key = Inventory::key(1, 1, 2);

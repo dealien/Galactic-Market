@@ -92,9 +92,14 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 },
             );
 
-            debug!(company_id, city_id, qty = inv.quantity, price = ask_price, "Sell order posted");
+            debug!(
+                company_id,
+                city_id,
+                qty = inv.quantity,
+                price = ask_price,
+                "Sell order posted"
+            );
         }
-
 
         // --- Refinery AI ---
         // Any company that owns a refinery should: sell ingots it has produced,
@@ -140,15 +145,27 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         created_tick: current_tick,
                     },
                 );
-                debug!(company_id, city_id, qty = ingot_inv.quantity, price = ask_price, "Ingot sell order posted");
+                debug!(
+                    company_id,
+                    city_id,
+                    qty = ingot_inv.quantity,
+                    price = ask_price,
+                    "Ingot sell order posted"
+                );
             }
 
             // Buy ore if the ingot margin is profitable (1 ingot = 3 ore + labor)
             let labor_margin = 1.0;
             if ingot_price > (ore_price * 3.0) + labor_margin {
                 // Find refinery facility to check capacity
-                let capacity = state.facilities.values()
-                    .find(|f| f.company_id == company_id && f.city_id == city_id && f.facility_type == "refinery")
+                let capacity = state
+                    .facilities
+                    .values()
+                    .find(|f| {
+                        f.company_id == company_id
+                            && f.city_id == city_id
+                            && f.facility_type == "refinery"
+                    })
                     .map(|f| f.capacity)
                     .unwrap_or(5);
 
@@ -200,7 +217,15 @@ mod tests {
     fn make_state_with_miner() -> SimState {
         let mut s = SimState::new();
 
-        s.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into(), population: 0 });
+        s.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 0,
+            },
+        );
 
         s.companies.insert(
             1,
@@ -230,7 +255,12 @@ mod tests {
         // Company has 50 Iron Ore ready to sell
         s.inventories.insert(
             Inventory::key(1, 1, 1),
-            Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 50 },
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 50,
+            },
         );
 
         s
@@ -251,7 +281,10 @@ mod tests {
         run_decisions(&mut state, 1);
 
         let company = &state.companies[&1];
-        assert!(company.next_eval_tick > 1, "next_eval_tick should be rescheduled");
+        assert!(
+            company.next_eval_tick > 1,
+            "next_eval_tick should be rescheduled"
+        );
     }
 
     #[test]
@@ -261,6 +294,9 @@ mod tests {
         state.companies.get_mut(&1).unwrap().next_eval_tick = 9999;
         run_decisions(&mut state, 1);
 
-        assert!(state.market_orders.is_empty(), "No orders should be posted if not due");
+        assert!(
+            state.market_orders.is_empty(),
+            "No orders should be posted if not due"
+        );
     }
 }
