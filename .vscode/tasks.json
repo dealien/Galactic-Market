@@ -50,6 +50,21 @@
                 "isDefault": true
             },
             "problemMatcher": []
+        },
+        {
+            "label": "docker: compose up",
+            "type": "shell",
+            "command": "docker-compose up -d",
+            "problemMatcher": []
+        },
+        {
+            "label": "Prepare for Debugging",
+            "dependsOn": [
+                "docker: compose up",
+                "rust: cargo build"
+            ],
+            "dependsOrder": "sequence",
+            "problemMatcher": []
         }
     ]
 }
