@@ -88,6 +88,18 @@ pub struct RecipeInput {
     pub quantity: i32,
 }
 
+/// An active in-transit shipment between cities.
+#[derive(Debug, Clone)]
+pub struct TradeRoute {
+    pub id: i32,
+    pub company_id: i32,
+    pub origin_city_id: i32,
+    pub dest_city_id: i32,
+    pub resource_type_id: i32,
+    pub quantity: i64,
+    pub arrival_tick: u64,
+}
+
 /// An active buy or sell order in a city's market.
 #[derive(Debug, Clone)]
 pub struct MarketOrder {
@@ -140,6 +152,9 @@ pub struct SimState {
     /// Recipes keyed by recipe ID.
     pub recipes: HashMap<i32, Recipe>,
 
+    /// Active in-transit shipments keyed by route ID.
+    pub trade_routes: HashMap<i32, TradeRoute>,
+
     /// Active market orders keyed by order ID. Cleared each tick after matching.
     pub market_orders: HashMap<i32, MarketOrder>,
 
@@ -160,6 +175,9 @@ pub struct SimState {
 
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
+
+    /// Monotonic counter for generating trade route IDs during a tick.
+    next_trade_route_id: i32,
 }
 
 impl Default for SimState {
@@ -179,6 +197,7 @@ impl SimState {
             inventories: HashMap::new(),
             facilities: HashMap::new(),
             recipes: HashMap::new(),
+            trade_routes: HashMap::new(),
             market_orders: HashMap::new(),
             market_history_buffer: Vec::new(),
             city_consumer_ids: HashMap::new(),
@@ -186,6 +205,7 @@ impl SimState {
             ema_prices: HashMap::new(),
             resource_types: HashMap::new(),
             next_order_id: 1,
+            next_trade_route_id: 1,
         }
     }
 
@@ -193,6 +213,13 @@ impl SimState {
     pub fn next_order_id(&mut self) -> i32 {
         let id = self.next_order_id;
         self.next_order_id += 1;
+        id
+    }
+
+    /// Generate a unique trade route ID for this tick.
+    pub fn next_trade_route_id(&mut self) -> i32 {
+        let id = self.next_trade_route_id;
+        self.next_trade_route_id += 1;
         id
     }
 }

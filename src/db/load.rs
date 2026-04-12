@@ -198,6 +198,32 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.recipes.len(), "Loaded recipes.");
 
+    // ── Trade Routes ──────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, i32, i32, i32, i64, i64)>(
+        "SELECT id, company_id, origin_city_id, dest_city_id, resource_type_id, quantity, arrival_tick FROM trade_routes",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, company_id, origin_city_id, dest_city_id, resource_type_id, quantity, arrival_tick) in
+        rows
+    {
+        state.trade_routes.insert(
+            id,
+            crate::sim::state::TradeRoute {
+                id,
+                company_id,
+                origin_city_id,
+                dest_city_id,
+                resource_type_id,
+                quantity,
+                arrival_tick: arrival_tick as u64,
+            },
+        );
+    }
+
+    info!(count = state.trade_routes.len(), "Loaded trade routes.");
+
     // ── Consumer company index ────────────────────────────────────────────────
     // Build a fast city_id → company_id map for the consumption phase.
     for (id, company) in &state.companies {

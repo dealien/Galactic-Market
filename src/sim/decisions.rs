@@ -1,7 +1,7 @@
 use rand::Rng;
 use tracing::debug;
 
-use crate::sim::state::{Inventory, MarketOrder, SimState};
+use crate::sim::state::{Inventory, MarketOrder, SimState, TradeRoute};
 
 /// Re-evaluation interval ranges by company type (min, max ticks).
 fn eval_interval_range(company_type: &str) -> (u64, u64) {
@@ -163,18 +163,66 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 if let Some(inv) = state.inventories.get(&key).cloned()
                     && inv.quantity > 0
                 {
-                    // Cost-disciplined pricing:
-                    let base_ask = cost * 1.15;
-                    let market_price = last_prices
-                        .get(&(city_id, res_id))
-                        .copied()
-                        .unwrap_or(base_ask * 1.5);
+                    // --- Logistics Logic: If we have too much ore and no local refinery, move it! ---
+                    let has_local_refinery = state
+                        .facilities
+                        .values()
+                        .any(|f| f.city_id == city_id && f.facility_type == "refinery");
 
                     let facility_capacity = state
                         .facilities
                         .get(&facility_id)
                         .map(|f| f.capacity)
                         .unwrap_or(10);
+
+                    if !has_local_refinery && inv.quantity >= (facility_capacity * 2) as i64 {
+                        // Find the "nearest" refinery (simplistic for Stage 1: first city of each body group)
+                        let refinery_city_id = state
+                            .cities
+                            .keys()
+                            .find(|&&id| (id - 1) % 4 == 0 && id != city_id)
+                            .copied();
+
+                        if let Some(target_city) = refinery_city_id {
+                            // Queue an "instant" trade route
+                            let route_id = state.next_trade_route_id();
+                            let move_qty = inv.quantity; // Move everything
+
+                            // Deduct from local inventory immediately to avoid double-counting
+                            if let Some(mut_inv) = state.inventories.get_mut(&key) {
+                                mut_inv.quantity -= move_qty;
+                            }
+
+                            state.trade_routes.insert(
+                                route_id,
+                                TradeRoute {
+                                    id: route_id,
+                                    company_id,
+                                    origin_city_id: city_id,
+                                    dest_city_id: target_city,
+                                    resource_type_id: res_id,
+                                    quantity: move_qty,
+                                    arrival_tick: current_tick, // Instant
+                                },
+                            );
+
+                            debug!(
+                                company_id,
+                                move_qty,
+                                from = city_id,
+                                to = target_city,
+                                "Miner moving ore to refinery city"
+                            );
+                            continue; // Skip posting sell order in current city
+                        }
+                    }
+
+                    // Cost-disciplined pricing:
+                    let base_ask = cost * 1.15;
+                    let market_price = last_prices
+                        .get(&(city_id, res_id))
+                        .copied()
+                        .unwrap_or(base_ask * 1.5);
 
                     // Desperation Logic: If inventory is high, discount aggressively to liquidate.
                     // If margin is razor thin, we be extra aggressive on clearing stock.

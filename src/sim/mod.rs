@@ -1,5 +1,6 @@
 pub mod consumption;
 pub mod decisions;
+pub mod logistics;
 pub mod markets;
 pub mod production;
 pub mod resources;
@@ -29,11 +30,14 @@ impl SimState {
         // ── Phase 1: Resource extraction ─────────────────────────────────────
         resources::run_extraction(self);
 
-        // ── Phase 6: Company AI decisions ─────────────────────────────────────
-        decisions::run_decisions(self, self.tick);
-
         // ── Phase 2: Production / refining ───────────────────────────────────
         production::run_production(self);
+
+        // ── Phase 3: Logistics ───────────────────────────────────────────────
+        logistics::run_logistics(self, self.tick);
+
+        // ── Phase 6: Company AI decisions ─────────────────────────────────────
+        decisions::run_decisions(self, self.tick);
 
         // ── Phase 3: Population consumption ───────────────────────────────
         consumption::run_consumption(self, self.tick);
@@ -135,6 +139,28 @@ impl SimState {
             .bind(facility.target_resource_id)
             .bind(ratios_json)
             .bind(facility.id)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Trade Routes (In-Transit) ──────────────────────────────────────────
+        // Wipe and rewrite active trade routes for simplicity in Stage 1
+        sqlx::query("DELETE FROM trade_routes")
+            .execute(&mut *tx)
+            .await?;
+
+        for route in self.trade_routes.values() {
+            sqlx::query(
+                "INSERT INTO trade_routes (id, company_id, origin_city_id, dest_city_id, resource_type_id, quantity, arrival_tick)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(route.id)
+            .bind(route.company_id)
+            .bind(route.origin_city_id)
+            .bind(route.dest_city_id)
+            .bind(route.resource_type_id)
+            .bind(route.quantity)
+            .bind(route.arrival_tick as i64)
             .execute(&mut *tx)
             .await?;
         }
