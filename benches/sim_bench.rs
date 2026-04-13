@@ -31,6 +31,7 @@ fn make_extraction_state(num_companies: usize) -> SimState {
                 cash: 100_000.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
 
@@ -87,6 +88,7 @@ fn make_market_state(num_orders: usize) -> SimState {
             cash: 0.0,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
         },
     );
     state.inventories.insert(
@@ -110,6 +112,7 @@ fn make_market_state(num_orders: usize) -> SimState {
                 cash: 100_000.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
         state.market_orders.insert(
@@ -181,6 +184,7 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 cash: 1000.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
         state.inventories.insert(
@@ -234,6 +238,7 @@ fn make_decisions_state(num_companies: usize) -> SimState {
                 debt: 0.0,
                 // Mix of due and not-due companies
                 next_eval_tick: if i % 2 == 0 { 1 } else { 9999 },
+                status: "active".into(),
             },
         );
         state.deposits.insert(

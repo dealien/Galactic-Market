@@ -48,6 +48,47 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
     for company_id in due {
         let company = state.companies.get(&company_id).unwrap();
+        
+        // --- Liquidation AI: Post Fire-Sale Orders ---
+        if company.status == "bankrupt" {
+            let mut orders_to_post = Vec::new();
+            let company_id = company.id;
+            let city_id = company.home_city_id;
+
+            // Find all inventory for this company across all cities
+            // (Bankrupt companies sell everything, everywhere)
+            let company_inventories: Vec<_> = state.inventories.values()
+                .filter(|inv| inv.company_id == company_id && inv.quantity > 0)
+                .cloned()
+                .collect();
+
+            for inv in company_inventories {
+                let market_price = state.ema_prices.get(&(inv.city_id, inv.resource_type_id))
+                    .copied()
+                    .unwrap_or(10.0);
+                
+                // Fire sale: 50% of market price to ensure it clears fast
+                let fire_sale_price = market_price * 0.5;
+
+                orders_to_post.push(MarketOrder {
+                    id: 0,
+                    city_id: inv.city_id,
+                    company_id,
+                    resource_type_id: inv.resource_type_id,
+                    order_type: "sell".into(),
+                    price: fire_sale_price,
+                    quantity: inv.quantity,
+                    created_tick: current_tick,
+                });
+            }
+
+            for mut order in orders_to_post {
+                order.id = state.next_order_id();
+                state.market_orders.insert(order.id, order);
+            }
+            continue; // Skip normal AI logic
+        }
+
         if company.status != "active" {
             continue;
         }

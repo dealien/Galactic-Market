@@ -38,8 +38,36 @@ pub fn run_finance(state: &mut SimState) {
         }
     }
 
-    // --- Bankruptcy Detection ---
+    // --- Bankruptcy Detection & Debt Repayment ---
     for company in state.companies.values_mut() {
+        if company.status == "bankrupt" {
+            // Apply all cash to debt
+            if company.cash > 0.0 {
+                let payment = company.cash.min(company.debt);
+                company.cash -= payment;
+                company.debt -= payment;
+                
+                // Also reduce the linked Loan objects if they exist
+                let company_id = company.id;
+                for loan in state.loans.values_mut().filter(|l| l.company_id == company_id) {
+                    let loan_payment = payment.min(loan.balance);
+                    loan.balance -= loan_payment;
+                }
+
+                debug!(company_id, payment, "Bankrupt company applied cash to debt reduction");
+            }
+
+            // Final Liquidation: If debt is gone and inventory is gone, mark as liquidated
+            let inventory_count = state.inventories.values()
+                .filter(|inv| inv.company_id == company.id && inv.quantity > 0)
+                .count();
+            
+            if company.debt <= 0.01 && inventory_count == 0 {
+                company.status = "liquidated".into();
+                debug!(company_id = company.id, "Company has been fully LIQUIDATED and is now defunct.");
+            }
+        }
+
         if company.status == "active" && company.debt > 500000.0 {
             company.status = "bankrupt".into();
             debug!(
