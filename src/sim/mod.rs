@@ -120,11 +120,12 @@ impl SimState {
         // ── Company financials ────────────────────────────────────────────────
         for company in self.companies.values() {
             sqlx::query(
-                "UPDATE companies SET cash = $1, debt = $2, next_eval_tick = $3 WHERE id = $4",
+                "UPDATE companies SET cash = $1, debt = $2, next_eval_tick = $3, status = $4 WHERE id = $5",
             )
             .bind(company.cash)
             .bind(company.debt)
             .bind(company.next_eval_tick as i64)
+            .bind(&company.status)
             .bind(company.id)
             .execute(&mut *tx)
             .await?;

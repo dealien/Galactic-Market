@@ -276,6 +276,7 @@ mod tests {
             cash,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
         }
     }
 

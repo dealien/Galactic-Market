@@ -98,25 +98,27 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.sectors.len(), "Loaded sectors.");
 
     // ── Companies ─────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, String, String, i32, f64, f64, i64)>(
-        "SELECT id, name, company_type, home_city_id, cash, debt, next_eval_tick FROM companies",
+    let rows = sqlx::query_as::<_, (i32, String, String, i32, f64, f64, i64, String)>(
+        "SELECT id, name, company_type, home_city_id, cash, debt, next_eval_tick, status FROM companies",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, name, company_type, home_city_id, cash, debt, next_eval_tick) in rows {
+    for (id, name, company_type, home_city_id, cash, debt, next_eval_tick, status) in rows {
         state.companies.insert(
             id,
             Company {
                 id,
                 name,
-                company_type,
+                company_type: company_type.clone(),
                 home_city_id,
                 cash,
                 debt,
                 next_eval_tick: next_eval_tick as u64,
+                status,
             },
         );
+
     }
 
     info!(count = state.companies.len(), "Loaded companies.");

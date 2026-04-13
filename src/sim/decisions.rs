@@ -47,6 +47,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         .collect();
 
     for company_id in due {
+        let company = state.companies.get(&company_id).unwrap();
+        if company.status != "active" {
+            continue;
+        }
+
         // Clear all outstanding orders for this company before making new ones.
         // This ensures the market book doesn't bloat with obsolete strategies.
         state
@@ -766,6 +771,7 @@ mod tests {
                 cash: 200.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
 

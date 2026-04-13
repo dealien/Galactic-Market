@@ -117,12 +117,13 @@ mod tests {
             1,
             Company {
                 id: 1,
-                name: "City 1 Consumers".into(),
+                name: "Test Consumer".into(),
                 company_type: "consumer".into(),
                 home_city_id: 1,
                 cash,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
 

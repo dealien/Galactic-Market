@@ -32,12 +32,20 @@ pub fn run_finance(state: &mut SimState) {
 
                 if let Some(loan) = state.loans.get_mut(&loan_id) {
                     loan.balance += shortfall;
-                    debug!(
-                        company_id,
-                        shortfall, "Interest shortfall added to loan balance"
-                    );
+                    debug!(company_id, shortfall, "Interest shortfall added to loan balance");
                 }
             }
+        }
+    }
+
+    // --- Bankruptcy Detection ---
+    for company in state.companies.values_mut() {
+        if company.status == "active" && company.debt > 500000.0 {
+            company.status = "bankrupt".into();
+            debug!(
+                company_id = company.id,
+                "Company has gone BANKRUPT due to excessive debt!"
+            );
         }
     }
 }
@@ -60,6 +68,7 @@ mod tests {
                 cash: 100.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
         state.loans.insert(
@@ -93,6 +102,7 @@ mod tests {
                 cash: 0.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
         state.loans.insert(
@@ -110,5 +120,27 @@ mod tests {
 
         assert_eq!(state.companies[&1].cash, 0.0);
         assert_eq!(state.loans[&1].balance, 1010.0);
+    }
+
+    #[test]
+    fn finance_triggers_bankruptcy_on_high_debt() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Debt King".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 0.0,
+                debt: 600000.0, // Over 500k limit
+                next_eval_tick: 1,
+                status: "active".into(),
+            },
+        );
+
+        run_finance(&mut state);
+
+        assert_eq!(state.companies[&1].status, "bankrupt");
     }
 }

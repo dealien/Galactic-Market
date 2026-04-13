@@ -98,6 +98,11 @@ pub fn run_extraction(state: &mut SimState) {
 
         debug!("Company found for miner");
 
+        if company.status != "active" {
+            debug!(company_id, status = company.status, "Skipping extraction for non-active company");
+            continue;
+        }
+
         let market_price = state
             .ema_prices
             .get(&(city_id, deposit.resource_type_id))
@@ -224,6 +229,7 @@ mod tests {
                 cash: 500.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
 

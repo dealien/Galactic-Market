@@ -52,6 +52,8 @@ pub struct Company {
     pub cash: f64,
     pub debt: f64,
     pub next_eval_tick: u64,
+    /// Status: "active", "bankrupt", "liquidated"
+    pub status: String,
 }
 
 /// A resource deposit on a celestial body.

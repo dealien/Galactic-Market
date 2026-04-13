@@ -46,6 +46,15 @@ pub fn run_production(state: &mut SimState) {
     }
 
     for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
+        let company = match state.companies.get(&company_id) {
+            Some(c) => c,
+            None => continue,
+        };
+
+        if company.status != "active" {
+            continue;
+        }
+
         for (recipe_id_str, ratio) in ratios {
             let recipe_id = match recipe_id_str.parse::<i32>() {
                 Ok(id) => id,
@@ -141,6 +150,7 @@ mod tests {
                 cash: 1000.0,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
             },
         );
 

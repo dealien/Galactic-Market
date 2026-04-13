@@ -27,6 +27,7 @@ fn full_economy_state() -> SimState {
             cash: 10_000.0,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
         },
     );
 
@@ -156,26 +157,29 @@ fn test_market_clearing_balances() {
         1,
         Company {
             id: 1,
-            name: "Seller".into(),
+            name: "Miner".into(),
             company_type: "freelancer".into(),
             home_city_id: 1,
-            cash: 0.0,
+            cash: 100.0,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
         },
-    );
-    state.companies.insert(
+        );
+        state.companies.insert(
         2,
         Company {
             id: 2,
-            name: "Buyer".into(),
+            name: "Refiner".into(),
             company_type: "freelancer".into(),
             home_city_id: 1,
-            cash: 500.0,
+            cash: 100.0,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
         },
-    );
+        );
+
 
     let total_before = state.companies[&1].cash + state.companies[&2].cash;
 
