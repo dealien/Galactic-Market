@@ -1,9 +1,9 @@
 use clap::Parser;
 use sqlx::postgres::PgPoolOptions;
 use std::env;
-use tracing::{Level, info};
+use tracing::info;
 
-use galactic_market::{db, sim};
+use galactic_market::db;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -15,19 +15,37 @@ struct Args {
     /// Seed the initial galaxy before running
     #[arg(short, long)]
     seed: bool,
+
+    /// Wipe the database before running (drops and recreates the public schema)
+    #[arg(long)]
+    clear: bool,
+
+    /// Show detailed debug logs during simulation
+    #[arg(long)]
+    debug: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize tracing
-    tracing_subscriber::fmt().with_max_level(Level::INFO).init();
+    let args = Args::parse();
+
+    // Initialize tracing. Default to INFO, or DEBUG if flag is set.
+    let log_level = if args.debug {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::INFO
+    };
+
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env().add_directive(log_level.into()),
+        )
+        .init();
 
     // Load .env file configurations
     dotenvy::dotenv().ok();
 
-    let args = Args::parse();
-
-    info!("Starting Galactic Market Simulator (Phase 0)");
+    info!("Starting Galactic Market Simulator (Stage 1)");
 
     let database_url = env::var("DATABASE_URL")?;
 
@@ -38,6 +56,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Connected to PostgreSQL.");
 
+    // Optionally wipe the DB before running migrations
+    if args.clear {
+        db::utils::clear_database(&pool).await?;
+    }
+
     // Run migrations
     info!("Running migrations...");
     sqlx::migrate!("./migrations").run(&pool).await?;
@@ -46,8 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         db::seed::run_seed(&pool).await?;
     }
 
-    // Initialize Simulation State
-    let mut state = sim::SimState::new();
+    // Load full simulation state from DB into memory
+    info!("Loading simulation state from database...");
+    let mut state = db::load::load(&pool).await?;
 
     // Run tick loop
     for _ in 0..args.ticks {
