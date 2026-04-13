@@ -10,6 +10,30 @@ pub struct City {
     pub population: i64,
 }
 
+/// A celestial body (planet, moon, station).
+#[derive(Debug, Clone)]
+pub struct CelestialBody {
+    pub id: i32,
+    pub system_id: i32,
+    pub name: String,
+}
+
+/// A star system containing celestial bodies.
+#[derive(Debug, Clone)]
+pub struct StarSystem {
+    pub id: i32,
+    pub sector_id: i32,
+    pub name: String,
+}
+
+/// A sector of space containing star systems.
+#[derive(Debug, Clone)]
+pub struct Sector {
+    pub id: i32,
+    pub empire_id: i32,
+    pub name: String,
+}
+
 /// A resource type in the simulation.
 #[derive(Debug, Clone)]
 pub struct ResourceType {
@@ -147,6 +171,15 @@ pub struct SimState {
     /// All cities keyed by city ID.
     pub cities: HashMap<i32, City>,
 
+    /// All celestial bodies keyed by body ID.
+    pub celestial_bodies: HashMap<i32, CelestialBody>,
+
+    /// All star systems keyed by system ID.
+    pub star_systems: HashMap<i32, StarSystem>,
+
+    /// All sectors keyed by sector ID.
+    pub sectors: HashMap<i32, Sector>,
+
     /// All companies keyed by company ID.
     pub companies: HashMap<i32, Company>,
 
@@ -205,6 +238,9 @@ impl SimState {
         Self {
             tick: 0,
             cities: HashMap::new(),
+            celestial_bodies: HashMap::new(),
+            star_systems: HashMap::new(),
+            sectors: HashMap::new(),
             companies: HashMap::new(),
             loans: HashMap::new(),
             deposits: HashMap::new(),

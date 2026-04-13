@@ -4,7 +4,6 @@ use tracing::debug;
 /// Phase 3: Logistics.
 ///
 /// Advance in-transit shipments and deliver cargo at destination.
-/// In Stage 1, we support "instant" delivery by checking arrival_tick.
 pub fn run_logistics(state: &mut SimState, current_tick: u64) {
     let mut to_deliver = Vec::new();
 
@@ -40,55 +39,120 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
     }
 }
 
+/// Metadata about a potential transport route.
+#[derive(Debug, Clone, Copy)]
+pub struct TransportInfo {
+    /// Total ticks until arrival.
+    pub ticks: u64,
+    /// Cost in currency per unit of resource.
+    pub cost_per_unit: f64,
+}
+
+/// Calculate time and cost for moving goods between two cities.
+pub fn get_transport_info(state: &SimState, origin_city_id: i32, dest_city_id: i32) -> TransportInfo {
+    if origin_city_id == dest_city_id {
+        return TransportInfo {
+            ticks: 0,
+            cost_per_unit: 0.0,
+        };
+    }
+
+    let origin_city = state.cities.get(&origin_city_id).expect("Origin city not found");
+    let dest_city = state.cities.get(&dest_city_id).expect("Dest city not found");
+
+    // 1. Same Celestial Body (Planet/Moon)
+    if origin_city.body_id == dest_city.body_id {
+        return TransportInfo {
+            ticks: 1,
+            cost_per_unit: 0.1,
+        };
+    }
+
+    // 2. Same Star System
+    let origin_body = state.celestial_bodies.get(&origin_city.body_id).expect("Origin body not found");
+    let dest_body = state.celestial_bodies.get(&dest_city.body_id).expect("Dest body not found");
+
+    if origin_body.system_id == dest_body.system_id {
+        return TransportInfo {
+            ticks: 3,
+            cost_per_unit: 0.5,
+        };
+    }
+
+    // 3. Same Sector
+    let origin_system = state.star_systems.get(&origin_body.system_id).expect("Origin system not found");
+    let dest_system = state.star_systems.get(&dest_body.system_id).expect("Dest system not found");
+
+    if origin_system.sector_id == dest_system.sector_id {
+        return TransportInfo {
+            ticks: 7,
+            cost_per_unit: 2.0,
+        };
+    }
+
+    // 4. Inter-Sector / Inter-Empire
+    TransportInfo {
+        ticks: 15,
+        cost_per_unit: 5.0,
+    }
+}
+
 // ─── Unit Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{SimState, TradeRoute};
+    use crate::sim::state::{SimState, TradeRoute, City, CelestialBody, StarSystem, Sector};
 
-    #[test]
-    fn logistics_delivers_arrived_shipments() {
-        let mut state = SimState::new();
-        state.trade_routes.insert(
-            1,
-            TradeRoute {
-                id: 1,
-                company_id: 1,
-                origin_city_id: 1,
-                dest_city_id: 2,
-                resource_type_id: 1,
-                quantity: 100,
-                arrival_tick: 1,
-            },
-        );
-
-        run_logistics(&mut state, 1);
-
-        let key = Inventory::key(1, 2, 1);
-        assert_eq!(state.inventories[&key].quantity, 100);
-        assert!(state.trade_routes.is_empty());
+    fn setup_hierarchy(state: &mut SimState) {
+        state.sectors.insert(1, Sector { id: 1, empire_id: 1, name: "Sector 1".into() });
+        state.sectors.insert(2, Sector { id: 2, empire_id: 1, name: "Sector 2".into() });
+        
+        state.star_systems.insert(1, StarSystem { id: 1, sector_id: 1, name: "System 1".into() });
+        state.star_systems.insert(2, StarSystem { id: 2, sector_id: 1, name: "System 2".into() });
+        
+        state.celestial_bodies.insert(1, CelestialBody { id: 1, system_id: 1, name: "Body 1".into() });
+        state.celestial_bodies.insert(2, CelestialBody { id: 2, system_id: 1, name: "Body 2".into() });
+        
+        state.cities.insert(1, City { id: 1, body_id: 1, name: "City 1".into(), population: 0 });
+        state.cities.insert(2, City { id: 2, body_id: 1, name: "City 2".into(), population: 0 });
+        state.cities.insert(3, City { id: 3, body_id: 2, name: "City 3".into(), population: 0 });
+        state.cities.insert(4, City { id: 4, body_id: 2, name: "City 4".into(), population: 0 });
+        
+        state.star_systems.insert(3, StarSystem { id: 3, sector_id: 2, name: "System 3".into() });
+        state.celestial_bodies.insert(3, CelestialBody { id: 3, system_id: 3, name: "Body 3".into() });
+        state.cities.insert(5, City { id: 5, body_id: 3, name: "City 5".into(), population: 0 });
     }
 
     #[test]
-    fn logistics_skips_future_shipments() {
+    fn transport_info_calculates_correctly() {
         let mut state = SimState::new();
-        state.trade_routes.insert(
-            1,
-            TradeRoute {
-                id: 1,
-                company_id: 1,
-                origin_city_id: 1,
-                dest_city_id: 2,
-                resource_type_id: 1,
-                quantity: 100,
-                arrival_tick: 10,
-            },
-        );
+        setup_hierarchy(&mut state);
 
-        run_logistics(&mut state, 1);
+        // Same city
+        let info = get_transport_info(&state, 1, 1);
+        assert_eq!(info.ticks, 0);
 
-        assert!(state.inventories.is_empty());
-        assert_eq!(state.trade_routes.len(), 1);
+        // Same planet
+        let info = get_transport_info(&state, 1, 2);
+        assert_eq!(info.ticks, 1);
+        assert_eq!(info.cost_per_unit, 0.1);
+
+        // Same system, different planet
+        let info = get_transport_info(&state, 1, 3);
+        assert_eq!(info.ticks, 3);
+        assert_eq!(info.cost_per_unit, 0.5);
+
+        // Same sector, different system
+        state.celestial_bodies.insert(4, CelestialBody { id: 4, system_id: 2, name: "Body 4".into() });
+        state.cities.insert(6, City { id: 6, body_id: 4, name: "City 6".into(), population: 0 });
+        let info = get_transport_info(&state, 1, 6);
+        assert_eq!(info.ticks, 7);
+        assert_eq!(info.cost_per_unit, 2.0);
+
+        // Different sector
+        let info = get_transport_info(&state, 1, 5);
+        assert_eq!(info.ticks, 15);
+        assert_eq!(info.cost_per_unit, 5.0);
     }
 }

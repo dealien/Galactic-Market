@@ -2,6 +2,7 @@ use rand::Rng;
 use tracing::debug;
 
 use crate::sim::state::{Inventory, MarketOrder, SimState, TradeRoute};
+use crate::sim::logistics::get_transport_info;
 
 /// Re-evaluation interval ranges by company type (min, max ticks).
 fn eval_interval_range(company_type: &str) -> (u64, u64) {
@@ -175,20 +176,61 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .map(|f| f.capacity)
                         .unwrap_or(10);
 
-                    if !has_local_refinery && inv.quantity >= (facility_capacity * 2) as i64 {
-                        // Find the "nearest" refinery (simplistic for Stage 1: first city of each body group)
-                        let refinery_city_id = state
-                            .cities
-                            .keys()
-                            .find(|&&id| (id - 1) % 4 == 0 && id != city_id)
-                            .copied();
+                    // --- Improved Logistics: Evaluate all cities for the best market ---
+                    let mut best_target_city = None;
+                    let mut best_target_profit = 0.0;
+                    let mut best_target_info = None;
 
-                        if let Some(target_city) = refinery_city_id {
-                            // Queue an "instant" trade route
+                    let local_price = state
+                        .ema_prices
+                        .get(&(city_id, res_id))
+                        .copied()
+                        .unwrap_or(cost * 1.1);
+
+                    for &target_city_id in state.cities.keys() {
+                        if target_city_id == city_id {
+                            continue;
+                        }
+
+                        let transport_info = get_transport_info(state, city_id, target_city_id);
+                        let dest_price = state
+                            .ema_prices
+                            .get(&(target_city_id, res_id))
+                            .copied()
+                            .unwrap_or(cost * 1.5);
+
+                        // Profit = (Destination Price - Local Price - Transport Cost)
+                        let margin = dest_price - local_price - transport_info.cost_per_unit;
+
+                        if margin > best_target_profit {
+                            best_target_profit = margin;
+                            best_target_city = Some(target_city_id);
+                            best_target_info = Some(transport_info);
+                        }
+                    }
+
+                    // Only ship if it's significantly more profitable (e.g. margin > 5% of cost)
+                    // OR if we are drowning in inventory and have no local refinery.
+                    let should_ship = if best_target_city.is_some() {
+                        best_target_profit > (cost * 0.05)
+                            || (!has_local_refinery && inv.quantity >= (facility_capacity * 2) as i64)
+                    } else {
+                        false
+                    };
+
+                    if should_ship {
+                        let target_city = best_target_city.unwrap();
+                        let transport_info = best_target_info.unwrap();
+                        let move_qty = inv.quantity;
+
+                        // Pay transport cost
+                        let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                        let company_cash = state.companies.get(&company_id).unwrap().cash;
+
+                        if company_cash >= total_cost {
+                            state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
+
                             let route_id = state.next_trade_route_id();
-                            let move_qty = inv.quantity; // Move everything
-
-                            // Deduct from local inventory immediately to avoid double-counting
                             if let Some(mut_inv) = state.inventories.get_mut(&key) {
                                 mut_inv.quantity -= move_qty;
                             }
@@ -202,7 +244,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                     dest_city_id: target_city,
                                     resource_type_id: res_id,
                                     quantity: move_qty,
-                                    arrival_tick: current_tick, // Instant
+                                    arrival_tick: current_tick + transport_info.ticks,
                                 },
                             );
 
@@ -211,7 +253,9 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 move_qty,
                                 from = city_id,
                                 to = target_city,
-                                "Miner moving ore to refinery city"
+                                ticks = transport_info.ticks,
+                                cost = total_cost,
+                                "Miner shipped ore to better market"
                             );
                             continue; // Skip posting sell order in current city
                         }
@@ -356,7 +400,161 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                 // 3. Post orders
                 for (_r_id, _margin, cost_basis, out_price, recipe) in recipes_evaluated {
-                    // ... (existing order posting logic)
+                    // Sell all ingots of this type
+                    let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
+                    if let Some(inv) = state.inventories.get(&out_key).cloned()
+                        && inv.quantity > 0
+                    {
+                        // --- Improved Logistics: Evaluate all cities for the best market for outputs ---
+                        let mut best_target_city = None;
+                        let mut best_target_profit = 0.0;
+                        let mut best_target_info = None;
+
+                        let local_price = state
+                            .ema_prices
+                            .get(&(city_id, recipe.output_resource_id))
+                            .copied()
+                            .unwrap_or(out_price);
+
+                        for &target_city_id in state.cities.keys() {
+                            if target_city_id == city_id {
+                                continue;
+                            }
+
+                            let transport_info = get_transport_info(state, city_id, target_city_id);
+                            let dest_price = state
+                                .ema_prices
+                                .get(&(target_city_id, recipe.output_resource_id))
+                                .copied()
+                                .unwrap_or(out_price * 1.2);
+
+                            let margin = dest_price - local_price - transport_info.cost_per_unit;
+
+                            if margin > best_target_profit {
+                                best_target_profit = margin;
+                                best_target_city = Some(target_city_id);
+                                best_target_info = Some(transport_info);
+                            }
+                        }
+
+                        // Ship if profit margin improvement > 10%
+                        if let Some(target_city) = best_target_city && best_target_profit > (out_price * 0.10) {
+                            let transport_info = best_target_info.unwrap();
+                            let move_qty = inv.quantity;
+                            let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                            let company_cash = state.companies.get(&company_id).unwrap().cash;
+
+                            if company_cash >= total_cost {
+                                state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
+                                let route_id = state.next_trade_route_id();
+                                if let Some(mut_inv) = state.inventories.get_mut(&out_key) {
+                                    mut_inv.quantity -= move_qty;
+                                }
+
+                                state.trade_routes.insert(
+                                    route_id,
+                                    TradeRoute {
+                                        id: route_id,
+                                        company_id,
+                                        origin_city_id: city_id,
+                                        dest_city_id: target_city,
+                                        resource_type_id: recipe.output_resource_id,
+                                        quantity: move_qty,
+                                        arrival_tick: current_tick + transport_info.ticks,
+                                    },
+                                );
+
+                                debug!(
+                                    company_id,
+                                    move_qty,
+                                    from = city_id,
+                                    to = target_city,
+                                    ticks = transport_info.ticks,
+                                    cost = total_cost,
+                                    "Refinery shipped refined goods to better market"
+                                );
+                                continue;
+                            }
+                        }
+
+                        // Price ingots at cost + 30% margin
+                        let base_ask = cost_basis * 1.3;
+
+                        // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
+                        // If inventory > capacity, we are overproducing; drop price.
+                        let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
+                            cost_basis * 1.05 // Sell near cost to clear stockpile
+                        } else {
+                            base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
+                        };
+
+                        orders_to_post.push(MarketOrder {
+                            id: 0,
+                            city_id,
+                            company_id,
+                            resource_type_id: recipe.output_resource_id,
+                            order_type: "sell".into(),
+                            price: ask_price,
+                            quantity: inv.quantity,
+                            created_tick: current_tick,
+                        });
+                    }
+
+                    // Buy inputs for a batch (e.g. 5 ticks of capacity * input qty)
+                    let portion_cap = (capacity as f64
+                        * (new_ratios.get(&recipe.id.to_string()).unwrap_or(&0.5)))
+                        as i32;
+                    if portion_cap > 0 {
+                        for input in &recipe.inputs {
+                            let buy_qty = (portion_cap * input.quantity * 5) as i64;
+
+                            // EMA as base for bidding
+                            let in_price = state
+                                .ema_prices
+                                .get(&(city_id, input.resource_type_id))
+                                .copied()
+                                .unwrap_or(2.5);
+
+                            // Profit-disciplined bidding:
+                            let max_affordable = (out_price * recipe.output_qty as f64
+                                - labor_margin)
+                                / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
+
+                            // Check raw material inventory to gauge desperation
+                            let in_key =
+                                Inventory::key(company_id, city_id, input.resource_type_id);
+                            let raw_inv_qty = state
+                                .inventories
+                                .get(&in_key)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0);
+
+                            // Try to buy at a tiny discount to market, but be willing to bid up to market
+                            // Desperation logic: If starving for raw materials, bid aggressively.
+                            let target_bid = if raw_inv_qty == 0 {
+                                in_price * 1.05 // Aggressive bid to jumpstart production
+                            } else if raw_inv_qty > (capacity * input.quantity * 10) as i64 {
+                                in_price * 0.90 // Plenty of stock, bid low
+                            } else {
+                                in_price * 0.98 // Standard tiny discount
+                            };
+
+                            let bid_price = target_bid.min(max_affordable);
+
+                            if bid_price > 0.0 {
+                                orders_to_post.push(MarketOrder {
+                                    id: 0,
+                                    city_id,
+                                    company_id,
+                                    resource_type_id: input.resource_type_id,
+                                    order_type: "buy".into(),
+                                    price: bid_price,
+                                    quantity: buy_qty,
+                                    created_tick: current_tick,
+                                });
+                            }
+                        }
+                    }
                 }
 
                 // --- Facility Expansion Logic (Refineries) ---
