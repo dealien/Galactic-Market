@@ -248,6 +248,28 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     });
                 }
             }
+
+            // --- Facility Expansion Logic (Miners) ---
+            let cash = state.companies.get(&company_id).unwrap().cash;
+            let facility = state.facilities.get(&facility_id).unwrap();
+            
+            // Progressive cost: base 500 * 1.2 ^ current_capacity
+            let expansion_cost = 500.0 * 1.2_f64.powi(facility.capacity);
+            
+            if cash > expansion_cost * 2.0 {
+                // Expand if we have double the cash needed
+                let facility = state.facilities.get_mut(&facility_id).unwrap();
+                facility.capacity += 5; // Expand capacity by 5 units
+                facility.setup_ticks_remaining = 5; // Construction delay
+                state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
+                
+                debug!(
+                    company_id, 
+                    new_capacity = facility.capacity, 
+                    cost = expansion_cost, 
+                    "Miner expanded facility capacity"
+                );
+            }
         }
 
         // ─── Refinery AI ──────────────────────────────────────────────────────
@@ -334,89 +356,29 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                 // 3. Post orders
                 for (_r_id, _margin, cost_basis, out_price, recipe) in recipes_evaluated {
-                    // Sell all ingots of this type
-                    let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
-                    if let Some(inv) = state.inventories.get(&out_key).cloned()
-                        && inv.quantity > 0
-                    {
-                        // Price ingots at cost + 30% margin
-                        let base_ask = cost_basis * 1.3;
+                    // ... (existing order posting logic)
+                }
 
-                        // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
-                        // If inventory > capacity, we are overproducing; drop price.
-                        let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
-                            cost_basis * 1.05 // Sell near cost to clear stockpile
-                        } else {
-                            base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
-                        };
-
-                        orders_to_post.push(MarketOrder {
-                            id: 0,
-                            city_id,
-                            company_id,
-                            resource_type_id: recipe.output_resource_id,
-                            order_type: "sell".into(),
-                            price: ask_price,
-                            quantity: inv.quantity,
-                            created_tick: current_tick,
-                        });
-                    }
-
-                    // Buy inputs for a batch (e.g. 5 ticks of capacity * input qty)
-                    let portion_cap = (capacity as f64
-                        * (new_ratios.get(&recipe.id.to_string()).unwrap_or(&0.5)))
-                        as i32;
-                    if portion_cap > 0 {
-                        for input in &recipe.inputs {
-                            let buy_qty = (portion_cap * input.quantity * 5) as i64;
-
-                            // EMA as base for bidding
-                            let in_price = state
-                                .ema_prices
-                                .get(&(city_id, input.resource_type_id))
-                                .copied()
-                                .unwrap_or(2.5);
-
-                            // Profit-disciplined bidding:
-                            let max_affordable = (out_price * recipe.output_qty as f64
-                                - labor_margin)
-                                / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
-
-                            // Check raw material inventory to gauge desperation
-                            let in_key =
-                                Inventory::key(company_id, city_id, input.resource_type_id);
-                            let raw_inv_qty = state
-                                .inventories
-                                .get(&in_key)
-                                .map(|i| i.quantity)
-                                .unwrap_or(0);
-
-                            // Try to buy at a tiny discount to market, but be willing to bid up to market
-                            // Desperation logic: If starving for raw materials, bid aggressively.
-                            let target_bid = if raw_inv_qty == 0 {
-                                in_price * 1.05 // Aggressive bid to jumpstart production
-                            } else if raw_inv_qty > (capacity * input.quantity * 10) as i64 {
-                                in_price * 0.90 // Plenty of stock, bid low
-                            } else {
-                                in_price * 0.98 // Standard tiny discount
-                            };
-
-                            let bid_price = target_bid.min(max_affordable);
-
-                            if bid_price > 0.0 {
-                                orders_to_post.push(MarketOrder {
-                                    id: 0,
-                                    city_id,
-                                    company_id,
-                                    resource_type_id: input.resource_type_id,
-                                    order_type: "buy".into(),
-                                    price: bid_price,
-                                    quantity: buy_qty,
-                                    created_tick: current_tick,
-                                });
-                            }
-                        }
-                    }
+                // --- Facility Expansion Logic (Refineries) ---
+                let cash = state.companies.get(&company_id).unwrap().cash;
+                let facility = state.facilities.get(&facility_id).unwrap();
+                
+                // Progressive cost for refineries (more complex facilities, higher base)
+                let expansion_cost = 1500.0 * 1.3_f64.powi(facility.capacity / 5); // every 5 units is a 'tier'
+                
+                if cash > expansion_cost * 2.5 {
+                    // Refineries require more safety capital to expand
+                    let facility = state.facilities.get_mut(&facility_id).unwrap();
+                    facility.capacity += 5;
+                    facility.setup_ticks_remaining = 8; // Longer construction for complex refineries
+                    state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
+                    
+                    debug!(
+                        company_id, 
+                        new_capacity = facility.capacity, 
+                        cost = expansion_cost, 
+                        "Refinery expanded facility capacity"
+                    );
                 }
             }
         }

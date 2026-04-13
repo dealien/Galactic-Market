@@ -62,6 +62,28 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.companies.len(), "Loaded companies.");
 
+    // ── Loans ─────────────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, f64, f64, f64)>(
+        "SELECT id, company_id, principal, interest_rate, balance FROM loans",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, company_id, principal, interest_rate, balance) in rows {
+        state.loans.insert(
+            id,
+            crate::sim::state::Loan {
+                id,
+                company_id,
+                principal,
+                interest_rate,
+                balance,
+            },
+        );
+    }
+
+    info!(count = state.loans.len(), "Loaded loans.");
+
     // ── Deposits ──────────────────────────────────────────────────────────────
     let rows = sqlx::query_as::<_, (i32, i32, i32, i64, i64, f64)>(
         "SELECT id, body_id, resource_type_id, size_total, size_remaining, extraction_cost_per_unit

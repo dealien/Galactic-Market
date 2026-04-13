@@ -1,5 +1,6 @@
 pub mod consumption;
 pub mod decisions;
+pub mod finance;
 pub mod logistics;
 pub mod markets;
 pub mod production;
@@ -44,6 +45,9 @@ impl SimState {
 
         // ── Phase 4: Market clearing ────────────────────────────────────
         markets::clear_orders(self, self.tick);
+
+        // ── Phase 5: Finance ───────────────────────────────────────────────
+        finance::run_finance(self);
 
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
@@ -124,6 +128,15 @@ impl SimState {
             .bind(company.id)
             .execute(&mut *tx)
             .await?;
+        }
+
+        // ── Loans ─────────────────────────────────────────────────────────────
+        for loan in self.loans.values() {
+            sqlx::query("UPDATE loans SET balance = $1 WHERE id = $2")
+                .bind(loan.balance)
+                .bind(loan.id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // ── Facilities ────────────────────────────────────────────────────────

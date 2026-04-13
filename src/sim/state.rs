@@ -41,6 +41,16 @@ pub struct Deposit {
     pub extraction_cost_per_unit: f64,
 }
 
+/// An outstanding loan for a company.
+#[derive(Debug, Clone)]
+pub struct Loan {
+    pub id: i32,
+    pub company_id: i32,
+    pub principal: f64,
+    pub interest_rate: f64,
+    pub balance: f64,
+}
+
 /// A company's stockpile at a specific city.
 #[derive(Debug, Clone)]
 pub struct Inventory {
@@ -140,6 +150,9 @@ pub struct SimState {
     /// All companies keyed by company ID.
     pub companies: HashMap<i32, Company>,
 
+    /// Outstanding loans keyed by loan ID.
+    pub loans: HashMap<i32, Loan>,
+
     /// All resource deposits keyed by deposit ID.
     pub deposits: HashMap<i32, Deposit>,
 
@@ -193,6 +206,7 @@ impl SimState {
             tick: 0,
             cities: HashMap::new(),
             companies: HashMap::new(),
+            loans: HashMap::new(),
             deposits: HashMap::new(),
             inventories: HashMap::new(),
             facilities: HashMap::new(),
