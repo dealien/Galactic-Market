@@ -146,12 +146,22 @@ impl SimState {
                 .as_ref()
                 .map(|r| sqlx::types::Json(r.clone()));
             sqlx::query(
-                "UPDATE facilities SET setup_ticks_remaining = $1, target_resource_id = $2, production_ratios = $3 WHERE id = $4",
+                "INSERT INTO facilities (id, city_id, company_id, facility_type, capacity, setup_ticks_remaining, target_resource_id, production_ratios)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (id) DO UPDATE SET
+                    capacity = EXCLUDED.capacity,
+                    setup_ticks_remaining = EXCLUDED.setup_ticks_remaining,
+                    target_resource_id = EXCLUDED.target_resource_id,
+                    production_ratios = EXCLUDED.production_ratios",
             )
+            .bind(facility.id)
+            .bind(facility.city_id)
+            .bind(facility.company_id)
+            .bind(&facility.facility_type)
+            .bind(facility.capacity)
             .bind(facility.setup_ticks_remaining as i32)
             .bind(facility.target_resource_id)
             .bind(ratios_json)
-            .bind(facility.id)
             .execute(&mut *tx)
             .await?;
         }

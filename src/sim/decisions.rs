@@ -2,7 +2,7 @@ use rand::Rng;
 use tracing::debug;
 
 use crate::sim::logistics::get_transport_info;
-use crate::sim::state::{Inventory, MarketOrder, SimState, TradeRoute};
+use crate::sim::state::{Facility, Inventory, MarketOrder, SimState, TradeRoute};
 
 /// Re-evaluation interval ranges by company type (min, max ticks).
 fn eval_interval_range(company_type: &str) -> (u64, u64) {
@@ -55,6 +55,16 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         let (city_id, company_type) = {
             let company = state.companies.get_mut(&company_id).unwrap();
+
+            // --- Promotion Logic ---
+            if company.company_type == "freelancer" && company.cash >= 10000.0 {
+                company.company_type = "small_company".into();
+                debug!(company_id, "Freelancer promoted to Small Company!");
+            } else if company.company_type == "small_company" && company.cash >= 100000.0 {
+                company.company_type = "corporation".into();
+                debug!(company_id, "Small Company promoted to Corporation!");
+            }
+
             let (min_interval, max_interval) = eval_interval_range(&company.company_type);
             let jitter = rng.gen_range(min_interval..=max_interval);
             company.next_eval_tick = current_tick + jitter;
@@ -62,6 +72,86 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         };
 
         let mut orders_to_post = Vec::new();
+
+        // --- New Facility Scouting (Only for small_company and above) ---
+        if company_type == "small_company" || company_type == "corporation" {
+            let company_cash = state.companies.get(&company_id).unwrap().cash;
+
+            // Count current facilities
+            let facility_count = state
+                .facilities
+                .values()
+                .filter(|f| f.company_id == company_id)
+                .count();
+
+            // Limit based on type: small_company (3), corporation (10)
+            let max_facilities = if company_type == "small_company" {
+                3
+            } else {
+                10
+            };
+
+            if facility_count < max_facilities {
+                // Scouting for Mine
+                let mut best_mine_target = None;
+                let mut best_mine_profit = 0.0;
+                let mine_cost = 5000.0;
+
+                if company_cash > mine_cost * 3.0 {
+                    for (&city_id_target, city) in &state.cities {
+                        // Don't build where we already have a facility
+                        if state
+                            .facilities
+                            .values()
+                            .any(|f| f.company_id == company_id && f.city_id == city_id_target)
+                        {
+                            continue;
+                        }
+
+                        let planet_id = city.body_id;
+                        let deposits: Vec<_> = state
+                            .deposits
+                            .values()
+                            .filter(|d| d.body_id == planet_id && d.size_remaining > 5000)
+                            .collect();
+
+                        for d in deposits {
+                            let ema = state
+                                .ema_prices
+                                .get(&(city_id_target, d.resource_type_id))
+                                .copied()
+                                .unwrap_or(d.extraction_cost_per_unit * 1.5);
+                            let margin = ema - d.extraction_cost_per_unit;
+                            if margin > best_mine_profit {
+                                best_mine_profit = margin;
+                                best_mine_target = Some(city_id_target);
+                            }
+                        }
+                    }
+                }
+
+                if let Some(target_city_id) = best_mine_target
+                    && best_mine_profit > 1.0
+                {
+                    let facility_id = state.next_facility_id();
+                    state.facilities.insert(
+                        facility_id,
+                        Facility {
+                            id: facility_id,
+                            city_id: target_city_id,
+                            company_id,
+                            facility_type: "mine".into(),
+                            capacity: 10,
+                            setup_ticks_remaining: 20, // Long construction for new facility
+                            target_resource_id: None,
+                            production_ratios: None,
+                        },
+                    );
+                    state.companies.get_mut(&company_id).unwrap().cash -= mine_cost;
+                    debug!(company_id, target_city_id, "Constructing new Mine facility");
+                }
+            }
+        }
 
         // ─── Consumer AI ──────────────────────────────────────────────────────
         if company_type == "consumer" {

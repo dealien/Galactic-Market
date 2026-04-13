@@ -205,7 +205,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.facilities.len(), "Loaded facilities.");
 
-    // ── Inventories ───────────────────────────────────────────────────────────
+    // Set next_facility_id based on current max
+    let max_facility_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM facilities")
+        .fetch_one(pool)
+        .await?;
+    state.next_facility_id = max_facility_id.0.unwrap_or(0) + 1;
+
+    // ─── Recipes ─────────────────────────────────────────────────────────────
+
     let rows = sqlx::query_as::<_, (i32, i32, i32, i64)>(
         "SELECT company_id, city_id, resource_type_id, quantity FROM inventory WHERE quantity > 0",
     )
