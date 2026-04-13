@@ -1,8 +1,8 @@
 use rand::Rng;
 use tracing::debug;
 
-use crate::sim::state::{Inventory, MarketOrder, SimState, TradeRoute};
 use crate::sim::logistics::get_transport_info;
+use crate::sim::state::{Inventory, MarketOrder, SimState, TradeRoute};
 
 /// Re-evaluation interval ranges by company type (min, max ticks).
 fn eval_interval_range(company_type: &str) -> (u64, u64) {
@@ -122,9 +122,10 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 .map(|d| (d.resource_type_id, d.extraction_cost_per_unit))
                 .collect();
 
-            // 1. Target selection based on EMA margins
+            // 1. Target selection based on EMA margins (local)
             let mut best_ore_id = None;
             let mut best_margin = f64::NEG_INFINITY;
+            let mut selected_ore_cost = 0.0;
 
             for &(res_id, cost) in &available_ores {
                 let ema = state
@@ -136,6 +137,29 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 if margin > best_margin {
                     best_margin = margin;
                     best_ore_id = Some(res_id);
+                    selected_ore_cost = cost;
+                }
+            }
+
+            // --- Capture the absolute best margin (considering transport) for expansion logic ---
+            let mut best_overall_margin = best_margin; // Start with local margin
+
+            if let Some(target_id) = best_ore_id {
+                // Check if shipping it elsewhere is even BETTER
+                for &target_city_id in state.cities.keys() {
+                    if target_city_id == city_id {
+                        continue;
+                    }
+                    let transport_info = get_transport_info(state, city_id, target_city_id);
+                    let dest_ema = state
+                        .ema_prices
+                        .get(&(target_city_id, target_id))
+                        .copied()
+                        .unwrap_or(selected_ore_cost * 1.5);
+                    let ship_margin = dest_ema - selected_ore_cost - transport_info.cost_per_unit;
+                    if ship_margin > best_overall_margin {
+                        best_overall_margin = ship_margin;
+                    }
                 }
             }
 
@@ -213,7 +237,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     // OR if we are drowning in inventory and have no local refinery.
                     let should_ship = if best_target_city.is_some() {
                         best_target_profit > (cost * 0.05)
-                            || (!has_local_refinery && inv.quantity >= (facility_capacity * 2) as i64)
+                            || (!has_local_refinery
+                                && inv.quantity >= (facility_capacity * 2) as i64)
                     } else {
                         false
                     };
@@ -294,24 +319,37 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             }
 
             // --- Facility Expansion Logic (Miners) ---
-            let cash = state.companies.get(&company_id).unwrap().cash;
+            let company = state.companies.get(&company_id).unwrap();
+            let cash = company.cash;
             let facility = state.facilities.get(&facility_id).unwrap();
-            
+
             // Progressive cost: base 500 * 1.2 ^ current_capacity
             let expansion_cost = 500.0 * 1.2_f64.powi(facility.capacity);
-            
-            if cash > expansion_cost * 2.0 {
-                // Expand if we have double the cash needed
+
+            // Smarter Expansion: Consider Profitability & Logistics
+            let expected_additional_profit_per_tick = best_overall_margin * 5.0; // 5 units added capacity
+
+            // Only expand if:
+            // 1. We have a healthy cash reserve (2.5x cost)
+            // 2. The facility is actually profitable after transport
+            // 3. The ROI is reasonable (e.g. pays for itself in < 50 ticks)
+            let roi_ticks = expansion_cost / expected_additional_profit_per_tick.max(0.01);
+
+            if cash > expansion_cost * 2.5
+                && best_overall_margin > (selected_ore_cost * 0.10)
+                && roi_ticks < 50.0
+            {
                 let facility = state.facilities.get_mut(&facility_id).unwrap();
-                facility.capacity += 5; // Expand capacity by 5 units
-                facility.setup_ticks_remaining = 5; // Construction delay
+                facility.capacity += 5;
+                facility.setup_ticks_remaining = 5;
                 state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
-                
+
                 debug!(
-                    company_id, 
-                    new_capacity = facility.capacity, 
-                    cost = expansion_cost, 
-                    "Miner expanded facility capacity"
+                    company_id,
+                    new_capacity = facility.capacity,
+                    cost = expansion_cost,
+                    roi_est = roi_ticks,
+                    "Miner expanded facility (Smarter Decision)"
                 );
             }
         }
@@ -438,7 +476,9 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         }
 
                         // Ship if profit margin improvement > 10%
-                        if let Some(target_city) = best_target_city && best_target_profit > (out_price * 0.10) {
+                        if let Some(target_city) = best_target_city
+                            && best_target_profit > (out_price * 0.10)
+                        {
                             let transport_info = best_target_info.unwrap();
                             let move_qty = inv.quantity;
                             let total_cost = transport_info.cost_per_unit * move_qty as f64;
@@ -558,24 +598,35 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
 
                 // --- Facility Expansion Logic (Refineries) ---
-                let cash = state.companies.get(&company_id).unwrap().cash;
+                let company = state.companies.get(&company_id).unwrap();
+                let cash = company.cash;
                 let facility = state.facilities.get(&facility_id).unwrap();
-                
+
                 // Progressive cost for refineries (more complex facilities, higher base)
                 let expansion_cost = 1500.0 * 1.3_f64.powi(facility.capacity / 5); // every 5 units is a 'tier'
-                
-                if cash > expansion_cost * 2.5 {
-                    // Refineries require more safety capital to expand
+
+                // Smarter Expansion: Use the weighted margin of the most profitable recipes.
+                // 'total_positive_margin' represents the profit potential of the current capacity.
+                let expected_additional_profit =
+                    (total_positive_margin / facility.capacity as f64) * 5.0;
+                let roi_ticks = expansion_cost / expected_additional_profit.max(0.01);
+
+                if cash > expansion_cost * 3.0
+                    && expected_additional_profit > 50.0
+                    && roi_ticks < 60.0
+                {
+                    // Refineries require more safety capital (3x) and a longer ROI (60 ticks)
                     let facility = state.facilities.get_mut(&facility_id).unwrap();
                     facility.capacity += 5;
                     facility.setup_ticks_remaining = 8; // Longer construction for complex refineries
                     state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
-                    
+
                     debug!(
-                        company_id, 
-                        new_capacity = facility.capacity, 
-                        cost = expansion_cost, 
-                        "Refinery expanded facility capacity"
+                        company_id,
+                        new_capacity = facility.capacity,
+                        cost = expansion_cost,
+                        roi_est = roi_ticks,
+                        "Refinery expanded facility (Smarter Decision)"
                     );
                 }
             }

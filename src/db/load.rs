@@ -39,48 +39,59 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.cities.len(), "Loaded cities.");
 
     // ── Celestial Bodies ──────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String)>(
-        "SELECT id, system_id, name FROM celestial_bodies",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows =
+        sqlx::query_as::<_, (i32, i32, String)>("SELECT id, system_id, name FROM celestial_bodies")
+            .fetch_all(pool)
+            .await?;
 
     for (id, system_id, name) in rows {
         state.celestial_bodies.insert(
             id,
-            crate::sim::state::CelestialBody { id, system_id, name },
+            crate::sim::state::CelestialBody {
+                id,
+                system_id,
+                name,
+            },
         );
     }
 
-    info!(count = state.celestial_bodies.len(), "Loaded celestial bodies.");
+    info!(
+        count = state.celestial_bodies.len(),
+        "Loaded celestial bodies."
+    );
 
     // ── Star Systems ──────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String)>(
-        "SELECT id, sector_id, name FROM star_systems",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows =
+        sqlx::query_as::<_, (i32, i32, String)>("SELECT id, sector_id, name FROM star_systems")
+            .fetch_all(pool)
+            .await?;
 
     for (id, sector_id, name) in rows {
         state.star_systems.insert(
             id,
-            crate::sim::state::StarSystem { id, sector_id, name },
+            crate::sim::state::StarSystem {
+                id,
+                sector_id,
+                name,
+            },
         );
     }
 
     info!(count = state.star_systems.len(), "Loaded star systems.");
 
     // ── Sectors ───────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String)>(
-        "SELECT id, empire_id, name FROM sectors",
-    )
-    .fetch_all(pool)
-    .await?;
+    let rows = sqlx::query_as::<_, (i32, i32, String)>("SELECT id, empire_id, name FROM sectors")
+        .fetch_all(pool)
+        .await?;
 
     for (id, empire_id, name) in rows {
         state.sectors.insert(
             id,
-            crate::sim::state::Sector { id, empire_id, name },
+            crate::sim::state::Sector {
+                id,
+                empire_id,
+                name,
+            },
         );
     }
 
