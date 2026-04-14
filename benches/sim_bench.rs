@@ -1,6 +1,7 @@
 use galactic_market::sim::SimState;
 use galactic_market::sim::state::{
-    City, Company, Deposit, Facility, Inventory, MarketOrder, Recipe, RecipeInput,
+    CelestialBody, City, Company, Deposit, Facility, Inventory, Loan, MarketOrder, Recipe,
+    RecipeInput, Sector, StarSystem, TradeRoute,
 };
 
 fn main() {
@@ -266,6 +267,102 @@ fn make_decisions_state(num_companies: usize) -> SimState {
     state
 }
 
+fn make_finance_state(num_companies: usize) -> SimState {
+    let mut state = SimState::new();
+    for i in 1..=(num_companies as i32) {
+        state.companies.insert(
+            i,
+            Company {
+                id: i,
+                name: format!("Co {i}"),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 100.0,
+                debt: 1000.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+            },
+        );
+        state.loans.insert(
+            i,
+            Loan {
+                id: i,
+                company_id: i,
+                principal: 1000.0,
+                interest_rate: 0.05,
+                balance: 1000.0,
+            },
+        );
+    }
+    state
+}
+
+fn make_logistics_state(num_routes: usize) -> SimState {
+    let mut state = SimState::new();
+    for i in 1..=(num_routes as i32) {
+        state.trade_routes.insert(
+            i,
+            TradeRoute {
+                id: i,
+                company_id: 1,
+                origin_city_id: 1,
+                dest_city_id: 2,
+                resource_type_id: 1,
+                quantity: 100,
+                arrival_tick: 1, // Ready to deliver
+            },
+        );
+    }
+    state
+}
+
+fn make_spatial_state() -> SimState {
+    let mut state = SimState::new();
+    state.sectors.insert(
+        1,
+        Sector {
+            id: 1,
+            empire_id: 1,
+            name: "S1".into(),
+        },
+    );
+    state.star_systems.insert(
+        1,
+        StarSystem {
+            id: 1,
+            sector_id: 1,
+            name: "Sys1".into(),
+        },
+    );
+    state.celestial_bodies.insert(
+        1,
+        CelestialBody {
+            id: 1,
+            system_id: 1,
+            name: "B1".into(),
+        },
+    );
+    state.cities.insert(
+        1,
+        City {
+            id: 1,
+            body_id: 1,
+            name: "C1".into(),
+            population: 0,
+        },
+    );
+    state.cities.insert(
+        2,
+        City {
+            id: 2,
+            body_id: 1,
+            name: "C2".into(),
+            population: 0,
+        },
+    );
+    state
+}
+
 // ─── Benchmarks ────────────────────────────────────────────────────────────────
 
 #[divan::bench(args = [32, 128, 512])]
@@ -301,5 +398,32 @@ fn bench_decisions_phase(bencher: divan::Bencher, num_companies: usize) {
         .with_inputs(|| make_decisions_state(num_companies))
         .bench_local_refs(|state| {
             galactic_market::sim::decisions::run_decisions(state, 1);
+        });
+}
+
+#[divan::bench(args = [32, 128, 512])]
+fn bench_finance_phase(bencher: divan::Bencher, num_companies: usize) {
+    bencher
+        .with_inputs(|| make_finance_state(num_companies))
+        .bench_local_refs(|state| {
+            galactic_market::sim::finance::run_finance(state);
+        });
+}
+
+#[divan::bench(args = [32, 128, 512])]
+fn bench_logistics_phase(bencher: divan::Bencher, num_routes: usize) {
+    bencher
+        .with_inputs(|| make_logistics_state(num_routes))
+        .bench_local_refs(|state| {
+            galactic_market::sim::logistics::run_logistics(state, 1);
+        });
+}
+
+#[divan::bench]
+fn bench_spatial_lookup(bencher: divan::Bencher) {
+    bencher
+        .with_inputs(make_spatial_state)
+        .bench_local_refs(|state| {
+            let _ = galactic_market::sim::logistics::get_transport_info(state, 1, 2);
         });
 }
