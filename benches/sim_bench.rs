@@ -33,6 +33,7 @@ fn make_extraction_state(num_companies: usize) -> SimState {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
 
@@ -90,6 +91,7 @@ fn make_market_state(num_orders: usize) -> SimState {
             debt: 0.0,
             next_eval_tick: 1,
             status: "active".into(),
+            last_trade_tick: 0,
         },
     );
     state.inventories.insert(
@@ -114,6 +116,7 @@ fn make_market_state(num_orders: usize) -> SimState {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.market_orders.insert(
@@ -186,6 +189,7 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.inventories.insert(
@@ -240,6 +244,7 @@ fn make_decisions_state(num_companies: usize) -> SimState {
                 // Mix of due and not-due companies
                 next_eval_tick: if i % 2 == 0 { 1 } else { 9999 },
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.deposits.insert(
@@ -281,6 +286,7 @@ fn make_finance_state(num_companies: usize) -> SimState {
                 debt: 1000.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.loans.insert(

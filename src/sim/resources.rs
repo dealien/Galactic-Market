@@ -234,6 +234,7 @@ mod tests {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
 

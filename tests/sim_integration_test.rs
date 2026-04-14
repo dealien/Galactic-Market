@@ -28,6 +28,7 @@ fn full_economy_state() -> SimState {
             debt: 0.0,
             next_eval_tick: 1,
             status: "active".into(),
+            last_trade_tick: 0,
         },
     );
 
@@ -164,6 +165,7 @@ fn test_market_clearing_balances() {
             debt: 0.0,
             next_eval_tick: 1,
             status: "active".into(),
+            last_trade_tick: 0,
         },
     );
     state.companies.insert(
@@ -177,6 +179,7 @@ fn test_market_clearing_balances() {
             debt: 0.0,
             next_eval_tick: 1,
             status: "active".into(),
+            last_trade_tick: 0,
         },
     );
 

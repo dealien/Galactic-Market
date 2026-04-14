@@ -180,7 +180,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     // 8. Seed one freelancer mining company per city + startup loan + mine + deposit
     //    Sector capital cities (first city of first planet per system) also get a refinery.
-    let startup_loan_amount = 10_000.0_f64;
+    let startup_loan_amount = 25_000.0_f64;
     let loan_interest_rate = 0.05_f64;
 
     // The "sector capital" is the first city of the first planet in each system (index 0, 4, 8, 12)

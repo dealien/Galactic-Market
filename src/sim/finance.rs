@@ -112,6 +112,7 @@ mod tests {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.loans.insert(
@@ -146,6 +147,7 @@ mod tests {
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
         state.loans.insert(
@@ -179,6 +181,7 @@ mod tests {
                 debt: 600000.0, // Over 500k limit
                 next_eval_tick: 1,
                 status: "active".into(),
+                last_trade_tick: 0,
             },
         );
 

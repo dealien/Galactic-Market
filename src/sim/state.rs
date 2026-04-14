@@ -54,6 +54,8 @@ pub struct Company {
     pub next_eval_tick: u64,
     /// Status: "active", "bankrupt", "liquidated"
     pub status: String,
+    /// The last tick this company successfully cleared a trade.
+    pub last_trade_tick: u64,
 }
 
 /// A resource deposit on a celestial body.
