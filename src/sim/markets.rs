@@ -160,9 +160,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             // Transfer cash: buyer pays, seller receives
             if let Some(buyer) = state.companies.get_mut(&buy_company_id) {
                 buyer.cash -= cash_transferred;
+                buyer.last_trade_tick = current_tick;
             }
             if let Some(seller) = state.companies.get_mut(&sell_company_id) {
                 seller.cash += cash_transferred;
+                seller.last_trade_tick = current_tick;
             }
 
             // Transfer inventory: seller loses, buyer gains
@@ -276,6 +278,8 @@ mod tests {
             cash,
             debt: 0.0,
             next_eval_tick: 1,
+            status: "active".into(),
+            last_trade_tick: 0,
         }
     }
 

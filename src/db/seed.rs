@@ -180,7 +180,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     // 8. Seed one freelancer mining company per city + startup loan + mine + deposit
     //    Sector capital cities (first city of first planet per system) also get a refinery.
-    let startup_loan_amount = 10_000.0_f64;
+    let startup_loan_amount = 50_000.0_f64;
     let loan_interest_rate = 0.05_f64;
 
     // The "sector capital" is the first city of the first planet in each system (index 0, 4, 8, 12)
@@ -193,13 +193,15 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         // Create the mining company
         let company_name = format!("Freelancer Mining Co. #{}", idx + 1);
         let company_id = sqlx::query_as::<_, (i32,)>(
-            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
         )
         .bind(&company_name).bind("freelancer").bind(city_id)
         .bind(0.0_f64)   // cash = 0; funded by loan
         .bind(0.0_f64)   // debt = 0; they start clean
         .bind("B")
         .bind(1_i64)
+        .bind("active")
+        .bind(0_i64)
         .fetch_one(&mut *tx).await?.0;
 
         // Give the company its startup loan; initial cash float equals loan principal
@@ -290,8 +292,8 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         let company_name = format!("City {} Consumers", city_id);
 
         sqlx::query(
-            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)"
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
         .bind(&company_name)
         .bind("consumer")
@@ -300,11 +302,35 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         .bind(0.0_f64)
         .bind("A") // consumers are always good for their purchases
         .bind(1_i64)
+        .bind("active")
+        .bind(0_i64)
         .execute(&mut *tx)
         .await?;
     }
 
     info!("Seeded 32 consumer companies (one per city).");
+
+    // 10. Prime the market with initial prices to prevent discovery deadlock
+    for &city_id in &city_ids {
+        for &(res_id, base_price) in &[
+            (iron_ore_id, 3.0),
+            (copper_ore_id, 3.5),
+            (tin_ore_id, 4.0),
+            (iron_ingot_id, 15.0),
+            (copper_ingot_id, 18.0),
+            (tin_ingot_id, 22.0),
+        ] {
+            sqlx::query(
+                "INSERT INTO market_history (city_id, resource_type_id, tick, open, high, low, close, volume)
+                 VALUES ($1, $2, 0, $3, $3, $3, $3, 100)"
+            )
+            .bind(city_id)
+            .bind(res_id)
+            .bind(base_price)
+            .execute(&mut *tx)
+            .await?;
+        }
+    }
 
     tx.commit().await?;
     info!("Seeding complete! Universe is ready.");

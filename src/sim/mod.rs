@@ -1,5 +1,6 @@
 pub mod consumption;
 pub mod decisions;
+pub mod finance;
 pub mod logistics;
 pub mod markets;
 pub mod production;
@@ -44,6 +45,9 @@ impl SimState {
 
         // ── Phase 4: Market clearing ────────────────────────────────────
         markets::clear_orders(self, self.tick);
+
+        // ── Phase 5: Finance ───────────────────────────────────────────────
+        finance::run_finance(self);
 
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
@@ -116,14 +120,25 @@ impl SimState {
         // ── Company financials ────────────────────────────────────────────────
         for company in self.companies.values() {
             sqlx::query(
-                "UPDATE companies SET cash = $1, debt = $2, next_eval_tick = $3 WHERE id = $4",
+                "UPDATE companies SET cash = $1, debt = $2, next_eval_tick = $3, status = $4, last_trade_tick = $5 WHERE id = $6",
             )
             .bind(company.cash)
             .bind(company.debt)
             .bind(company.next_eval_tick as i64)
+            .bind(&company.status)
+            .bind(company.last_trade_tick as i64)
             .bind(company.id)
             .execute(&mut *tx)
             .await?;
+        }
+
+        // ── Loans ─────────────────────────────────────────────────────────────
+        for loan in self.loans.values() {
+            sqlx::query("UPDATE loans SET balance = $1 WHERE id = $2")
+                .bind(loan.balance)
+                .bind(loan.id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // ── Facilities ────────────────────────────────────────────────────────
@@ -133,12 +148,22 @@ impl SimState {
                 .as_ref()
                 .map(|r| sqlx::types::Json(r.clone()));
             sqlx::query(
-                "UPDATE facilities SET setup_ticks_remaining = $1, target_resource_id = $2, production_ratios = $3 WHERE id = $4",
+                "INSERT INTO facilities (id, city_id, company_id, facility_type, capacity, setup_ticks_remaining, target_resource_id, production_ratios)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (id) DO UPDATE SET
+                    capacity = EXCLUDED.capacity,
+                    setup_ticks_remaining = EXCLUDED.setup_ticks_remaining,
+                    target_resource_id = EXCLUDED.target_resource_id,
+                    production_ratios = EXCLUDED.production_ratios",
             )
+            .bind(facility.id)
+            .bind(facility.city_id)
+            .bind(facility.company_id)
+            .bind(&facility.facility_type)
+            .bind(facility.capacity)
             .bind(facility.setup_ticks_remaining as i32)
             .bind(facility.target_resource_id)
             .bind(ratios_json)
-            .bind(facility.id)
             .execute(&mut *tx)
             .await?;
         }

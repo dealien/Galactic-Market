@@ -10,6 +10,30 @@ pub struct City {
     pub population: i64,
 }
 
+/// A celestial body (planet, moon, station).
+#[derive(Debug, Clone)]
+pub struct CelestialBody {
+    pub id: i32,
+    pub system_id: i32,
+    pub name: String,
+}
+
+/// A star system containing celestial bodies.
+#[derive(Debug, Clone)]
+pub struct StarSystem {
+    pub id: i32,
+    pub sector_id: i32,
+    pub name: String,
+}
+
+/// A sector of space containing star systems.
+#[derive(Debug, Clone)]
+pub struct Sector {
+    pub id: i32,
+    pub empire_id: i32,
+    pub name: String,
+}
+
 /// A resource type in the simulation.
 #[derive(Debug, Clone)]
 pub struct ResourceType {
@@ -28,6 +52,10 @@ pub struct Company {
     pub cash: f64,
     pub debt: f64,
     pub next_eval_tick: u64,
+    /// Status: "active", "bankrupt", "liquidated"
+    pub status: String,
+    /// The last tick this company successfully cleared a trade.
+    pub last_trade_tick: u64,
 }
 
 /// A resource deposit on a celestial body.
@@ -39,6 +67,16 @@ pub struct Deposit {
     pub size_total: i64,
     pub size_remaining: i64,
     pub extraction_cost_per_unit: f64,
+}
+
+/// An outstanding loan for a company.
+#[derive(Debug, Clone)]
+pub struct Loan {
+    pub id: i32,
+    pub company_id: i32,
+    pub principal: f64,
+    pub interest_rate: f64,
+    pub balance: f64,
 }
 
 /// A company's stockpile at a specific city.
@@ -137,8 +175,20 @@ pub struct SimState {
     /// All cities keyed by city ID.
     pub cities: HashMap<i32, City>,
 
+    /// All celestial bodies keyed by body ID.
+    pub celestial_bodies: HashMap<i32, CelestialBody>,
+
+    /// All star systems keyed by system ID.
+    pub star_systems: HashMap<i32, StarSystem>,
+
+    /// All sectors keyed by sector ID.
+    pub sectors: HashMap<i32, Sector>,
+
     /// All companies keyed by company ID.
     pub companies: HashMap<i32, Company>,
+
+    /// Outstanding loans keyed by loan ID.
+    pub loans: HashMap<i32, Loan>,
 
     /// All resource deposits keyed by deposit ID.
     pub deposits: HashMap<i32, Deposit>,
@@ -178,6 +228,9 @@ pub struct SimState {
 
     /// Monotonic counter for generating trade route IDs during a tick.
     next_trade_route_id: i32,
+
+    /// Monotonic counter for generating facility IDs.
+    pub next_facility_id: i32,
 }
 
 impl Default for SimState {
@@ -192,7 +245,11 @@ impl SimState {
         Self {
             tick: 0,
             cities: HashMap::new(),
+            celestial_bodies: HashMap::new(),
+            star_systems: HashMap::new(),
+            sectors: HashMap::new(),
             companies: HashMap::new(),
+            loans: HashMap::new(),
             deposits: HashMap::new(),
             inventories: HashMap::new(),
             facilities: HashMap::new(),
@@ -206,6 +263,7 @@ impl SimState {
             resource_types: HashMap::new(),
             next_order_id: 1,
             next_trade_route_id: 1,
+            next_facility_id: 1,
         }
     }
 
@@ -220,6 +278,13 @@ impl SimState {
     pub fn next_trade_route_id(&mut self) -> i32 {
         let id = self.next_trade_route_id;
         self.next_trade_route_id += 1;
+        id
+    }
+
+    /// Generate a unique facility ID.
+    pub fn next_facility_id(&mut self) -> i32 {
+        let id = self.next_facility_id;
+        self.next_facility_id += 1;
         id
     }
 }

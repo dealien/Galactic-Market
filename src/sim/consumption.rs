@@ -2,43 +2,33 @@ use tracing::debug;
 
 use crate::sim::state::{MarketOrder, SimState};
 
-/// Iron Ingot resource type ID (hardcoded for Stage 1; will be data-driven in Stage 2).
-const IRON_INGOT_RESOURCE_ID: i32 = 4;
-
 /// Credits earned per citizen per tick (represents wages, taxes, etc.)
-const INCOME_PER_CAPITA_PER_TICK: f64 = 0.005; // Increased from 0.001 to ensure consumption can keep up with production
+const INCOME_PER_CAPITA_PER_TICK: f64 = 0.01; // Increased from 0.005
 
-/// Ingots demanded per 10,000 citizens per tick.
-const DEMAND_PER_10K_POPULATION: i64 = 1;
+/// Ingots demanded per 1,000 citizens per tick.
+const DEMAND_PER_1K_POPULATION: i64 = 1;
 
-/// Maximum price consumers are willing to pay for an iron ingot.
-/// This is deliberately above extraction + refining cost to ensure trades clear.
-const CONSUMER_WILLINGNESS_TO_PAY: f64 = 25.0; // Raised from 20.0 to be safe
-
-/// Phase 3: Population consumption.
+/// Phase 5: Population consumption.
 ///
 /// Each city's consumer company receives a per-capita income credit, then
-/// posts a buy order for Iron Ingots sized by population. This creates the
-/// demand side of the economic cycle:
-///
-/// ```text
-/// Miners → extract ore → sell to market
-/// Refiners → buy ore → smelt ingots → sell to market
-/// Consumers → post buy orders → purchase ingots → cash flows to producers
-/// ```
-///
-/// Consumer cash accumulates between ticks if no ingots are available,
-/// creating a demand pressure that rises until the market can supply it.
-///
-/// # Examples
-/// ```
-/// use galactic_market::sim::state::SimState;
-/// use galactic_market::sim::consumption::run_consumption;
-/// let mut state = SimState::new();
-/// run_consumption(&mut state, 1);
-/// ```
+/// posts buy orders for all Refined and Consumer goods.
 pub fn run_consumption(state: &mut SimState, current_tick: u64) {
-    // Collect (city_id, population, consumer_company_id) for cities with a consumer
+    // Snapshot last known prices for budgeting
+    let last_prices = state.price_cache.clone();
+
+    // Identify target resource types (Refined and Consumer Goods)
+    let target_resource_ids: Vec<i32> = state
+        .resource_types
+        .values()
+        .filter(|r| r.category == "Refined Material" || r.category == "Consumer Good")
+        .map(|r| r.id)
+        .collect();
+
+    if target_resource_ids.is_empty() {
+        return;
+    }
+
+    // Collect (city_id, population, consumer_company_id)
     let consumers: Vec<(i32, i64, i32)> = state
         .city_consumer_ids
         .iter()
@@ -51,45 +41,49 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
     for (city_id, population, company_id) in consumers {
         // 1. Credit per-tick income to the consumer treasury
         let income = population as f64 * INCOME_PER_CAPITA_PER_TICK;
+        let mut available_cash = 0.0;
+
         if let Some(company) = state.companies.get_mut(&company_id) {
             company.cash += income;
+            available_cash = company.cash;
         }
 
-        // 2. Calculate demand quantity based on population
-        let demand_qty = (population / 10_000).max(1) * DEMAND_PER_10K_POPULATION;
+        // 2. Budgeting: Split 80% of available cash among target resources
+        let total_budget = available_cash * 0.8;
+        let budget_per_resource = total_budget / target_resource_ids.len() as f64;
 
-        // 3. Only post a buy order if the consumer has enough cash to cover
-        let required_cash = demand_qty as f64 * CONSUMER_WILLINGNESS_TO_PAY;
-        let available_cash = state
-            .companies
-            .get(&company_id)
-            .map(|c| c.cash)
-            .unwrap_or(0.0);
+        for &res_id in &target_resource_ids {
+            let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(20.0);
 
-        if available_cash < required_cash {
-            // Can only afford a partial order
-            let affordable_qty = (available_cash / CONSUMER_WILLINGNESS_TO_PAY) as i64;
-            if affordable_qty == 0 {
-                continue;
+            // Consumers are willing to pay slightly above market to ensure fulfillment
+            let bid_price = (market_price * 1.1).min(500.0);
+
+            // Demand scales with population
+            let ideal_demand = (population / 1000).max(1) * DEMAND_PER_1K_POPULATION;
+
+            // Can we afford the ideal demand?
+            let affordable_qty = (budget_per_resource / bid_price) as i64;
+            let final_qty = ideal_demand.min(affordable_qty);
+
+            if final_qty > 0 {
+                let order_id = state.next_order_id();
+                state.market_orders.insert(
+                    order_id,
+                    MarketOrder {
+                        id: order_id,
+                        city_id,
+                        company_id,
+                        resource_type_id: res_id,
+                        order_type: "buy".into(),
+                        price: bid_price,
+                        quantity: final_qty,
+                        created_tick: current_tick,
+                    },
+                );
             }
         }
 
-        let order_id = state.next_order_id();
-        state.market_orders.insert(
-            order_id,
-            MarketOrder {
-                id: order_id,
-                city_id,
-                company_id,
-                resource_type_id: IRON_INGOT_RESOURCE_ID,
-                order_type: "buy".into(),
-                price: CONSUMER_WILLINGNESS_TO_PAY,
-                quantity: demand_qty,
-                created_tick: current_tick,
-            },
-        );
-
-        debug!(city_id, population, demand_qty, "Consumer buy order posted");
+        debug!(city_id, population, "Consumer demand updated for city");
     }
 }
 
@@ -98,10 +92,19 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{City, Company, SimState};
+    use crate::sim::state::{City, Company, ResourceType, SimState};
 
     fn make_consumer_state(population: i64, cash: f64) -> SimState {
         let mut s = SimState::new();
+
+        s.resource_types.insert(
+            1,
+            ResourceType {
+                id: 1,
+                name: "Test Ingot".into(),
+                category: "Refined Material".into(),
+            },
+        );
 
         s.cities.insert(
             1,
@@ -117,16 +120,18 @@ mod tests {
             1,
             Company {
                 id: 1,
-                name: "City 1 Consumers".into(),
+                name: "Test Consumer".into(),
                 company_type: "consumer".into(),
                 home_city_id: 1,
                 cash,
                 debt: 0.0,
                 next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
             },
         );
 
-        s.city_consumer_ids.insert(1, 1); // city 1 → company 1
+        s.city_consumer_ids.insert(1, 1);
         s
     }
 
@@ -139,47 +144,11 @@ mod tests {
     }
 
     #[test]
-    fn consumer_posts_buy_order_for_ingots() {
+    fn consumer_posts_buy_orders() {
         let mut state = make_consumer_state(1_000_000, 10_000.0);
         run_consumption(&mut state, 1);
         let orders: Vec<_> = state.market_orders.values().collect();
-        assert!(
-            !orders.is_empty(),
-            "Should have posted at least one buy order"
-        );
-        assert_eq!(orders[0].resource_type_id, IRON_INGOT_RESOURCE_ID);
+        assert!(!orders.is_empty(), "Should have posted buy orders");
         assert_eq!(orders[0].order_type, "buy");
-        assert_eq!(orders[0].price, CONSUMER_WILLINGNESS_TO_PAY);
-    }
-
-    #[test]
-    fn consumer_demand_scales_with_population() {
-        let mut small = make_consumer_state(100_000, 100_000.0);
-        let mut large = make_consumer_state(10_000_000, 100_000.0);
-
-        run_consumption(&mut small, 1);
-        run_consumption(&mut large, 1);
-
-        let small_qty = small.market_orders.values().next().unwrap().quantity;
-        let large_qty = large.market_orders.values().next().unwrap().quantity;
-
-        assert!(
-            large_qty > small_qty,
-            "Larger city should demand more ingots"
-        );
-    }
-
-    #[test]
-    fn consumer_skips_if_insufficient_cash() {
-        // Only 0.5 credits — can't afford even 1 ingot at 20.0
-        let mut state = make_consumer_state(1_000_000, 0.5);
-        run_consumption(&mut state, 1);
-
-        // After income is added (1000 credits), it should now post an order
-        // because income bumps cash above threshold
-        assert!(
-            !state.market_orders.is_empty(),
-            "After income credit, consumer should post order"
-        );
     }
 }

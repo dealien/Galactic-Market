@@ -38,29 +38,123 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.cities.len(), "Loaded cities.");
 
+    // ── Celestial Bodies ──────────────────────────────────────────────────────
+    let rows =
+        sqlx::query_as::<_, (i32, i32, String)>("SELECT id, system_id, name FROM celestial_bodies")
+            .fetch_all(pool)
+            .await?;
+
+    for (id, system_id, name) in rows {
+        state.celestial_bodies.insert(
+            id,
+            crate::sim::state::CelestialBody {
+                id,
+                system_id,
+                name,
+            },
+        );
+    }
+
+    info!(
+        count = state.celestial_bodies.len(),
+        "Loaded celestial bodies."
+    );
+
+    // ── Star Systems ──────────────────────────────────────────────────────────
+    let rows =
+        sqlx::query_as::<_, (i32, i32, String)>("SELECT id, sector_id, name FROM star_systems")
+            .fetch_all(pool)
+            .await?;
+
+    for (id, sector_id, name) in rows {
+        state.star_systems.insert(
+            id,
+            crate::sim::state::StarSystem {
+                id,
+                sector_id,
+                name,
+            },
+        );
+    }
+
+    info!(count = state.star_systems.len(), "Loaded star systems.");
+
+    // ── Sectors ───────────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, String)>("SELECT id, empire_id, name FROM sectors")
+        .fetch_all(pool)
+        .await?;
+
+    for (id, empire_id, name) in rows {
+        state.sectors.insert(
+            id,
+            crate::sim::state::Sector {
+                id,
+                empire_id,
+                name,
+            },
+        );
+    }
+
+    info!(count = state.sectors.len(), "Loaded sectors.");
+
     // ── Companies ─────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, String, String, i32, f64, f64, i64)>(
-        "SELECT id, name, company_type, home_city_id, cash, debt, next_eval_tick FROM companies",
+    let rows = sqlx::query_as::<_, (i32, String, String, i32, f64, f64, i64, String, i64)>(
+        "SELECT id, name, company_type, home_city_id, cash, debt, next_eval_tick, status, last_trade_tick FROM companies",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, name, company_type, home_city_id, cash, debt, next_eval_tick) in rows {
+    for (
+        id,
+        name,
+        company_type,
+        home_city_id,
+        cash,
+        debt,
+        next_eval_tick,
+        status,
+        last_trade_tick,
+    ) in rows
+    {
         state.companies.insert(
             id,
             Company {
                 id,
                 name,
-                company_type,
+                company_type: company_type.clone(),
                 home_city_id,
                 cash,
                 debt,
                 next_eval_tick: next_eval_tick as u64,
+                status,
+                last_trade_tick: last_trade_tick as u64,
             },
         );
     }
 
     info!(count = state.companies.len(), "Loaded companies.");
+
+    // ── Loans ─────────────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, f64, f64, f64)>(
+        "SELECT id, company_id, principal, interest_rate, balance FROM loans",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, company_id, principal, interest_rate, balance) in rows {
+        state.loans.insert(
+            id,
+            crate::sim::state::Loan {
+                id,
+                company_id,
+                principal,
+                interest_rate,
+                balance,
+            },
+        );
+    }
+
+    info!(count = state.loans.len(), "Loaded loans.");
 
     // ── Deposits ──────────────────────────────────────────────────────────────
     let rows = sqlx::query_as::<_, (i32, i32, i32, i64, i64, f64)>(
@@ -124,7 +218,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     info!(count = state.facilities.len(), "Loaded facilities.");
 
-    // ── Inventories ───────────────────────────────────────────────────────────
+    // Set next_facility_id based on current max
+    let max_facility_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM facilities")
+        .fetch_one(pool)
+        .await?;
+    state.next_facility_id = max_facility_id.0.unwrap_or(0) + 1;
+
+    // ─── Recipes ─────────────────────────────────────────────────────────────
+
     let rows = sqlx::query_as::<_, (i32, i32, i32, i64)>(
         "SELECT company_id, city_id, resource_type_id, quantity FROM inventory WHERE quantity > 0",
     )
