@@ -32,7 +32,10 @@ pub fn run_finance(state: &mut SimState) {
 
                 if let Some(loan) = state.loans.get_mut(&loan_id) {
                     loan.balance += shortfall;
-                    debug!(company_id, shortfall, "Interest shortfall added to loan balance");
+                    debug!(
+                        company_id,
+                        shortfall, "Interest shortfall added to loan balance"
+                    );
                 }
             }
         }
@@ -46,25 +49,37 @@ pub fn run_finance(state: &mut SimState) {
                 let payment = company.cash.min(company.debt);
                 company.cash -= payment;
                 company.debt -= payment;
-                
+
                 // Also reduce the linked Loan objects if they exist
                 let company_id = company.id;
-                for loan in state.loans.values_mut().filter(|l| l.company_id == company_id) {
+                for loan in state
+                    .loans
+                    .values_mut()
+                    .filter(|l| l.company_id == company_id)
+                {
                     let loan_payment = payment.min(loan.balance);
                     loan.balance -= loan_payment;
                 }
 
-                debug!(company_id, payment, "Bankrupt company applied cash to debt reduction");
+                debug!(
+                    company_id,
+                    payment, "Bankrupt company applied cash to debt reduction"
+                );
             }
 
             // Final Liquidation: If debt is gone and inventory is gone, mark as liquidated
-            let inventory_count = state.inventories.values()
+            let inventory_count = state
+                .inventories
+                .values()
                 .filter(|inv| inv.company_id == company.id && inv.quantity > 0)
                 .count();
-            
+
             if company.debt <= 0.01 && inventory_count == 0 {
                 company.status = "liquidated".into();
-                debug!(company_id = company.id, "Company has been fully LIQUIDATED and is now defunct.");
+                debug!(
+                    company_id = company.id,
+                    "Company has been fully LIQUIDATED and is now defunct."
+                );
             }
         }
 

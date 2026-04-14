@@ -165,8 +165,8 @@ fn test_market_clearing_balances() {
             next_eval_tick: 1,
             status: "active".into(),
         },
-        );
-        state.companies.insert(
+    );
+    state.companies.insert(
         2,
         Company {
             id: 2,
@@ -178,8 +178,7 @@ fn test_market_clearing_balances() {
             next_eval_tick: 1,
             status: "active".into(),
         },
-        );
-
+    );
 
     let total_before = state.companies[&1].cash + state.companies[&2].cash;
 

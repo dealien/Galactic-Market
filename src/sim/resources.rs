@@ -99,7 +99,11 @@ pub fn run_extraction(state: &mut SimState) {
         debug!("Company found for miner");
 
         if company.status != "active" {
-            debug!(company_id, status = company.status, "Skipping extraction for non-active company");
+            debug!(
+                company_id,
+                status = company.status,
+                "Skipping extraction for non-active company"
+            );
             continue;
         }
 

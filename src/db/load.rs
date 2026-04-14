@@ -118,7 +118,6 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 status,
             },
         );
-
     }
 
     info!(count = state.companies.len(), "Loaded companies.");
