@@ -179,6 +179,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     }
                 }
 
+                #[allow(clippy::collapsible_if)]
                 if let Some(target_city_id) = best_mine_target {
                     if best_mine_profit > 1.0 {
                         let facility_id = state.next_facility_id();
@@ -326,6 +327,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 let key = Inventory::key(company_id, city_id, res_id);
                 let inv_opt = state.inventories.get(&key).cloned();
                 if let Some(inv) = inv_opt {
+                    #[allow(clippy::collapsible_if)]
                     if inv.quantity > 0 {
                         // --- Logistics Logic: If we have too much ore and no local refinery, move it! ---
                         let has_local_refinery = state
@@ -582,6 +584,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
                     let inv_opt = state.inventories.get(&out_key).cloned();
                     if let Some(inv) = inv_opt {
+                        #[allow(clippy::collapsible_if)]
                         if inv.quantity > 0 {
                             // --- Improved Logistics: Evaluate all cities for the best market for outputs ---
                             let mut best_target_city = None;
@@ -618,6 +621,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                             // Ship if profit margin improvement > 10%
                             let mut shipped = false;
+                            #[allow(clippy::collapsible_if)]
                             if let Some(target_city) = best_target_city {
                                 if best_target_profit > (out_price * 0.10) {
                                     let transport_info = best_target_info.unwrap();
