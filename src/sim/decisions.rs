@@ -48,25 +48,28 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
     for company_id in due {
         let company = state.companies.get(&company_id).unwrap();
-        
+
         // --- Liquidation AI: Post Fire-Sale Orders ---
         if company.status == "bankrupt" {
             let mut orders_to_post = Vec::new();
             let company_id = company.id;
-            let city_id = company.home_city_id;
 
             // Find all inventory for this company across all cities
             // (Bankrupt companies sell everything, everywhere)
-            let company_inventories: Vec<_> = state.inventories.values()
+            let company_inventories: Vec<_> = state
+                .inventories
+                .values()
                 .filter(|inv| inv.company_id == company_id && inv.quantity > 0)
                 .cloned()
                 .collect();
 
             for inv in company_inventories {
-                let market_price = state.ema_prices.get(&(inv.city_id, inv.resource_type_id))
+                let market_price = state
+                    .ema_prices
+                    .get(&(inv.city_id, inv.resource_type_id))
                     .copied()
                     .unwrap_or(10.0);
-                
+
                 // Fire sale: 50% of market price to ensure it clears fast
                 let fire_sale_price = market_price * 0.5;
 
@@ -176,25 +179,25 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     }
                 }
 
-                if let Some(target_city_id) = best_mine_target
-                    && best_mine_profit > 1.0
-                {
-                    let facility_id = state.next_facility_id();
-                    state.facilities.insert(
-                        facility_id,
-                        Facility {
-                            id: facility_id,
-                            city_id: target_city_id,
-                            company_id,
-                            facility_type: "mine".into(),
-                            capacity: 10,
-                            setup_ticks_remaining: 20, // Long construction for new facility
-                            target_resource_id: None,
-                            production_ratios: None,
-                        },
-                    );
-                    state.companies.get_mut(&company_id).unwrap().cash -= mine_cost;
-                    debug!(company_id, target_city_id, "Constructing new Mine facility");
+                if let Some(target_city_id) = best_mine_target {
+                    if best_mine_profit > 1.0 {
+                        let facility_id = state.next_facility_id();
+                        state.facilities.insert(
+                            facility_id,
+                            Facility {
+                                id: facility_id,
+                                city_id: target_city_id,
+                                company_id,
+                                facility_type: "mine".into(),
+                                capacity: 10,
+                                setup_ticks_remaining: 20, // Long construction for new facility
+                                target_resource_id: None,
+                                production_ratios: None,
+                            },
+                        );
+                        state.companies.get_mut(&company_id).unwrap().cash -= mine_cost;
+                        debug!(company_id, target_city_id, "Constructing new Mine facility");
+                    }
                 }
             }
         }
@@ -321,136 +324,137 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             // 3. Post sell orders for ALL extracted ores in inventory
             for &(res_id, cost) in &available_ores {
                 let key = Inventory::key(company_id, city_id, res_id);
-                if let Some(inv) = state.inventories.get(&key).cloned()
-                    && inv.quantity > 0
-                {
-                    // --- Logistics Logic: If we have too much ore and no local refinery, move it! ---
-                    let has_local_refinery = state
-                        .facilities
-                        .values()
-                        .any(|f| f.city_id == city_id && f.facility_type == "refinery");
+                let inv_opt = state.inventories.get(&key).cloned();
+                if let Some(inv) = inv_opt {
+                    if inv.quantity > 0 {
+                        // --- Logistics Logic: If we have too much ore and no local refinery, move it! ---
+                        let has_local_refinery = state
+                            .facilities
+                            .values()
+                            .any(|f| f.city_id == city_id && f.facility_type == "refinery");
 
-                    let facility_capacity = state
-                        .facilities
-                        .get(&facility_id)
-                        .map(|f| f.capacity)
-                        .unwrap_or(10);
+                        let facility_capacity = state
+                            .facilities
+                            .get(&facility_id)
+                            .map(|f| f.capacity)
+                            .unwrap_or(10);
 
-                    // --- Improved Logistics: Evaluate all cities for the best market ---
-                    let mut best_target_city = None;
-                    let mut best_target_profit = 0.0;
-                    let mut best_target_info = None;
+                        // --- Improved Logistics: Evaluate all cities for the best market ---
+                        let mut best_target_city = None;
+                        let mut best_target_profit = 0.0;
+                        let mut best_target_info = None;
 
-                    let local_price = state
-                        .ema_prices
-                        .get(&(city_id, res_id))
-                        .copied()
-                        .unwrap_or(cost * 1.1);
-
-                    for &target_city_id in state.cities.keys() {
-                        if target_city_id == city_id {
-                            continue;
-                        }
-
-                        let transport_info = get_transport_info(state, city_id, target_city_id);
-                        let dest_price = state
+                        let local_price = state
                             .ema_prices
-                            .get(&(target_city_id, res_id))
+                            .get(&(city_id, res_id))
                             .copied()
-                            .unwrap_or(cost * 1.5);
+                            .unwrap_or(cost * 1.1);
 
-                        // Profit = (Destination Price - Local Price - Transport Cost)
-                        let margin = dest_price - local_price - transport_info.cost_per_unit;
-
-                        if margin > best_target_profit {
-                            best_target_profit = margin;
-                            best_target_city = Some(target_city_id);
-                            best_target_info = Some(transport_info);
-                        }
-                    }
-
-                    // Only ship if it's significantly more profitable (e.g. margin > 5% of cost)
-                    // OR if we are drowning in inventory and have no local refinery.
-                    let should_ship = if best_target_city.is_some() {
-                        best_target_profit > (cost * 0.05)
-                            || (!has_local_refinery
-                                && inv.quantity >= (facility_capacity * 2) as i64)
-                    } else {
-                        false
-                    };
-
-                    if should_ship {
-                        let target_city = best_target_city.unwrap();
-                        let transport_info = best_target_info.unwrap();
-                        let move_qty = inv.quantity;
-
-                        // Pay transport cost
-                        let total_cost = transport_info.cost_per_unit * move_qty as f64;
-                        let company_cash = state.companies.get(&company_id).unwrap().cash;
-
-                        if company_cash >= total_cost {
-                            state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
-
-                            let route_id = state.next_trade_route_id();
-                            if let Some(mut_inv) = state.inventories.get_mut(&key) {
-                                mut_inv.quantity -= move_qty;
+                        for &target_city_id in state.cities.keys() {
+                            if target_city_id == city_id {
+                                continue;
                             }
 
-                            state.trade_routes.insert(
-                                route_id,
-                                TradeRoute {
-                                    id: route_id,
-                                    company_id,
-                                    origin_city_id: city_id,
-                                    dest_city_id: target_city,
-                                    resource_type_id: res_id,
-                                    quantity: move_qty,
-                                    arrival_tick: current_tick + transport_info.ticks,
-                                },
-                            );
+                            let transport_info = get_transport_info(state, city_id, target_city_id);
+                            let dest_price = state
+                                .ema_prices
+                                .get(&(target_city_id, res_id))
+                                .copied()
+                                .unwrap_or(cost * 1.5);
 
-                            debug!(
-                                company_id,
-                                move_qty,
-                                from = city_id,
-                                to = target_city,
-                                ticks = transport_info.ticks,
-                                cost = total_cost,
-                                "Miner shipped ore to better market"
-                            );
-                            continue; // Skip posting sell order in current city
+                            // Profit = (Destination Price - Local Price - Transport Cost)
+                            let margin = dest_price - local_price - transport_info.cost_per_unit;
+
+                            if margin > best_target_profit {
+                                best_target_profit = margin;
+                                best_target_city = Some(target_city_id);
+                                best_target_info = Some(transport_info);
+                            }
                         }
+
+                        // Only ship if it's significantly more profitable (e.g. margin > 5% of cost)
+                        // OR if we are drowning in inventory and have no local refinery.
+                        let should_ship = if best_target_city.is_some() {
+                            best_target_profit > (cost * 0.05)
+                                || (!has_local_refinery
+                                    && inv.quantity >= (facility_capacity * 2) as i64)
+                        } else {
+                            false
+                        };
+
+                        if should_ship {
+                            let target_city = best_target_city.unwrap();
+                            let transport_info = best_target_info.unwrap();
+                            let move_qty = inv.quantity;
+
+                            // Pay transport cost
+                            let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                            let company_cash = state.companies.get(&company_id).unwrap().cash;
+
+                            if company_cash >= total_cost {
+                                state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
+
+                                let route_id = state.next_trade_route_id();
+                                if let Some(mut_inv) = state.inventories.get_mut(&key) {
+                                    mut_inv.quantity -= move_qty;
+                                }
+
+                                state.trade_routes.insert(
+                                    route_id,
+                                    TradeRoute {
+                                        id: route_id,
+                                        company_id,
+                                        origin_city_id: city_id,
+                                        dest_city_id: target_city,
+                                        resource_type_id: res_id,
+                                        quantity: move_qty,
+                                        arrival_tick: current_tick + transport_info.ticks,
+                                    },
+                                );
+
+                                debug!(
+                                    company_id,
+                                    move_qty,
+                                    from = city_id,
+                                    to = target_city,
+                                    ticks = transport_info.ticks,
+                                    cost = total_cost,
+                                    "Miner shipped ore to better market"
+                                );
+                                continue; // Skip posting sell order in current city
+                            }
+                        }
+
+                        // Cost-disciplined pricing:
+                        let base_ask = cost * 1.15;
+                        let market_price = last_prices
+                            .get(&(city_id, res_id))
+                            .copied()
+                            .unwrap_or(base_ask * 1.5);
+
+                        // Desperation Logic: If inventory is high, discount aggressively to liquidate.
+                        // If margin is razor thin, we be extra aggressive on clearing stock.
+                        let ask_price = if inv.quantity > (facility_capacity * 5) as i64 {
+                            cost * 1.01 // Clear it out near cost
+                        } else if inv.quantity > (facility_capacity * 2) as i64 {
+                            base_ask.min(market_price * 0.90) // Under-cut heavily
+                        } else if inv.quantity > facility_capacity as i64 {
+                            base_ask.min(market_price * 0.95) // Keep undercutting
+                        } else {
+                            base_ask.max(market_price)
+                        };
+
+                        orders_to_post.push(MarketOrder {
+                            id: 0,
+                            city_id,
+                            company_id,
+                            resource_type_id: res_id,
+                            order_type: "sell".into(),
+                            price: ask_price,
+                            quantity: inv.quantity,
+                            created_tick: current_tick,
+                        });
                     }
-
-                    // Cost-disciplined pricing:
-                    let base_ask = cost * 1.15;
-                    let market_price = last_prices
-                        .get(&(city_id, res_id))
-                        .copied()
-                        .unwrap_or(base_ask * 1.5);
-
-                    // Desperation Logic: If inventory is high, discount aggressively to liquidate.
-                    // If margin is razor thin, we be extra aggressive on clearing stock.
-                    let ask_price = if inv.quantity > (facility_capacity * 5) as i64 {
-                        cost * 1.01 // Clear it out near cost
-                    } else if inv.quantity > (facility_capacity * 2) as i64 {
-                        base_ask.min(market_price * 0.90) // Under-cut heavily
-                    } else if inv.quantity > facility_capacity as i64 {
-                        base_ask.min(market_price * 0.95) // Keep undercutting
-                    } else {
-                        base_ask.max(market_price)
-                    };
-
-                    orders_to_post.push(MarketOrder {
-                        id: 0,
-                        city_id,
-                        company_id,
-                        resource_type_id: res_id,
-                        order_type: "sell".into(),
-                        price: ask_price,
-                        quantity: inv.quantity,
-                        created_tick: current_tick,
-                    });
                 }
             }
 
@@ -576,104 +580,113 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 for (_r_id, _margin, cost_basis, out_price, recipe) in recipes_evaluated {
                     // Sell all ingots of this type
                     let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
-                    if let Some(inv) = state.inventories.get(&out_key).cloned()
-                        && inv.quantity > 0
-                    {
-                        // --- Improved Logistics: Evaluate all cities for the best market for outputs ---
-                        let mut best_target_city = None;
-                        let mut best_target_profit = 0.0;
-                        let mut best_target_info = None;
+                    let inv_opt = state.inventories.get(&out_key).cloned();
+                    if let Some(inv) = inv_opt {
+                        if inv.quantity > 0 {
+                            // --- Improved Logistics: Evaluate all cities for the best market for outputs ---
+                            let mut best_target_city = None;
+                            let mut best_target_profit = 0.0;
+                            let mut best_target_info = None;
 
-                        let local_price = state
-                            .ema_prices
-                            .get(&(city_id, recipe.output_resource_id))
-                            .copied()
-                            .unwrap_or(out_price);
-
-                        for &target_city_id in state.cities.keys() {
-                            if target_city_id == city_id {
-                                continue;
-                            }
-
-                            let transport_info = get_transport_info(state, city_id, target_city_id);
-                            let dest_price = state
+                            let local_price = state
                                 .ema_prices
-                                .get(&(target_city_id, recipe.output_resource_id))
+                                .get(&(city_id, recipe.output_resource_id))
                                 .copied()
-                                .unwrap_or(out_price * 1.2);
+                                .unwrap_or(out_price);
 
-                            let margin = dest_price - local_price - transport_info.cost_per_unit;
-
-                            if margin > best_target_profit {
-                                best_target_profit = margin;
-                                best_target_city = Some(target_city_id);
-                                best_target_info = Some(transport_info);
-                            }
-                        }
-
-                        // Ship if profit margin improvement > 10%
-                        if let Some(target_city) = best_target_city
-                            && best_target_profit > (out_price * 0.10)
-                        {
-                            let transport_info = best_target_info.unwrap();
-                            let move_qty = inv.quantity;
-                            let total_cost = transport_info.cost_per_unit * move_qty as f64;
-                            let company_cash = state.companies.get(&company_id).unwrap().cash;
-
-                            if company_cash >= total_cost {
-                                state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
-                                let route_id = state.next_trade_route_id();
-                                if let Some(mut_inv) = state.inventories.get_mut(&out_key) {
-                                    mut_inv.quantity -= move_qty;
+                            for &target_city_id in state.cities.keys() {
+                                if target_city_id == city_id {
+                                    continue;
                                 }
 
-                                state.trade_routes.insert(
-                                    route_id,
-                                    TradeRoute {
-                                        id: route_id,
-                                        company_id,
-                                        origin_city_id: city_id,
-                                        dest_city_id: target_city,
-                                        resource_type_id: recipe.output_resource_id,
-                                        quantity: move_qty,
-                                        arrival_tick: current_tick + transport_info.ticks,
-                                    },
-                                );
+                                let transport_info =
+                                    get_transport_info(state, city_id, target_city_id);
+                                let dest_price = state
+                                    .ema_prices
+                                    .get(&(target_city_id, recipe.output_resource_id))
+                                    .copied()
+                                    .unwrap_or(out_price * 1.2);
 
-                                debug!(
-                                    company_id,
-                                    move_qty,
-                                    from = city_id,
-                                    to = target_city,
-                                    ticks = transport_info.ticks,
-                                    cost = total_cost,
-                                    "Refinery shipped refined goods to better market"
-                                );
+                                let margin = dest_price - local_price - transport_info.cost_per_unit;
+
+                                if margin > best_target_profit {
+                                    best_target_profit = margin;
+                                    best_target_city = Some(target_city_id);
+                                    best_target_info = Some(transport_info);
+                                }
+                            }
+
+                            // Ship if profit margin improvement > 10%
+                            let mut shipped = false;
+                            if let Some(target_city) = best_target_city {
+                                if best_target_profit > (out_price * 0.10) {
+                                    let transport_info = best_target_info.unwrap();
+                                    let move_qty = inv.quantity;
+                                    let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                                    let company_cash =
+                                        state.companies.get(&company_id).unwrap().cash;
+
+                                    if company_cash >= total_cost {
+                                        state.companies.get_mut(&company_id).unwrap().cash -=
+                                            total_cost;
+                                        let route_id = state.next_trade_route_id();
+                                        if let Some(mut_inv) = state.inventories.get_mut(&out_key) {
+                                            mut_inv.quantity -= move_qty;
+                                        }
+
+                                        state.trade_routes.insert(
+                                            route_id,
+                                            TradeRoute {
+                                                id: route_id,
+                                                company_id,
+                                                origin_city_id: city_id,
+                                                dest_city_id: target_city,
+                                                resource_type_id: recipe.output_resource_id,
+                                                quantity: move_qty,
+                                                arrival_tick: current_tick + transport_info.ticks,
+                                            },
+                                        );
+
+                                        debug!(
+                                            company_id,
+                                            move_qty,
+                                            from = city_id,
+                                            to = target_city,
+                                            ticks = transport_info.ticks,
+                                            cost = total_cost,
+                                            "Refinery shipped refined goods to better market"
+                                        );
+                                        shipped = true;
+                                    }
+                                }
+                            }
+
+                            if shipped {
                                 continue;
                             }
+
+                            // Price ingots at cost + 30% margin
+                            let base_ask = cost_basis * 1.3;
+
+                            // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
+                            // If inventory > capacity, we are overproducing; drop price.
+                            let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
+                                cost_basis * 1.05 // Sell near cost to clear stockpile
+                            } else {
+                                base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
+                            };
+
+                            orders_to_post.push(MarketOrder {
+                                id: 0,
+                                city_id,
+                                company_id,
+                                resource_type_id: recipe.output_resource_id,
+                                order_type: "sell".into(),
+                                price: ask_price,
+                                quantity: inv.quantity,
+                                created_tick: current_tick,
+                            });
                         }
-
-                        // Price ingots at cost + 30% margin
-                        let base_ask = cost_basis * 1.3;
-
-                        // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
-                        // If inventory > capacity, we are overproducing; drop price.
-                        let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
-                            cost_basis * 1.05 // Sell near cost to clear stockpile
-                        } else {
-                            base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
-                        };
-
-                        orders_to_post.push(MarketOrder {
-                            id: 0,
-                            city_id,
-                            company_id,
-                            resource_type_id: recipe.output_resource_id,
-                            order_type: "sell".into(),
-                            price: ask_price,
-                            quantity: inv.quantity,
-                            created_tick: current_tick,
-                        });
                     }
 
                     // Buy inputs for a batch (e.g. 5 ticks of capacity * input qty)
