@@ -610,7 +610,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                     .copied()
                                     .unwrap_or(out_price * 1.2);
 
-                                let margin = dest_price - local_price - transport_info.cost_per_unit;
+                                let margin =
+                                    dest_price - local_price - transport_info.cost_per_unit;
 
                                 if margin > best_target_profit {
                                     best_target_profit = margin;
@@ -674,7 +675,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                             // Stabilize matching: If we have ANY inventory and no sales, be more aggressive.
                             // If inventory > capacity, we are overproducing; drop price.
-                            let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
+                            let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64
+                            {
                                 cost_basis * 1.05 // Sell near cost to clear stockpile
                             } else {
                                 base_ask.min(out_price * 0.98) // Slowly drift down to find buyer
