@@ -104,7 +104,18 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    for (id, name, company_type, home_city_id, cash, debt, next_eval_tick, status, last_trade_tick) in rows {
+    for (
+        id,
+        name,
+        company_type,
+        home_city_id,
+        cash,
+        debt,
+        next_eval_tick,
+        status,
+        last_trade_tick,
+    ) in rows
+    {
         state.companies.insert(
             id,
             Company {

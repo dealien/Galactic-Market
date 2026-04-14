@@ -122,17 +122,19 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             };
 
             if facility_count < max_facilities {
+                // 1. Scouting for Mines
                 let mut best_mine_target = None;
                 let mut best_mine_profit = 0.0;
                 let mine_cost = 5000.0;
 
                 if company_cash > mine_cost * 3.0 {
                     for (&city_id_target, city) in &state.cities {
-                        if state
-                            .facilities
-                            .values()
-                            .any(|f| f.company_id == company_id && f.city_id == city_id_target)
-                        {
+                        // Vertical Integration: Can build mine if we don't have a MINE here
+                        if state.facilities.values().any(|f| {
+                            f.company_id == company_id
+                                && f.city_id == city_id_target
+                                && f.facility_type == "mine"
+                        }) {
                             continue;
                         }
 
@@ -179,6 +181,72 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         debug!(company_id, target_city_id, "Constructing new Mine facility");
                     }
                 }
+
+                // 2. Scouting for Refineries
+                let mut best_refinery_target = None;
+                let mut best_refinery_profit = 0.0;
+                let refinery_cost = 15000.0;
+
+                if company_cash > refinery_cost * 3.0 {
+                    for &city_id_target in state.cities.keys() {
+                        if state.facilities.values().any(|f| {
+                            f.company_id == company_id
+                                && f.city_id == city_id_target
+                                && f.facility_type == "refinery"
+                        }) {
+                            continue;
+                        }
+
+                        // Heuristic: Is there high demand for refined goods here?
+                        // For now, look at EMA prices of all ingots.
+                        let mut total_margin = 0.0;
+                        for recipe in state
+                            .recipes
+                            .values()
+                            .filter(|r| r.facility_type == "refinery")
+                        {
+                            let out_price = state
+                                .ema_prices
+                                .get(&(city_id_target, recipe.output_resource_id))
+                                .copied()
+                                .unwrap_or(30.0);
+                            let margin = out_price - 10.0; // Simplistic cost assumption for scouting
+                            if margin > 0.0 {
+                                total_margin += margin;
+                            }
+                        }
+
+                        if total_margin > best_refinery_profit {
+                            best_refinery_profit = total_margin;
+                            best_refinery_target = Some(city_id_target);
+                        }
+                    }
+                }
+
+                #[allow(clippy::collapsible_if)]
+                if let Some(target_city_id) = best_refinery_target {
+                    if best_refinery_profit > 10.0 {
+                        let facility_id = state.next_facility_id();
+                        state.facilities.insert(
+                            facility_id,
+                            Facility {
+                                id: facility_id,
+                                city_id: target_city_id,
+                                company_id,
+                                facility_type: "refinery".into(),
+                                capacity: 5,
+                                setup_ticks_remaining: 30, // Refineries take longer
+                                target_resource_id: None,
+                                production_ratios: None,
+                            },
+                        );
+                        state.companies.get_mut(&company_id).unwrap().cash -= refinery_cost;
+                        debug!(
+                            company_id,
+                            target_city_id, "Constructing new Refinery facility"
+                        );
+                    }
+                }
             }
         }
 
@@ -195,7 +263,10 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             if cash > 10.0 && !target_ids.is_empty() {
                 let budget_per_product = (cash * 0.5) / target_ids.len() as f64;
                 for &r_id in &target_ids {
-                    let target_price = last_prices.get(&(home_city_id, r_id)).copied().unwrap_or(20.0);
+                    let target_price = last_prices
+                        .get(&(home_city_id, r_id))
+                        .copied()
+                        .unwrap_or(20.0);
                     let max_willingness_to_pay = 250.0;
                     let bid_price = (target_price * 1.02).min(max_willingness_to_pay);
                     let qty = (budget_per_product / bid_price) as i64;
@@ -225,7 +296,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             .map(|f| f.id);
 
         if let Some(facility_id) = miner_info {
-            let planet_id = state.cities.get(&home_city_id).map(|c| c.body_id).unwrap_or(0);
+            let planet_id = state
+                .cities
+                .get(&home_city_id)
+                .map(|c| c.body_id)
+                .unwrap_or(0);
             let available_ores: Vec<_> = state
                 .deposits
                 .values()
@@ -279,7 +354,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         facility.setup_ticks_remaining = 2;
                         state.companies.get_mut(&company_id).unwrap().cash -= 50.0;
                     }
-                    debug!(company_id, new_target = best_id, "Miner switched target resource");
+                    debug!(
+                        company_id,
+                        new_target = best_id,
+                        "Miner switched target resource"
+                    );
                 }
             }
 
@@ -314,7 +393,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             if target_city_id == home_city_id {
                                 continue;
                             }
-                            let transport_info = get_transport_info(state, home_city_id, target_city_id);
+                            let transport_info =
+                                get_transport_info(state, home_city_id, target_city_id);
                             let dest_price = state
                                 .ema_prices
                                 .get(&(target_city_id, res_id))
@@ -361,7 +441,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                         arrival_tick: current_tick + transport_info.ticks,
                                     },
                                 );
-                                debug!(company_id, move_qty, from = home_city_id, to = target_city, "Miner shipped ore to better market");
+                                debug!(
+                                    company_id,
+                                    move_qty,
+                                    from = home_city_id,
+                                    to = target_city,
+                                    "Miner shipped ore to better market"
+                                );
                                 continue;
                             }
                         }
@@ -373,14 +459,21 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             .unwrap_or(base_ask * 1.5);
 
                         let ticks_since_trade = current_tick.saturating_sub(last_trade_tick);
-                        let ask_price = if inv.quantity > (facility_capacity * 5) as i64 || ticks_since_trade > 50 {
+
+                        let ask_price = if inv.quantity > (facility_capacity * 10) as i64
+                            || ticks_since_trade > 100
+                        {
                             cost * 1.01
-                        } else if inv.quantity > (facility_capacity * 2) as i64 || ticks_since_trade > 20 {
-                            base_ask.min(market_price * 0.90)
-                        } else if inv.quantity > facility_capacity as i64 || ticks_since_trade > 10 {
-                            base_ask.min(market_price * 0.95)
+                        } else if inv.quantity > (facility_capacity * 5) as i64
+                            || ticks_since_trade > 50
+                        {
+                            cost * 1.05
+                        } else if inv.quantity > (facility_capacity * 2) as i64
+                            || ticks_since_trade > 20
+                        {
+                            base_ask.min(market_price * 0.85)
                         } else {
-                            base_ask.max(market_price)
+                            base_ask.max(market_price * 0.98)
                         };
 
                         orders_to_post.push(MarketOrder {
@@ -411,30 +504,39 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 facility.capacity += 5;
                 facility.setup_ticks_remaining = 5;
                 state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
-                debug!(company_id, new_capacity = facility.capacity, cost = expansion_cost, "Miner expanded facility (Smarter Decision)");
+                debug!(
+                    company_id,
+                    new_capacity = facility.capacity,
+                    cost = expansion_cost,
+                    "Miner expanded facility (Smarter Decision)"
+                );
             }
         }
 
         // ─── Refinery AI ──────────────────────────────────────────────────────
-        let refinery_info = state
+        let refineries: Vec<(i32, i32)> = state
             .facilities
             .values()
-            .find(|f| {
-                f.company_id == company_id && f.city_id == home_city_id && f.facility_type == "refinery"
-            })
-            .map(|f| (f.id, f.capacity));
+            .filter(|f| f.company_id == company_id && f.facility_type == "refinery")
+            .map(|f| (f.id, f.city_id))
+            .collect();
 
-        if let Some((facility_id, capacity)) = refinery_info {
+        for (facility_id, refinery_city_id) in refineries {
+            let capacity = state.facilities.get(&facility_id).unwrap().capacity;
             let mut recipes_evaluated = Vec::new();
             let mut total_positive_margin = 0.0;
             let labor_margin = 1.5;
 
-            for recipe in state.recipes.values().filter(|r| r.facility_type == "refinery") {
+            for recipe in state
+                .recipes
+                .values()
+                .filter(|r| r.facility_type == "refinery")
+            {
                 let mut cost_basis = 0.0;
                 for input in &recipe.inputs {
                     let in_price = state
                         .ema_prices
-                        .get(&(home_city_id, input.resource_type_id))
+                        .get(&(refinery_city_id, input.resource_type_id))
                         .copied()
                         .unwrap_or(2.5);
                     cost_basis += in_price * input.quantity as f64;
@@ -442,14 +544,20 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                 let out_price = state
                     .ema_prices
-                    .get(&(home_city_id, recipe.output_resource_id))
+                    .get(&(refinery_city_id, recipe.output_resource_id))
                     .copied()
                     .unwrap_or(cost_basis * 1.5);
                 let revenue = out_price * recipe.output_qty as f64;
                 let margin = revenue - cost_basis;
 
                 if margin > 0.0 {
-                    recipes_evaluated.push((recipe.id, margin, cost_basis, out_price, recipe.clone()));
+                    recipes_evaluated.push((
+                        recipe.id,
+                        margin,
+                        cost_basis,
+                        out_price,
+                        recipe.clone(),
+                    ));
                     total_positive_margin += margin;
                 }
             }
@@ -465,7 +573,10 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 let mut significant_change = false;
                 for (id, &new_val) in &new_ratios {
                     let old_val = current_ratios.get(id).copied().unwrap_or(0.0);
-                    if (new_val - old_val).abs() > 0.10 { significant_change = true; break; }
+                    if (new_val - old_val).abs() > 0.10 {
+                        significant_change = true;
+                        break;
+                    }
                 }
 
                 if significant_change {
@@ -476,7 +587,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
 
                 for (_r_id, _margin, cost_basis, out_price, recipe) in recipes_evaluated {
-                    let out_key = Inventory::key(company_id, home_city_id, recipe.output_resource_id);
+                    let out_key =
+                        Inventory::key(company_id, refinery_city_id, recipe.output_resource_id);
                     let inv_opt = state.inventories.get(&out_key).cloned();
                     if let Some(inv) = inv_opt {
                         #[allow(clippy::collapsible_if)]
@@ -487,19 +599,23 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                             let local_price = state
                                 .ema_prices
-                                .get(&(home_city_id, recipe.output_resource_id))
+                                .get(&(refinery_city_id, recipe.output_resource_id))
                                 .copied()
                                 .unwrap_or(out_price);
 
                             for &target_city_id in state.cities.keys() {
-                                if target_city_id == home_city_id { continue; }
-                                let transport_info = get_transport_info(state, home_city_id, target_city_id);
+                                if target_city_id == refinery_city_id {
+                                    continue;
+                                }
+                                let transport_info =
+                                    get_transport_info(state, refinery_city_id, target_city_id);
                                 let dest_price = state
                                     .ema_prices
                                     .get(&(target_city_id, recipe.output_resource_id))
                                     .copied()
                                     .unwrap_or(out_price * 1.2);
-                                let margin = dest_price - local_price - transport_info.cost_per_unit;
+                                let margin =
+                                    dest_price - local_price - transport_info.cost_per_unit;
                                 if margin > best_target_profit {
                                     best_target_profit = margin;
                                     best_target_city = Some(target_city_id);
@@ -514,10 +630,12 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                     let transport_info = best_target_info.unwrap();
                                     let move_qty = inv.quantity;
                                     let total_cost = transport_info.cost_per_unit * move_qty as f64;
-                                    let company_cash = state.companies.get(&company_id).unwrap().cash;
+                                    let company_cash =
+                                        state.companies.get(&company_id).unwrap().cash;
 
                                     if company_cash >= total_cost {
-                                        state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
+                                        state.companies.get_mut(&company_id).unwrap().cash -=
+                                            total_cost;
                                         let route_id = state.next_trade_route_id();
                                         if let Some(mut_inv) = state.inventories.get_mut(&out_key) {
                                             mut_inv.quantity -= move_qty;
@@ -527,23 +645,32 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                             TradeRoute {
                                                 id: route_id,
                                                 company_id,
-                                                origin_city_id: home_city_id,
+                                                origin_city_id: refinery_city_id,
                                                 dest_city_id: target_city,
                                                 resource_type_id: recipe.output_resource_id,
                                                 quantity: move_qty,
                                                 arrival_tick: current_tick + transport_info.ticks,
                                             },
                                         );
-                                        debug!(company_id, move_qty, from = home_city_id, to = target_city, "Refinery shipped refined goods to better market");
+                                        debug!(
+                                            company_id,
+                                            move_qty,
+                                            from = refinery_city_id,
+                                            to = target_city,
+                                            "Refinery shipped refined goods to better market"
+                                        );
                                         shipped = true;
                                     }
                                 }
                             }
 
-                            if shipped { continue; }
+                            if shipped {
+                                continue;
+                            }
 
                             let base_ask = cost_basis * 1.3;
-                            let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64 {
+                            let ask_price = if inv.quantity > (capacity * recipe.output_qty) as i64
+                            {
                                 cost_basis * 1.05
                             } else {
                                 base_ask.min(out_price * 0.98)
@@ -551,7 +678,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                             orders_to_post.push(MarketOrder {
                                 id: 0,
-                                city_id: home_city_id,
+                                city_id: refinery_city_id,
                                 company_id,
                                 resource_type_id: recipe.output_resource_id,
                                 order_type: "sell".into(),
@@ -562,20 +689,43 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         }
                     }
 
-                    let portion_cap = (capacity as f64 * (new_ratios.get(&recipe.id.to_string()).unwrap_or(&0.5))) as i32;
+                    let portion_cap = (capacity as f64
+                        * (new_ratios.get(&recipe.id.to_string()).unwrap_or(&0.5)))
+                        as i32;
                     if portion_cap > 0 {
                         for input in &recipe.inputs {
                             let buy_qty = (portion_cap * input.quantity * 5) as i64;
-                            let in_price = state.ema_prices.get(&(home_city_id, input.resource_type_id)).copied().unwrap_or(2.5);
-                            let max_affordable = (out_price * recipe.output_qty as f64 - labor_margin) / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
-                            let in_key = Inventory::key(company_id, home_city_id, input.resource_type_id);
-                            let raw_inv_qty = state.inventories.get(&in_key).map(|i| i.quantity).unwrap_or(0);
-                            
+                            let in_price = state
+                                .ema_prices
+                                .get(&(refinery_city_id, input.resource_type_id))
+                                .copied()
+                                .unwrap_or(2.5);
+                            let mut max_affordable = (out_price * recipe.output_qty as f64
+                                - labor_margin)
+                                / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
+                            let in_key = Inventory::key(
+                                company_id,
+                                refinery_city_id,
+                                input.resource_type_id,
+                            );
+                            let raw_inv_qty = state
+                                .inventories
+                                .get(&in_key)
+                                .map(|i| i.quantity)
+                                .unwrap_or(0);
+
                             let ticks_since_trade = current_tick.saturating_sub(last_trade_tick);
-                            let target_bid = if raw_inv_qty == 0 || ticks_since_trade > 20 {
+
+                            if raw_inv_qty == 0 && ticks_since_trade > 20 {
+                                max_affordable *= 1.5;
+                            }
+
+                            let target_bid = if raw_inv_qty == 0 || ticks_since_trade > 100 {
+                                in_price * 1.50
+                            } else if ticks_since_trade > 50 {
+                                in_price * 1.25
+                            } else if ticks_since_trade > 20 {
                                 in_price * 1.10
-                            } else if raw_inv_qty > (capacity * input.quantity * 10) as i64 {
-                                in_price * 0.90
                             } else {
                                 in_price * 0.98
                             };
@@ -584,7 +734,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             if bid_price > 0.0 {
                                 orders_to_post.push(MarketOrder {
                                     id: 0,
-                                    city_id: home_city_id,
+                                    city_id: refinery_city_id,
                                     company_id,
                                     resource_type_id: input.resource_type_id,
                                     order_type: "buy".into(),
@@ -600,15 +750,24 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 let company_cash = state.companies.get(&company_id).unwrap().cash;
                 let facility = state.facilities.get(&facility_id).unwrap();
                 let expansion_cost = 1500.0 * 1.3_f64.powi(facility.capacity / 5);
-                let expected_additional_profit = (total_positive_margin / facility.capacity as f64) * 5.0;
+                let expected_additional_profit =
+                    (total_positive_margin / facility.capacity as f64) * 5.0;
                 let roi_ticks = expansion_cost / expected_additional_profit.max(0.01);
 
-                if company_cash > expansion_cost * 3.0 && expected_additional_profit > 50.0 && roi_ticks < 60.0 {
+                if company_cash > expansion_cost * 3.0
+                    && expected_additional_profit > 50.0
+                    && roi_ticks < 60.0
+                {
                     let facility = state.facilities.get_mut(&facility_id).unwrap();
                     facility.capacity += 5;
                     facility.setup_ticks_remaining = 8;
                     state.companies.get_mut(&company_id).unwrap().cash -= expansion_cost;
-                    debug!(company_id, new_capacity = facility.capacity, cost = expansion_cost, "Refinery expanded facility (Smarter Decision)");
+                    debug!(
+                        company_id,
+                        new_capacity = facility.capacity,
+                        cost = expansion_cost,
+                        "Refinery expanded facility (Smarter Decision)"
+                    );
                 }
             }
         }
@@ -632,21 +791,62 @@ mod tests {
 
     fn make_state_with_miner() -> SimState {
         let mut s = SimState::new();
-        s.cities.insert(1, City { id: 1, body_id: 1, name: "Test City".into(), population: 0 });
-        s.companies.insert(1, Company {
-            id: 1,
-            name: "Mining Co".into(),
-            company_type: "freelancer".into(),
-            home_city_id: 1,
-            cash: 200.0,
-            debt: 0.0,
-            next_eval_tick: 1,
-            status: "active".into(),
-            last_trade_tick: 0,
-        });
-        s.deposits.insert(1, Deposit { id: 1, body_id: 1, resource_type_id: 1, size_total: 1000, size_remaining: 1000, extraction_cost_per_unit: 2.0 });
-        s.facilities.insert(1, Facility { id: 1, city_id: 1, company_id: 1, facility_type: "mine".into(), capacity: 10, setup_ticks_remaining: 0, target_resource_id: Some(1), production_ratios: None });
-        s.inventories.insert(Inventory::key(1, 1, 1), Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 50 });
+        s.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 0,
+            },
+        );
+        s.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Mining Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 200.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        s.deposits.insert(
+            1,
+            Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1,
+                size_total: 1000,
+                size_remaining: 1000,
+                extraction_cost_per_unit: 2.0,
+            },
+        );
+        s.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "mine".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(1),
+                production_ratios: None,
+            },
+        );
+        s.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 50,
+            },
+        );
         s
     }
 
