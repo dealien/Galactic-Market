@@ -16,15 +16,13 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 
     // ── Cities ────────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String, i64)>(
-        "SELECT c.id, cb.id AS body_id, c.name, c.population
-         FROM cities c
-         JOIN celestial_bodies cb ON cb.id = c.body_id",
+    let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, f64, i64)>(
+        "SELECT id, body_id, name, population, port_tier, port_fee_per_unit, port_max_throughput FROM cities",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, body_id, name, population) in rows {
+    for (id, body_id, name, population, port_tier, port_fee_per_unit, port_max_throughput) in rows {
         state.cities.insert(
             id,
             City {
@@ -32,11 +30,37 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 body_id,
                 name,
                 population,
+                port_tier,
+                port_fee_per_unit,
+                port_max_throughput,
             },
         );
     }
 
     info!(count = state.cities.len(), "Loaded cities.");
+
+    // ── System Lanes ──────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, f64, String)>(
+        "SELECT system_a_id, system_b_id, distance_ly, lane_type FROM system_lanes",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (sys_a, sys_b, dist, lane_type) in rows {
+        state.system_lanes.insert(
+            (sys_a, sys_b),
+            crate::sim::state::SystemLane {
+                system_a_id: sys_a,
+                system_b_id: sys_b,
+                distance_ly: dist,
+                lane_type,
+            },
+        );
+    }
+
+    crate::sim::logistics::build_system_distances(&mut state);
+
+    info!(count = state.system_lanes.len(), "Loaded system lanes.");
 
     // ── Celestial Bodies ──────────────────────────────────────────────────────
     let rows =

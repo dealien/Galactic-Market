@@ -798,6 +798,9 @@ mod tests {
                 body_id: 1,
                 name: "Test City".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
         s.companies.insert(

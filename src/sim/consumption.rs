@@ -113,6 +113,9 @@ mod tests {
                 body_id: 1,
                 name: "Consumer City".into(),
                 population,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
 

@@ -19,6 +19,9 @@ fn make_extraction_state(num_companies: usize) -> SimState {
                 body_id: i,
                 name: format!("City {i}"),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
 
@@ -76,6 +79,9 @@ fn make_market_state(num_orders: usize) -> SimState {
             body_id: 1,
             name: "Market City".into(),
             population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
         },
     );
 
@@ -176,6 +182,9 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 body_id: i,
                 name: format!("City {i}"),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
         state.companies.insert(
@@ -230,6 +239,9 @@ fn make_decisions_state(num_companies: usize) -> SimState {
                 body_id: i,
                 name: format!("City {i}"),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
         state.companies.insert(
@@ -355,6 +367,9 @@ fn make_spatial_state() -> SimState {
             body_id: 1,
             name: "C1".into(),
             population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
         },
     );
     state.cities.insert(
@@ -364,6 +379,9 @@ fn make_spatial_state() -> SimState {
             body_id: 1,
             name: "C2".into(),
             population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
         },
     );
     state

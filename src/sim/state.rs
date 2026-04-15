@@ -8,6 +8,9 @@ pub struct City {
     pub name: String,
     /// Resident population, used to calculate consumption demand.
     pub population: i64,
+    pub port_tier: i32,
+    pub port_fee_per_unit: f64,
+    pub port_max_throughput: i64,
 }
 
 /// A celestial body (planet, moon, station).
@@ -32,6 +35,15 @@ pub struct Sector {
     pub id: i32,
     pub empire_id: i32,
     pub name: String,
+}
+
+/// A jump lane between star systems.
+#[derive(Debug, Clone)]
+pub struct SystemLane {
+    pub system_a_id: i32,
+    pub system_b_id: i32,
+    pub distance_ly: f64,
+    pub lane_type: String,
 }
 
 /// A resource type in the simulation.
@@ -181,6 +193,12 @@ pub struct SimState {
     /// All star systems keyed by system ID.
     pub star_systems: HashMap<i32, StarSystem>,
 
+    /// All jump lanes keyed by (sys_a, sys_b) tuple.
+    pub system_lanes: HashMap<(i32, i32), SystemLane>,
+
+    /// Cached shortest path distances between star systems.
+    pub system_distances: HashMap<(i32, i32), f64>,
+
     /// All sectors keyed by sector ID.
     pub sectors: HashMap<i32, Sector>,
 
@@ -247,6 +265,8 @@ impl SimState {
             cities: HashMap::new(),
             celestial_bodies: HashMap::new(),
             star_systems: HashMap::new(),
+            system_lanes: HashMap::new(),
+            system_distances: HashMap::new(),
             sectors: HashMap::new(),
             companies: HashMap::new(),
             loans: HashMap::new(),
