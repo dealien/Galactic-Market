@@ -8,15 +8,57 @@ fn main() {
     divan::main();
 }
 
+/// Helper to setup a valid universe hierarchy for benchmarks that require pathfinding.
+fn setup_benchmark_hierarchy(state: &mut SimState, num_cities: usize) {
+    // Sector
+    state.sectors.insert(
+        1,
+        Sector {
+            id: 1,
+            empire_id: 1,
+            name: "Sector 1".into(),
+        },
+    );
+
+    // Systems (1 per 8 cities)
+    let num_systems = (num_cities / 8).max(1);
+    for i in 1..=num_systems {
+        state.star_systems.insert(
+            i as i32,
+            StarSystem {
+                id: i as i32,
+                sector_id: 1,
+                name: format!("Sys {i}"),
+            },
+        );
+    }
+
+    // Bodies (1 per 4 cities)
+    let num_bodies = (num_cities / 4).max(1);
+    for i in 1..=num_bodies {
+        let sys_id = ((i - 1) / 2 + 1) as i32;
+        state.celestial_bodies.insert(
+            i as i32,
+            CelestialBody {
+                id: i as i32,
+                system_id: sys_id,
+                name: format!("Body {i}"),
+            },
+        );
+    }
+}
+
 fn make_extraction_state(num_companies: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, num_companies);
 
     for i in 1..=(num_companies as i32) {
+        let body_id = (i - 1) / 4 + 1;
         state.cities.insert(
             i,
             City {
                 id: i,
-                body_id: i,
+                body_id,
                 name: format!("City {i}"),
                 population: 0,
                 port_tier: 1,
@@ -44,7 +86,7 @@ fn make_extraction_state(num_companies: usize) -> SimState {
             i,
             Deposit {
                 id: i,
-                body_id: i,
+                body_id,
                 resource_type_id: 1,
                 size_total: 1_000_000,
                 size_remaining: 1_000_000,
@@ -72,6 +114,8 @@ fn make_extraction_state(num_companies: usize) -> SimState {
 
 fn make_market_state(num_orders: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, 1);
+
     state.cities.insert(
         1,
         City {
@@ -160,6 +204,7 @@ fn make_market_state(num_orders: usize) -> SimState {
 
 fn make_production_state(num_refineries: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, num_refineries);
 
     state.recipes.insert(
         1,
@@ -177,11 +222,12 @@ fn make_production_state(num_refineries: usize) -> SimState {
     );
 
     for i in 1..=(num_refineries as i32) {
+        let body_id = (i - 1) / 4 + 1;
         state.cities.insert(
             i,
             City {
                 id: i,
-                body_id: i,
+                body_id,
                 name: format!("City {i}"),
                 population: 0,
                 port_tier: 1,
@@ -232,13 +278,15 @@ fn make_production_state(num_refineries: usize) -> SimState {
 
 fn make_decisions_state(num_companies: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, num_companies);
 
     for i in 1..=(num_companies as i32) {
+        let body_id = (i - 1) / 4 + 1;
         state.cities.insert(
             i,
             City {
                 id: i,
-                body_id: i,
+                body_id,
                 name: format!("City {i}"),
                 population: 0,
                 port_tier: 1,
@@ -265,7 +313,7 @@ fn make_decisions_state(num_companies: usize) -> SimState {
             i,
             Deposit {
                 id: i,
-                body_id: i,
+                body_id,
                 resource_type_id: 1,
                 size_total: 1_000,
                 size_remaining: 1_000,
@@ -391,6 +439,7 @@ fn make_spatial_state() -> SimState {
 
 fn make_merchant_state(num_merchants: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, 32);
 
     // 32 cities
     for i in 1..=32 {
@@ -443,6 +492,8 @@ fn make_merchant_state(num_merchants: usize) -> SimState {
 
 fn make_advanced_market_state(num_orders: usize) -> SimState {
     let mut state = SimState::new();
+    setup_benchmark_hierarchy(&mut state, 1);
+
     state.cities.insert(
         1,
         City {
