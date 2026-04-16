@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use tracing::debug;
+use tracing::{debug, warn};
 
-use crate::sim::state::{MarketHistory, SimState};
+use crate::sim::state::{Inventory, MarketHistory, SimState};
 
 /// Phase 4: Sophisticated market clearing.
 ///
@@ -106,15 +106,21 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 }
                 ("market", "limit") => sell_price,
                 ("limit", "market") => buy_price,
-                _ => (buy_price + sell_price) / 2.0, // Midpoint
+                _ => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
             };
 
             let actual_buyer_cash = state.companies[&buy_company_id].cash;
-            let affordable_by_buyer = (actual_buyer_cash / clearing_price) as i64;
+            let affordable_by_buyer = if clearing_price > 0.0 {
+                (actual_buyer_cash / clearing_price) as i64
+            } else {
+                buy_qty // Free items!
+            };
 
+            // Invariant: Orders in this loop belong to `city_id`.
+            let seller_inv_key = Inventory::key(sell_company_id, city_id, resource_type_id);
             let actual_seller_inventory = state
                 .inventories
-                .get(&(sell_company_id, city_id, resource_type_id))
+                .get(&seller_inv_key)
                 .map(|inv| inv.quantity)
                 .unwrap_or(0);
 
@@ -137,18 +143,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 }
 
                 // Transfer inventory
-                if let Some(seller_inv) =
-                    state
-                        .inventories
-                        .get_mut(&(sell_company_id, city_id, resource_type_id))
-                {
+                if let Some(seller_inv) = state.inventories.get_mut(&seller_inv_key) {
                     seller_inv.quantity -= qty;
                 }
 
                 let buyer_inv = state
                     .inventories
-                    .entry((buy_company_id, city_id, resource_type_id))
-                    .or_insert(crate::sim::state::Inventory {
+                    .entry(Inventory::key(buy_company_id, city_id, resource_type_id))
+                    .or_insert(Inventory {
                         company_id: buy_company_id,
                         city_id,
                         resource_type_id,
@@ -185,10 +187,24 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 );
             } else {
                 // Determine fault and void order
-                if actual_buyer_cash < clearing_price {
+                if affordable_by_buyer == 0 && actual_buyer_cash < clearing_price {
+                    debug!(buy_company_id, "Voiding buy order due to lack of cash");
                     state.market_orders.remove(&b_id);
                 } else if actual_seller_inventory == 0 {
+                    debug!(
+                        sell_company_id,
+                        "Voiding sell order due to lack of inventory"
+                    );
                     state.market_orders.remove(&s_id);
+                } else {
+                    // Logic safety catch: if we can't trade and it's not cash/inv,
+                    // something is wrong with the match. Skip it to avoid infinite loop.
+                    warn!(
+                        city_id,
+                        res_id = resource_type_id,
+                        "Zero quantity match catch-all triggered"
+                    );
+                    break;
                 }
             }
 
@@ -231,6 +247,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
             state.price_cache.insert((city_id, resource_type_id), close);
 
+            // EMA alpha 0.2 chosen for Stage 3 to allow faster convergence
+            // in a geography-distributed economy where arbitrageurs are active.
             let alpha = 0.2;
             let current_ema = state
                 .ema_prices
@@ -284,7 +302,7 @@ mod tests {
         state.companies.insert(1, make_company(1, 1000.0));
         state.companies.insert(2, make_company(2, 1000.0));
         state.inventories.insert(
-            (1, 1, 1),
+            Inventory::key(1, 1, 1),
             Inventory {
                 company_id: 1,
                 city_id: 1,
@@ -335,5 +353,92 @@ mod tests {
 
         assert_eq!(state.companies[&1].cash, 1050.0); // 1000 + (10 * 5.0)
         assert_eq!(state.companies[&2].cash, 950.0);
+    }
+
+    #[test]
+    fn limit_order_midpoint_clearing() {
+        let mut state = setup_test_state();
+
+        // Seller: Limit Sell 10 @ 4.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 4.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Limit Buy 10 @ 6.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 6.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // Price should be 5.0 (midpoint)
+        assert_eq!(state.companies[&1].cash, 1050.0);
+        assert_eq!(state.companies[&2].cash, 950.0);
+    }
+
+    #[test]
+    fn market_order_to_market_order_uses_ema() {
+        let mut state = setup_test_state();
+        state.ema_prices.insert((1, 1), 25.0);
+
+        // Seller: Market Sell 10
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "market".into(),
+                price: 0.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Market Buy 10
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "market".into(),
+                price: 0.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // Uses EMA price of 25.0
+        assert_eq!(state.companies[&1].cash, 1250.0);
+        assert_eq!(state.companies[&2].cash, 750.0);
     }
 }

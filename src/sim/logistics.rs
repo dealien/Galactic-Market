@@ -1,7 +1,7 @@
 use crate::sim::state::{Inventory, SimState};
 use petgraph::algo::dijkstra;
 use petgraph::graphmap::UnGraphMap;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Phase 3: Logistics.
 ///
@@ -137,6 +137,12 @@ pub fn get_transport_info(
             cost_per_unit: total_cost,
         };
     }
+
+    warn!(
+        from_sys = origin_system_id,
+        to_sys = dest_system_id,
+        "No jump lane path found between systems"
+    );
 
     // Fallback if no path exists
     TransportInfo {
