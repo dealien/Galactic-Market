@@ -75,6 +75,7 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
                         company_id,
                         resource_type_id: res_id,
                         order_type: "buy".into(),
+                        order_kind: "limit".into(),
                         price: bid_price,
                         quantity: final_qty,
                         created_tick: current_tick,

@@ -210,24 +210,27 @@ fn test_market_clearing_balances() {
             company_id: 1,
             resource_type_id: 1,
             order_type: "sell".into(),
-            price: 8.0,
-            quantity: 10,
-            created_tick: 0,
-        },
-    );
-    state.market_orders.insert(
-        2,
-        MarketOrder {
+            order_kind: "limit".into(),
+            price: 5.0,
+            quantity: 50,
+            created_tick: 1,
+            },
+            );
+            state.market_orders.insert(
+            2,
+            MarketOrder {
             id: 2,
             city_id: 1,
             company_id: 2,
-            resource_type_id: 1,
+            resource_type_id: 2,
             order_type: "buy".into(),
-            price: 10.0,
-            quantity: 10,
-            created_tick: 0,
-        },
-    );
+            order_kind: "limit".into(),
+            price: 5.0,
+            quantity: 50,
+            created_tick: 1,
+            },
+            );
+
 
     galactic_market::sim::markets::clear_orders(&mut state, 1);
 

@@ -332,6 +332,29 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     info!("Seeded 32 consumer companies (one per city).");
 
+    // 9. Seed 4 Merchant companies (Arbitrageurs) - one per star system
+    for (i, _) in system_ids.iter().enumerate() {
+        // Find the first city in this system to place the merchant's home office
+        let city_id = (i * 8) as i32 + 1; 
+
+        sqlx::query(
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+        )
+        .bind(format!("System {} Merchant", i + 1))
+        .bind("merchant")
+        .bind(city_id)
+        .bind(100_000.0_f64) // High initial capital for arbitrage
+        .bind(0.0_f64)
+        .bind("A")
+        .bind(1_i64)
+        .bind("active")
+        .bind(0_i64)
+        .execute(&mut *tx)
+        .await?;
+    }
+    info!("Seeded 4 merchant arbitrageurs.");
+
     // 10. Prime the market with initial prices to prevent discovery deadlock
     for &city_id in &city_ids {
         for &(res_id, base_price) in &[

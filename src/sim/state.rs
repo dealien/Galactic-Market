@@ -158,6 +158,7 @@ pub struct MarketOrder {
     pub company_id: i32,
     pub resource_type_id: i32,
     pub order_type: String, // "buy" | "sell"
+    pub order_kind: String, // "limit" | "market"
     pub price: f64,
     pub quantity: i64,
     pub created_tick: u64,
