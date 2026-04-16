@@ -121,16 +121,38 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     let mut city_ids = Vec::new();
     for (i, body_id) in body_ids.iter().enumerate() {
         for j in 1..=4 {
+            // Tiered ports: First city of each planet is a Hub (higher throughput, lower fee)
+            let (fee, throughput, tier) = if j == 1 {
+                (0.05, 50000, 3)
+            } else {
+                (0.15, 10000, 1)
+            };
+
             let city_id = sqlx::query_as::<_, (i32,)>(
-                "INSERT INTO cities (body_id, name, population, infrastructure_lvl, port_tier) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+                "INSERT INTO cities (body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
             )
-            .bind(body_id).bind(format!("City {}-{}", i + 1, j)).bind(1_000_000_i64).bind(1).bind(1)
+            .bind(body_id).bind(format!("City {}-{}", i + 1, j)).bind(1_000_000_i64).bind(1).bind(tier).bind(fee).bind(throughput)
             .fetch_one(&mut *tx).await?.0;
             city_ids.push(city_id);
         }
     }
 
     info!("Seeded geography: 2 empires, 4 systems, 8 planets, 32 cities.");
+
+    // 6.1 Seed System Lanes (Structured Ring Topology for Debugging)
+    // 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
+    for i in 0..system_ids.len() {
+        let sys_a = system_ids[i];
+        let sys_b = system_ids[(i + 1) % system_ids.len()];
+        sqlx::query(
+            "INSERT INTO system_lanes (system_a_id, system_b_id, distance_ly) VALUES ($1, $2, 5.0)",
+        )
+        .bind(sys_a)
+        .bind(sys_b)
+        .execute(&mut *tx)
+        .await?;
+    }
+    info!("Seeded structured jump lane network (Ring).");
 
     // 7. Recipes
     let iron_recipe_id = sqlx::query_as::<_, (i32,)>(
@@ -309,6 +331,29 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     }
 
     info!("Seeded 32 consumer companies (one per city).");
+
+    // 9. Seed 4 Merchant companies (Arbitrageurs) - one per star system
+    for (i, _) in system_ids.iter().enumerate() {
+        // Find the first city in this system to place the merchant's home office
+        let city_id = (i * 8) as i32 + 1;
+
+        sqlx::query(
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+        )
+        .bind(format!("System {} Merchant", i + 1))
+        .bind("merchant")
+        .bind(city_id)
+        .bind(100_000.0_f64) // High initial capital for arbitrage
+        .bind(0.0_f64)
+        .bind("A")
+        .bind(1_i64)
+        .bind("active")
+        .bind(0_i64)
+        .execute(&mut *tx)
+        .await?;
+    }
+    info!("Seeded 4 merchant arbitrageurs.");
 
     // 10. Prime the market with initial prices to prevent discovery deadlock
     for &city_id in &city_ids {

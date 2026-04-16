@@ -11,6 +11,7 @@ fn eval_interval_range(company_type: &str) -> (u64, u64) {
         "small_company" => (5, 20),
         "corporation" => (20, 60),
         "megacorp" => (60, 200),
+        "merchant" => (1, 2),
         _ => (5, 20),
     }
 }
@@ -41,7 +42,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
         if status == "bankrupt" {
             let mut orders_to_post = Vec::new();
 
-            // Find all inventory for this company across all cities
             let company_inventories: Vec<_> = state
                 .inventories
                 .values()
@@ -64,6 +64,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     company_id,
                     resource_type_id: inv.resource_type_id,
                     order_type: "sell".into(),
+                    order_kind: "limit".into(),
                     price: fire_sale_price,
                     quantity: inv.quantity,
                     created_tick: current_tick,
@@ -106,6 +107,152 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         let mut orders_to_post = Vec::new();
 
+        // --- Merchant AI (Arbitrageur) ──────────────────────────────────────────
+        if company_type == "merchant" {
+            let company_cash = state.companies.get(&company_id).unwrap().cash;
+            if company_cash > 1000.0 {
+                let mut best_arbitrage = None;
+                let mut best_profit_margin = 0.0;
+
+                for &res_id in state.resource_types.keys() {
+                    for &origin_city_id in state.cities.keys() {
+                        let buy_price = state
+                            .ema_prices
+                            .get(&(origin_city_id, res_id))
+                            .copied()
+                            .unwrap_or(1000.0);
+                        for &dest_city_id in state.cities.keys() {
+                            if origin_city_id == dest_city_id {
+                                continue;
+                            }
+                            let sell_price = state
+                                .ema_prices
+                                .get(&(dest_city_id, res_id))
+                                .copied()
+                                .unwrap_or(0.0);
+                            let transport = get_transport_info(state, origin_city_id, dest_city_id);
+                            let total_cost = buy_price + transport.cost_per_unit;
+                            let profit = sell_price - total_cost;
+
+                            if profit > best_profit_margin && profit > (buy_price * 0.001) {
+                                best_profit_margin = profit;
+                                best_arbitrage =
+                                    Some((res_id, origin_city_id, dest_city_id, buy_price));
+                            }
+                        }
+                    }
+                }
+
+                if let Some((res_id, origin, _dest, buy_price)) = best_arbitrage {
+                    let max_affordable = (company_cash * 0.5 / buy_price) as i64;
+                    let qty = 50.min(max_affordable);
+                    if qty > 0 {
+                        orders_to_post.push(MarketOrder {
+                            id: 0,
+                            city_id: origin,
+                            company_id,
+                            resource_type_id: res_id,
+                            order_type: "buy".into(),
+                            order_kind: "market".into(),
+                            price: buy_price * 1.1,
+                            quantity: qty,
+                            created_tick: current_tick,
+                        });
+                        debug!(
+                            company_id,
+                            res_id,
+                            from = origin,
+                            margin = best_profit_margin,
+                            "Merchant initiated arbitrage buy"
+                        );
+                    }
+                }
+            }
+
+            let company_inventories: Vec<_> = state
+                .inventories
+                .values()
+                .filter(|inv| inv.company_id == company_id && inv.quantity > 0)
+                .cloned()
+                .collect();
+
+            for inv in company_inventories {
+                let local_ema = state
+                    .ema_prices
+                    .get(&(inv.city_id, inv.resource_type_id))
+                    .copied()
+                    .unwrap_or(0.0);
+                let mut best_dest = inv.city_id;
+                let mut best_price_after_transport = local_ema;
+                let mut best_transport_ticks = 0;
+
+                for &dest_city_id in state.cities.keys() {
+                    if dest_city_id == inv.city_id {
+                        continue;
+                    }
+                    let dest_ema = state
+                        .ema_prices
+                        .get(&(dest_city_id, inv.resource_type_id))
+                        .copied()
+                        .unwrap_or(0.0);
+                    let transport = get_transport_info(state, inv.city_id, dest_city_id);
+                    if dest_ema - transport.cost_per_unit > best_price_after_transport {
+                        best_price_after_transport = dest_ema - transport.cost_per_unit;
+                        best_dest = dest_city_id;
+                        best_transport_ticks = transport.ticks;
+                    }
+                }
+
+                if best_dest != inv.city_id {
+                    let transport = get_transport_info(state, inv.city_id, best_dest);
+                    let total_ship_cost = transport.cost_per_unit * inv.quantity as f64;
+                    let cash = state.companies.get(&company_id).unwrap().cash;
+                    if cash >= total_ship_cost {
+                        state.companies.get_mut(&company_id).unwrap().cash -= total_ship_cost;
+                        if let Some(mut_inv) = state.inventories.get_mut(&Inventory::key(
+                            company_id,
+                            inv.city_id,
+                            inv.resource_type_id,
+                        )) {
+                            mut_inv.quantity = 0;
+                        }
+                        let route_id = state.next_trade_route_id();
+                        state.trade_routes.insert(
+                            route_id,
+                            TradeRoute {
+                                id: route_id,
+                                company_id,
+                                origin_city_id: inv.city_id,
+                                dest_city_id: best_dest,
+                                resource_type_id: inv.resource_type_id,
+                                quantity: inv.quantity,
+                                arrival_tick: current_tick + best_transport_ticks,
+                            },
+                        );
+                        debug!(
+                            company_id,
+                            qty = inv.quantity,
+                            from = inv.city_id,
+                            to = best_dest,
+                            "Merchant shipping inventory"
+                        );
+                    }
+                } else {
+                    orders_to_post.push(MarketOrder {
+                        id: 0,
+                        city_id: inv.city_id,
+                        company_id,
+                        resource_type_id: inv.resource_type_id,
+                        order_type: "sell".into(),
+                        order_kind: "limit".into(),
+                        price: local_ema * 0.98,
+                        quantity: inv.quantity,
+                        created_tick: current_tick,
+                    });
+                }
+            }
+        }
+
         // --- New Facility Scouting ---
         if company_type == "small_company" || company_type == "corporation" {
             let company_cash = state.companies.get(&company_id).unwrap().cash;
@@ -114,7 +261,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 .values()
                 .filter(|f| f.company_id == company_id)
                 .count();
-
             let max_facilities = if company_type == "small_company" {
                 3
             } else {
@@ -129,7 +275,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                 if company_cash > mine_cost * 3.0 {
                     for (&city_id_target, city) in &state.cities {
-                        // Vertical Integration: Can build mine if we don't have a MINE here
                         if state.facilities.values().any(|f| {
                             f.company_id == company_id
                                 && f.city_id == city_id_target
@@ -137,7 +282,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         }) {
                             continue;
                         }
-
                         let planet_id = city.body_id;
                         let deposits: Vec<_> = state
                             .deposits
@@ -196,9 +340,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         }) {
                             continue;
                         }
-
-                        // Heuristic: Is there high demand for refined goods here?
-                        // For now, look at EMA prices of all ingots.
                         let mut total_margin = 0.0;
                         for recipe in state
                             .recipes
@@ -210,12 +351,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 .get(&(city_id_target, recipe.output_resource_id))
                                 .copied()
                                 .unwrap_or(30.0);
-                            let margin = out_price - 10.0; // Simplistic cost assumption for scouting
+                            let margin = out_price - 10.0;
                             if margin > 0.0 {
                                 total_margin += margin;
                             }
                         }
-
                         if total_margin > best_refinery_profit {
                             best_refinery_profit = total_margin;
                             best_refinery_target = Some(city_id_target);
@@ -235,7 +375,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 company_id,
                                 facility_type: "refinery".into(),
                                 capacity: 5,
-                                setup_ticks_remaining: 30, // Refineries take longer
+                                setup_ticks_remaining: 30,
                                 target_resource_id: None,
                                 production_ratios: None,
                             },
@@ -267,8 +407,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .get(&(home_city_id, r_id))
                         .copied()
                         .unwrap_or(20.0);
-                    let max_willingness_to_pay = 250.0;
-                    let bid_price = (target_price * 1.02).min(max_willingness_to_pay);
+                    let bid_price = (target_price * 1.02).min(250.0);
                     let qty = (budget_per_product / bid_price) as i64;
                     if qty > 0 {
                         orders_to_post.push(MarketOrder {
@@ -277,6 +416,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             company_id,
                             resource_type_id: r_id,
                             order_type: "buy".into(),
+                            order_kind: "limit".into(),
                             price: bid_price,
                             quantity: qty,
                             created_tick: current_tick,
@@ -332,13 +472,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     if target_city_id == home_city_id {
                         continue;
                     }
-                    let transport_info = get_transport_info(state, home_city_id, target_city_id);
+                    let transport = get_transport_info(state, home_city_id, target_city_id);
                     let dest_ema = state
                         .ema_prices
                         .get(&(target_city_id, target_id))
                         .copied()
                         .unwrap_or(selected_ore_cost * 1.5);
-                    let ship_margin = dest_ema - selected_ore_cost - transport_info.cost_per_unit;
+                    let ship_margin = dest_ema - selected_ore_cost - transport.cost_per_unit;
                     if ship_margin > best_overall_margin {
                         best_overall_margin = ship_margin;
                     }
@@ -372,17 +512,14 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             .facilities
                             .values()
                             .any(|f| f.city_id == home_city_id && f.facility_type == "refinery");
-
                         let facility_capacity = state
                             .facilities
                             .get(&facility_id)
                             .map(|f| f.capacity)
                             .unwrap_or(10);
-
                         let mut best_target_city = None;
                         let mut best_target_profit = 0.0;
                         let mut best_target_info = None;
-
                         let local_price = state
                             .ema_prices
                             .get(&(home_city_id, res_id))
@@ -393,18 +530,17 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             if target_city_id == home_city_id {
                                 continue;
                             }
-                            let transport_info =
-                                get_transport_info(state, home_city_id, target_city_id);
+                            let transport = get_transport_info(state, home_city_id, target_city_id);
                             let dest_price = state
                                 .ema_prices
                                 .get(&(target_city_id, res_id))
                                 .copied()
                                 .unwrap_or(cost * 1.5);
-                            let margin = dest_price - local_price - transport_info.cost_per_unit;
+                            let margin = dest_price - local_price - transport.cost_per_unit;
                             if margin > best_target_profit {
                                 best_target_profit = margin;
                                 best_target_city = Some(target_city_id);
-                                best_target_info = Some(transport_info);
+                                best_target_info = Some(transport);
                             }
                         }
 
@@ -418,17 +554,17 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
                         if should_ship {
                             let target_city = best_target_city.unwrap();
-                            let transport_info = best_target_info.unwrap();
+                            let transport = best_target_info.unwrap();
                             let move_qty = inv.quantity;
-                            let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                            let total_cost = transport.cost_per_unit * move_qty as f64;
                             let company_cash = state.companies.get(&company_id).unwrap().cash;
 
                             if company_cash >= total_cost {
                                 state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
-                                let route_id = state.next_trade_route_id();
                                 if let Some(mut_inv) = state.inventories.get_mut(&key) {
                                     mut_inv.quantity -= move_qty;
                                 }
+                                let route_id = state.next_trade_route_id();
                                 state.trade_routes.insert(
                                     route_id,
                                     TradeRoute {
@@ -438,7 +574,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                         dest_city_id: target_city,
                                         resource_type_id: res_id,
                                         quantity: move_qty,
-                                        arrival_tick: current_tick + transport_info.ticks,
+                                        arrival_tick: current_tick + transport.ticks,
                                     },
                                 );
                                 debug!(
@@ -446,7 +582,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                     move_qty,
                                     from = home_city_id,
                                     to = target_city,
-                                    "Miner shipped ore to better market"
+                                    "Miner shipped ore"
                                 );
                                 continue;
                             }
@@ -457,9 +593,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             .get(&(home_city_id, res_id))
                             .copied()
                             .unwrap_or(base_ask * 1.5);
-
                         let ticks_since_trade = current_tick.saturating_sub(last_trade_tick);
-
                         let ask_price = if inv.quantity > (facility_capacity * 10) as i64
                             || ticks_since_trade > 100
                         {
@@ -482,6 +616,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             company_id,
                             resource_type_id: res_id,
                             order_type: "sell".into(),
+                            order_kind: "limit".into(),
                             price: ask_price,
                             quantity: inv.quantity,
                             created_tick: current_tick,
@@ -541,7 +676,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .unwrap_or(2.5);
                     cost_basis += in_price * input.quantity as f64;
                 }
-
                 let out_price = state
                     .ema_prices
                     .get(&(refinery_city_id, recipe.output_resource_id))
@@ -549,7 +683,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     .unwrap_or(cost_basis * 1.5);
                 let revenue = out_price * recipe.output_qty as f64;
                 let margin = revenue - cost_basis;
-
                 if margin > 0.0 {
                     recipes_evaluated.push((
                         recipe.id,
@@ -596,7 +729,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             let mut best_target_city = None;
                             let mut best_target_profit = 0.0;
                             let mut best_target_info = None;
-
                             let local_price = state
                                 .ema_prices
                                 .get(&(refinery_city_id, recipe.output_resource_id))
@@ -607,19 +739,18 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 if target_city_id == refinery_city_id {
                                     continue;
                                 }
-                                let transport_info =
+                                let transport =
                                     get_transport_info(state, refinery_city_id, target_city_id);
                                 let dest_price = state
                                     .ema_prices
                                     .get(&(target_city_id, recipe.output_resource_id))
                                     .copied()
                                     .unwrap_or(out_price * 1.2);
-                                let margin =
-                                    dest_price - local_price - transport_info.cost_per_unit;
+                                let margin = dest_price - local_price - transport.cost_per_unit;
                                 if margin > best_target_profit {
                                     best_target_profit = margin;
                                     best_target_city = Some(target_city_id);
-                                    best_target_info = Some(transport_info);
+                                    best_target_info = Some(transport);
                                 }
                             }
 
@@ -627,19 +758,19 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             #[allow(clippy::collapsible_if)]
                             if let Some(target_city) = best_target_city {
                                 if best_target_profit > (out_price * 0.10) {
-                                    let transport_info = best_target_info.unwrap();
+                                    let transport = best_target_info.unwrap();
                                     let move_qty = inv.quantity;
-                                    let total_cost = transport_info.cost_per_unit * move_qty as f64;
+                                    let total_cost = transport.cost_per_unit * move_qty as f64;
                                     let company_cash =
                                         state.companies.get(&company_id).unwrap().cash;
 
                                     if company_cash >= total_cost {
                                         state.companies.get_mut(&company_id).unwrap().cash -=
                                             total_cost;
-                                        let route_id = state.next_trade_route_id();
                                         if let Some(mut_inv) = state.inventories.get_mut(&out_key) {
                                             mut_inv.quantity -= move_qty;
                                         }
+                                        let route_id = state.next_trade_route_id();
                                         state.trade_routes.insert(
                                             route_id,
                                             TradeRoute {
@@ -649,7 +780,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                                 dest_city_id: target_city,
                                                 resource_type_id: recipe.output_resource_id,
                                                 quantity: move_qty,
-                                                arrival_tick: current_tick + transport_info.ticks,
+                                                arrival_tick: current_tick + transport.ticks,
                                             },
                                         );
                                         debug!(
@@ -657,7 +788,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                             move_qty,
                                             from = refinery_city_id,
                                             to = target_city,
-                                            "Refinery shipped refined goods to better market"
+                                            "Refinery shipped refined goods"
                                         );
                                         shipped = true;
                                     }
@@ -682,6 +813,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 company_id,
                                 resource_type_id: recipe.output_resource_id,
                                 order_type: "sell".into(),
+                                order_kind: "limit".into(),
                                 price: ask_price,
                                 quantity: inv.quantity,
                                 created_tick: current_tick,
@@ -715,7 +847,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 .unwrap_or(0);
 
                             let ticks_since_trade = current_tick.saturating_sub(last_trade_tick);
-
                             if raw_inv_qty == 0 && ticks_since_trade > 20 {
                                 max_affordable *= 1.5;
                             }
@@ -738,6 +869,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                     company_id,
                                     resource_type_id: input.resource_type_id,
                                     order_type: "buy".into(),
+                                    order_kind: "limit".into(),
                                     price: bid_price,
                                     quantity: buy_qty,
                                     created_tick: current_tick,
@@ -772,6 +904,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             }
         }
 
+        // Apply generated orders
         for mut order in orders_to_post {
             let id = state.next_order_id();
             order.id = id;
@@ -780,9 +913,12 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     }
 }
 
+/// Returns the last clearing price per (city_id, resource_type_id) from the state's persistent cache.
 fn last_known_prices(state: &SimState) -> std::collections::HashMap<(i32, i32), f64> {
     state.price_cache.clone()
 }
+
+// ─── Unit Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
@@ -798,6 +934,9 @@ mod tests {
                 body_id: 1,
                 name: "Test City".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
             },
         );
         s.companies.insert(

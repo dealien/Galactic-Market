@@ -1,5 +1,7 @@
 use crate::sim::state::{Inventory, SimState};
-use tracing::debug;
+use petgraph::algo::dijkstra;
+use petgraph::graphmap::UnGraphMap;
+use tracing::{debug, warn};
 
 /// Phase 3: Logistics.
 ///
@@ -39,6 +41,24 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
     }
 }
 
+/// Builds the all-pairs shortest path cache for the system jump network.
+pub fn build_system_distances(state: &mut SimState) {
+    let mut graph = UnGraphMap::<i32, f64>::new();
+
+    // Add edges for all lanes
+    for lane in state.system_lanes.values() {
+        graph.add_edge(lane.system_a_id, lane.system_b_id, lane.distance_ly);
+    }
+
+    // Compute shortest paths between all pairs of systems
+    for start_node in graph.nodes() {
+        let shortest_paths = dijkstra(&graph, start_node, None, |(_, _, weight)| *weight);
+        for (end_node, cost) in shortest_paths {
+            state.system_distances.insert((start_node, end_node), cost);
+        }
+    }
+}
+
 /// Metadata about a potential transport route.
 #[derive(Debug, Clone, Copy)]
 pub struct TransportInfo {
@@ -70,15 +90,6 @@ pub fn get_transport_info(
         .get(&dest_city_id)
         .expect("Dest city not found");
 
-    // 1. Same Celestial Body (Planet/Moon)
-    if origin_city.body_id == dest_city.body_id {
-        return TransportInfo {
-            ticks: 1,
-            cost_per_unit: 0.1,
-        };
-    }
-
-    // 2. Same Star System
     let origin_body = state
         .celestial_bodies
         .get(&origin_city.body_id)
@@ -88,34 +99,55 @@ pub fn get_transport_info(
         .get(&dest_city.body_id)
         .expect("Dest body not found");
 
+    // 1. Same Celestial Body (Planet/Moon)
+    if origin_city.body_id == dest_city.body_id {
+        let cost = 0.1 + origin_city.port_fee_per_unit + dest_city.port_fee_per_unit;
+        return TransportInfo {
+            ticks: 1,
+            cost_per_unit: cost,
+        };
+    }
+
+    // 2. Same Star System
     if origin_body.system_id == dest_body.system_id {
+        let cost = 0.5 + origin_city.port_fee_per_unit + dest_city.port_fee_per_unit;
         return TransportInfo {
             ticks: 3,
-            cost_per_unit: 0.5,
+            cost_per_unit: cost,
         };
     }
 
-    // 3. Same Sector
-    let origin_system = state
-        .star_systems
-        .get(&origin_body.system_id)
-        .expect("Origin system not found");
-    let dest_system = state
-        .star_systems
-        .get(&dest_body.system_id)
-        .expect("Dest system not found");
+    // 3. Inter-System (requires pathfinding)
+    let origin_system_id = origin_body.system_id;
+    let dest_system_id = dest_body.system_id;
 
-    if origin_system.sector_id == dest_system.sector_id {
+    if let Some(&distance) = state
+        .system_distances
+        .get(&(origin_system_id, dest_system_id))
+    {
+        // Base ticks: 3 for taking off/landing + 1 tick per 2 LY. Base cost: 0.5 + 0.2 per LY
+        let travel_ticks = 3 + (distance / 2.0).ceil() as u64;
+        let travel_cost = 0.5 + (distance * 0.2);
+
+        // Apply port fees
+        let total_cost = travel_cost + origin_city.port_fee_per_unit + dest_city.port_fee_per_unit;
+
         return TransportInfo {
-            ticks: 7,
-            cost_per_unit: 2.0,
+            ticks: travel_ticks,
+            cost_per_unit: total_cost,
         };
     }
 
-    // 4. Inter-Sector / Inter-Empire
+    warn!(
+        from_sys = origin_system_id,
+        to_sys = dest_system_id,
+        "No jump lane path found between systems"
+    );
+
+    // Fallback if no path exists
     TransportInfo {
-        ticks: 15,
-        cost_per_unit: 5.0,
+        ticks: 999,
+        cost_per_unit: 9999.0,
     }
 }
 
@@ -124,7 +156,7 @@ pub fn get_transport_info(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{CelestialBody, City, Sector, SimState, StarSystem};
+    use crate::sim::state::{CelestialBody, City, Sector, SimState, StarSystem, SystemLane};
 
     fn setup_hierarchy(state: &mut SimState) {
         state.sectors.insert(
@@ -178,6 +210,7 @@ mod tests {
             },
         );
 
+        let fee = 0.05;
         state.cities.insert(
             1,
             City {
@@ -185,6 +218,9 @@ mod tests {
                 body_id: 1,
                 name: "City 1".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -194,6 +230,9 @@ mod tests {
                 body_id: 1,
                 name: "City 2".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -203,6 +242,9 @@ mod tests {
                 body_id: 2,
                 name: "City 3".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -212,6 +254,9 @@ mod tests {
                 body_id: 2,
                 name: "City 4".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
 
@@ -238,30 +283,12 @@ mod tests {
                 body_id: 3,
                 name: "City 5".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
-    }
 
-    #[test]
-    fn transport_info_calculates_correctly() {
-        let mut state = SimState::new();
-        setup_hierarchy(&mut state);
-
-        // Same city
-        let info = get_transport_info(&state, 1, 1);
-        assert_eq!(info.ticks, 0);
-
-        // Same planet
-        let info = get_transport_info(&state, 1, 2);
-        assert_eq!(info.ticks, 1);
-        assert_eq!(info.cost_per_unit, 0.1);
-
-        // Same system, different planet
-        let info = get_transport_info(&state, 1, 3);
-        assert_eq!(info.ticks, 3);
-        assert_eq!(info.cost_per_unit, 0.5);
-
-        // Same sector, different system
         state.celestial_bodies.insert(
             4,
             CelestialBody {
@@ -277,15 +304,70 @@ mod tests {
                 body_id: 4,
                 name: "City 6".into(),
                 population: 0,
+                port_tier: 1,
+                port_fee_per_unit: fee,
+                port_max_throughput: 1000,
             },
         );
-        let info = get_transport_info(&state, 1, 6);
-        assert_eq!(info.ticks, 7);
-        assert_eq!(info.cost_per_unit, 2.0);
 
-        // Different sector
+        state.system_lanes.insert(
+            (1, 2),
+            SystemLane {
+                system_a_id: 1,
+                system_b_id: 2,
+                distance_ly: 4.0,
+                lane_type: "standard".into(),
+            },
+        );
+        state.system_lanes.insert(
+            (2, 3),
+            SystemLane {
+                system_a_id: 2,
+                system_b_id: 3,
+                distance_ly: 6.0,
+                lane_type: "standard".into(),
+            },
+        );
+        state.system_lanes.insert(
+            (1, 3),
+            SystemLane {
+                system_a_id: 1,
+                system_b_id: 3,
+                distance_ly: 10.0,
+                lane_type: "standard".into(),
+            },
+        );
+
+        build_system_distances(state);
+    }
+
+    #[test]
+    fn transport_info_calculates_correctly() {
+        let mut state = SimState::new();
+        setup_hierarchy(&mut state);
+
+        // Same city
+        let info = get_transport_info(&state, 1, 1);
+        assert_eq!(info.ticks, 0);
+
+        // Same planet
+        let info = get_transport_info(&state, 1, 2);
+        assert_eq!(info.ticks, 1);
+        assert!((info.cost_per_unit - 0.2).abs() < 0.001); // 0.1 + 0.05 + 0.05
+
+        // Same system, different planet
+        let info = get_transport_info(&state, 1, 3);
+        assert_eq!(info.ticks, 3);
+        assert!((info.cost_per_unit - 0.6).abs() < 0.001); // 0.5 + 0.05 + 0.05
+
+        // Different system (1 to 2, distance 4.0)
+        let info = get_transport_info(&state, 1, 6);
+        assert_eq!(info.ticks, 5); // 3 + ceil(4.0/2.0) = 5
+        assert!((info.cost_per_unit - 1.4).abs() < 0.001); // 0.5 + (4.0*0.2) + 0.05 + 0.05
+
+        // Different system, multi-jump (1 to 3, distance 10.0)
         let info = get_transport_info(&state, 1, 5);
-        assert_eq!(info.ticks, 15);
-        assert_eq!(info.cost_per_unit, 5.0);
+        assert_eq!(info.ticks, 8); // 3 + ceil(10.0/2.0) = 8
+        assert!((info.cost_per_unit - 2.6).abs() < 0.001); // 0.5 + (10.0*0.2) + 0.05 + 0.05
     }
 }
