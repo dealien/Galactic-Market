@@ -7,6 +7,9 @@ use tracing::{debug, warn};
 ///
 /// Advance in-transit shipments and deliver cargo at destination.
 pub fn run_logistics(state: &mut SimState, current_tick: u64) {
+    // Refresh distance cache to account for blockades
+    build_system_distances(state);
+
     let mut to_deliver = Vec::new();
 
     // Identify shipments that have arrived
@@ -42,11 +45,26 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
 }
 
 /// Builds the all-pairs shortest path cache for the system jump network.
+/// Account for active blockades by skipping blocked lanes.
 pub fn build_system_distances(state: &mut SimState) {
+    state.system_distances.clear();
     let mut graph = UnGraphMap::<i32, f64>::new();
 
-    // Add edges for all lanes
-    for lane in state.system_lanes.values() {
+    // Identify blockaded lanes
+    let mut blockaded_lanes = std::collections::HashSet::new();
+    for event in state.active_events.values() {
+        if let Some(target) = event.target_id.filter(|_| event.event_type == "blockade_lane") {
+            blockaded_lanes.insert(target);
+        }
+    }
+
+    // Add edges for all lanes that aren't blockaded
+    for (tuple, lane) in &state.system_lanes {
+        // Deterministic ID for the lane tuple to match events::find_lane_id
+        let lane_id = tuple.0 ^ tuple.1; 
+        if blockaded_lanes.contains(&lane_id) {
+            continue; 
+        }
         graph.add_edge(lane.system_a_id, lane.system_b_id, lane.distance_ly);
     }
 

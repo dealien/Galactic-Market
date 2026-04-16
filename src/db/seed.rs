@@ -1,8 +1,17 @@
 use sqlx::PgPool;
 use tracing::info;
+use crate::sim::namegen::{self, LocationType};
+use rand::thread_rng;
 
 pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     info!("Seeding universe...");
+
+    // Initialize name dictionary
+    if let Err(e) = namegen::init_dictionary("data/names.json") {
+        info!("Name dictionary already initialized or failed: {}", e);
+    }
+
+    let mut rng = thread_rng();
 
     // Check if empires exist; skip if already seeded
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
@@ -93,25 +102,31 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     // 4. Star Systems (2 per sector = 4)
     let mut system_ids = Vec::new();
+    let mut system_names = Vec::new();
     for (i, sector_id) in sector_ids.iter().enumerate() {
-        for j in 1..=2 {
+        for _ in 1..=2 {
+            let loc_type = if i == 0 { LocationType::Core } else { LocationType::Outpost };
+            let name = namegen::generate_system_name(loc_type, &mut rng);
             let id = sqlx::query_as::<_, (i32,)>(
                 "INSERT INTO star_systems (sector_id, name, star_type, resource_modifier) VALUES ($1, $2, $3, $4) RETURNING id"
             )
-            .bind(sector_id).bind(format!("System {}-{}", i + 1, j)).bind("G-Type").bind(1.0)
+            .bind(sector_id).bind(&name).bind("G-Type").bind(1.0)
             .fetch_one(&mut *tx).await?.0;
             system_ids.push(id);
+            system_names.push(name);
         }
     }
 
     // 5. Celestial Bodies (2 per system = 8)
     let mut body_ids = Vec::new();
     for (i, system_id) in system_ids.iter().enumerate() {
-        for j in 1..=2 {
+        let loc_type = if i < 2 { LocationType::Core } else { LocationType::Outpost };
+        for _ in 1..=2 {
+            let name = namegen::generate_planet_name(loc_type, &mut rng);
             let id = sqlx::query_as::<_, (i32,)>(
                 "INSERT INTO celestial_bodies (system_id, name, body_type, mass, habitable, population_cap) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
             )
-            .bind(system_id).bind(format!("Planet {}-{}", i + 1, j)).bind("Terrestrial").bind(5.97e24).bind(true).bind(10_000_000_000_i64)
+            .bind(system_id).bind(&name).bind("Terrestrial").bind(5.97e24).bind(true).bind(10_000_000_000_i64)
             .fetch_one(&mut *tx).await?.0;
             body_ids.push(id);
         }
@@ -119,7 +134,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     // 6. Cities (4 per planet = 32); collect their IDs for company seeding
     let mut city_ids = Vec::new();
+    let mut city_names = Vec::new();
     for (i, body_id) in body_ids.iter().enumerate() {
+        let loc_type = if i < 4 { LocationType::Core } else { LocationType::Outpost };
         for j in 1..=4 {
             // Tiered ports: First city of each planet is a Hub (higher throughput, lower fee)
             let (fee, throughput, tier) = if j == 1 {
@@ -128,16 +145,18 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
                 (0.15, 10000, 1)
             };
 
+            let name = namegen::generate_city_name(loc_type, &mut rng);
             let city_id = sqlx::query_as::<_, (i32,)>(
                 "INSERT INTO cities (body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
             )
-            .bind(body_id).bind(format!("City {}-{}", i + 1, j)).bind(1_000_000_i64).bind(1).bind(tier).bind(fee).bind(throughput)
+            .bind(body_id).bind(&name).bind(1_000_000_i64).bind(1).bind(tier).bind(fee).bind(throughput)
             .fetch_one(&mut *tx).await?.0;
             city_ids.push(city_id);
+            city_names.push(name);
         }
     }
 
-    info!("Seeded geography: 2 empires, 4 systems, 8 planets, 32 cities.");
+    info!("Seeded geography: 2 empires, {} systems, {} planets, 32 cities.", system_ids.len(), body_ids.len());
 
     // 6.1 Seed System Lanes (Structured Ring Topology for Debugging)
     // 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
@@ -211,9 +230,10 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     for (idx, &city_id) in city_ids.iter().enumerate() {
         // Which planet does this city belong to?
         let body_id = body_ids[idx / 4];
+        let loc_type = if idx < 16 { LocationType::Core } else { LocationType::Outpost };
 
         // Create the mining company
-        let company_name = format!("Freelancer Mining Co. #{}", idx + 1);
+        let company_name = namegen::generate_company_name(loc_type, &mut rng);
         let company_id = sqlx::query_as::<_, (i32,)>(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
         )
@@ -303,7 +323,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     // 9. Seed one consumer company per city representing local population demand.
     //    Each consumer is funded by a per-capita city treasury (population × 10 credits).
     //    They don't receive loans — they represent collective purchasing power.
-    for &city_id in &city_ids {
+    for (idx, &city_id) in city_ids.iter().enumerate() {
         // Fetch city population for this city_id
         let (pop,): (i64,) = sqlx::query_as("SELECT population FROM cities WHERE id = $1")
             .bind(city_id)
@@ -311,7 +331,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             .await?;
 
         let treasury = pop as f64 * 10.0; // starting credits = population × 10
-        let company_name = format!("City {} Consumers", city_id);
+        let company_name = format!("{} Consumers", city_names[idx]);
 
         sqlx::query(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
@@ -333,15 +353,15 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     info!("Seeded 32 consumer companies (one per city).");
 
     // 9. Seed 4 Merchant companies (Arbitrageurs) - one per star system
-    for (i, _) in system_ids.iter().enumerate() {
+    for (i, &_system_id) in system_ids.iter().enumerate() {
         // Find the first city in this system to place the merchant's home office
-        let city_id = (i * 8) as i32 + 1;
+        let city_id = city_ids[i * 8];
 
         sqlx::query(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
         )
-        .bind(format!("System {} Merchant", i + 1))
+        .bind(format!("{} Merchant", system_names[i]))
         .bind("merchant")
         .bind(city_id)
         .bind(100_000.0_f64) // High initial capital for arbitrage
@@ -361,9 +381,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             (iron_ore_id, 3.0),
             (copper_ore_id, 3.5),
             (tin_ore_id, 4.0),
-            (iron_ingot_id, 15.0),
-            (copper_ingot_id, 18.0),
-            (tin_ingot_id, 22.0),
+            (iron_ingot_id, 45.0),
+            (copper_ingot_id, 55.0),
+            (tin_ingot_id, 65.0),
         ] {
             sqlx::query(
                 "INSERT INTO market_history (city_id, resource_type_id, tick, open, high, low, close, volume)

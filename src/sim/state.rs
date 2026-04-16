@@ -46,6 +46,54 @@ pub struct SystemLane {
     pub lane_type: String,
 }
 
+/// An interstellar empire or faction.
+#[derive(Debug, Clone)]
+pub struct Empire {
+    pub id: i32,
+    pub name: String,
+    pub government_type: String,
+    pub tax_rate_base: f64,
+}
+
+/// Diplomatic standing between two empires.
+#[derive(Debug, Clone)]
+pub struct DiplomaticRelation {
+    pub empire_a_id: i32,
+    pub empire_b_id: i32,
+    pub tension: f64,
+    pub status: String, // neutral, war, alliance
+}
+
+/// An active event affecting the simulation.
+#[derive(Debug, Clone)]
+pub struct ActiveEvent {
+    pub id: i32,
+    pub event_type: String,
+    pub target_id: Option<i32>,
+    pub severity: f64,
+    pub start_tick: u64,
+    pub end_tick: u64,
+    pub flavor_text: Option<String>,
+}
+
+/// A definition of a possible random event from JSON.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EventDefinition {
+    pub id: String,
+    pub weight: u32,
+    pub severity_range: [f64; 2],
+    pub effects: Vec<EventEffectDefinition>,
+    pub flavor_text: String,
+}
+
+/// A mechanical effect defined in JSON.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EventEffectDefinition {
+    #[serde(rename = "type")]
+    pub effect_type: String,
+    pub duration_range: [u64; 2],
+}
+
 /// A resource type in the simulation.
 #[derive(Debug, Clone)]
 pub struct ResourceType {
@@ -250,6 +298,21 @@ pub struct SimState {
 
     /// Monotonic counter for generating facility IDs.
     pub next_facility_id: i32,
+
+    /// All empires keyed by empire ID.
+    pub empires: HashMap<i32, Empire>,
+
+    /// Diplomatic relations keyed by (emp_a, emp_b) tuple.
+    pub diplomatic_relations: HashMap<(i32, i32), DiplomaticRelation>,
+
+    /// Active events keyed by event ID.
+    pub active_events: HashMap<i32, ActiveEvent>,
+
+    /// Generic event definitions from JSON.
+    pub event_definitions: Vec<EventDefinition>,
+
+    /// Monotonic counter for generating event IDs.
+    pub next_event_id: i32,
 }
 
 impl Default for SimState {
@@ -285,6 +348,11 @@ impl SimState {
             next_order_id: 1,
             next_trade_route_id: 1,
             next_facility_id: 1,
+            empires: HashMap::new(),
+            diplomatic_relations: HashMap::new(),
+            active_events: HashMap::new(),
+            event_definitions: Vec::new(),
+            next_event_id: 1,
         }
     }
 

@@ -1,0 +1,52 @@
+{
+  "events": [
+    {
+      "id": "pirate_blockade",
+      "weight": 10,
+      "severity_range": [0.5, 1.0],
+      "effects": [
+        {
+          "type": "blockade_lane",
+          "duration_range": [10, 50]
+        }
+      ],
+      "flavor_text": "Pirate activity has spiked in the {system_a}-{system_b} lane. All civilian transport is halted!"
+    },
+    {
+      "id": "solar_storm",
+      "weight": 5,
+      "severity_range": [0.2, 0.8],
+      "effects": [
+        {
+          "type": "infrastructure_damage",
+          "duration_range": [5, 15]
+        }
+      ],
+      "flavor_text": "A massive solar storm has hit {city_name}, disrupting local infrastructure."
+    },
+    {
+      "id": "crop_failure",
+      "weight": 8,
+      "severity_range": [0.5, 1.5],
+      "effects": [
+        {
+          "type": "famine",
+          "duration_range": [20, 100]
+        }
+      ],
+      "flavor_text": "Biological blight has devastated hydroponic farms in {city_name}. Food demand is skyrocketing!"
+    },
+    {
+      "id": "border_skirmish",
+      "weight": 15,
+      "severity_range": [0.1, 0.5],
+      "effects": [
+        {
+          "type": "tension_increase",
+          "duration_range": [1, 1]
+        }
+      ],
+      "flavor_text": "A minor skirmish between {empire_a} and {empire_b} has increased regional tensions."
+    }
+  ]
+}

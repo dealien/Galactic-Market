@@ -23,6 +23,10 @@ struct Args {
     /// Show detailed debug logs during simulation
     #[arg(long)]
     debug: bool,
+
+    /// Random seed for reproducible runs
+    #[arg(long)]
+    random_seed: Option<u64>,
 }
 
 #[tokio::main]
@@ -73,9 +77,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("Loading simulation state from database...");
     let mut state = db::load::load(&pool).await?;
 
+    // Load event definitions from JSON
+    let events_json = std::fs::read_to_string("data/events.json")?;
+    let event_config: serde_json::Value = serde_json::from_str(&events_json)?;
+    state.event_definitions = serde_json::from_value(event_config["events"].clone())?;
+    info!("Loaded {} event definitions.", state.event_definitions.len());
+
+    // Initialize RNG
+    use rand::SeedableRng;
+    let seed = args.random_seed.unwrap_or_else(rand::random);
+    let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
+    info!("Simulation RNG seed: {}", seed);
+
     // Run tick loop
     for _ in 0..args.ticks {
-        state.run_tick(&pool).await?;
+        state.run_tick(&pool, &mut rng).await?;
     }
 
     info!("Simulation complete. Ran {} ticks.", args.ticks);

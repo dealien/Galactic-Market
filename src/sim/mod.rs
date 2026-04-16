@@ -1,3 +1,5 @@
+pub mod namegen;
+pub mod events;
 pub mod consumption;
 pub mod decisions;
 pub mod finance;
@@ -20,7 +22,7 @@ const FLUSH_INTERVAL: u64 = 100;
 
 impl SimState {
     /// Advance the simulation by one tick, running all active phases in order.
-    pub async fn run_tick(&mut self, pool: &PgPool) -> Result<(), sqlx::Error> {
+    pub async fn run_tick(&mut self, pool: &PgPool, rng: &mut impl rand::Rng) -> Result<(), sqlx::Error> {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log
@@ -48,6 +50,9 @@ impl SimState {
 
         // ── Phase 5: Finance ───────────────────────────────────────────────
         finance::run_finance(self);
+
+        // ── Phase 9: Random Events ───────────────────────────────────────────
+        events::run_events(self, rng);
 
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
@@ -205,6 +210,43 @@ impl SimState {
             .bind(h.low)
             .bind(h.close)
             .bind(h.volume)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Diplomatic Relations ──────────────────────────────────────────────
+        for rel in self.diplomatic_relations.values() {
+            sqlx::query(
+                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (empire_a_id, empire_b_id)
+                 DO UPDATE SET tension = EXCLUDED.tension, status = EXCLUDED.status",
+            )
+            .bind(rel.empire_a_id)
+            .bind(rel.empire_b_id)
+            .bind(rel.tension)
+            .bind(&rel.status)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Active Events ─────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM active_events")
+            .execute(&mut *tx)
+            .await?;
+
+        for event in self.active_events.values() {
+            sqlx::query(
+                "INSERT INTO active_events (id, event_type, target_id, severity, start_tick, end_tick, flavor_text)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(event.id)
+            .bind(&event.event_type)
+            .bind(event.target_id)
+            .bind(event.severity)
+            .bind(event.start_tick as i64)
+            .bind(event.end_tick as i64)
+            .bind(&event.flavor_text)
             .execute(&mut *tx)
             .await?;
         }

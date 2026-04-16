@@ -39,6 +39,12 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
         .collect();
 
     for (city_id, population, company_id) in consumers {
+        // Check for active famine in this city
+        let famine_severity = state.active_events.values()
+            .filter(|e| e.event_type == "famine" && e.target_id == Some(city_id))
+            .map(|e| e.severity)
+            .sum::<f64>();
+
         // 1. Credit per-tick income to the consumer treasury
         let income = population as f64 * INCOME_PER_CAPITA_PER_TICK;
         let mut available_cash = 0.0;
@@ -53,13 +59,24 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
         let budget_per_resource = total_budget / target_resource_ids.len() as f64;
 
         for &res_id in &target_resource_ids {
+            let res = &state.resource_types[&res_id];
             let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(20.0);
 
-            // Consumers are willing to pay slightly above market to ensure fulfillment
-            let bid_price = (market_price * 1.1).min(500.0);
+            // Consumers are willing to pay slightly above market to ensure fulfillment.
+            // Spikes significantly during famine for Food Rations.
+            let mut bid_modifier = 1.1;
+            let mut demand_modifier = 1.0;
+            
+            if res.name == "Food Rations" && famine_severity > 0.0 {
+                bid_modifier += famine_severity * 2.0; // Desperation price
+                demand_modifier += famine_severity * 3.0; // Inelastic demand spike
+            }
+
+            let bid_price = (market_price * bid_modifier).min(1000.0);
 
             // Demand scales with population
-            let ideal_demand = (population / 1000).max(1) * DEMAND_PER_1K_POPULATION;
+            let ideal_demand = ((population / 1000).max(1) * DEMAND_PER_1K_POPULATION) as f64 * demand_modifier;
+            let ideal_demand = ideal_demand as i64;
 
             // Can we afford the ideal demand?
             let affordable_qty = (budget_per_resource / bid_price) as i64;
