@@ -42,20 +42,28 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let oa = &state.market_orders[&a];
             let ob = &state.market_orders[&b];
             if oa.order_kind != ob.order_kind {
-                if oa.order_kind == "market" { return std::cmp::Ordering::Less; }
+                if oa.order_kind == "market" {
+                    return std::cmp::Ordering::Less;
+                }
                 return std::cmp::Ordering::Greater;
             }
-            ob.price.partial_cmp(&oa.price).unwrap_or(std::cmp::Ordering::Equal)
+            ob.price
+                .partial_cmp(&oa.price)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         sells.sort_by(|&a, &b| {
             let oa = &state.market_orders[&a];
             let ob = &state.market_orders[&b];
             if oa.order_kind != ob.order_kind {
-                if oa.order_kind == "market" { return std::cmp::Ordering::Less; }
+                if oa.order_kind == "market" {
+                    return std::cmp::Ordering::Less;
+                }
                 return std::cmp::Ordering::Greater;
             }
-            oa.price.partial_cmp(&ob.price).unwrap_or(std::cmp::Ordering::Equal)
+            oa.price
+                .partial_cmp(&ob.price)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let mut b_idx = 0;
@@ -90,8 +98,12 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let clearing_price = match (buy_kind.as_str(), sell_kind.as_str()) {
                 ("market", "market") => {
                     // Two market orders: use last known EMA or fallback
-                    state.ema_prices.get(&(city_id, resource_type_id)).copied().unwrap_or(10.0)
-                },
+                    state
+                        .ema_prices
+                        .get(&(city_id, resource_type_id))
+                        .copied()
+                        .unwrap_or(10.0)
+                }
                 ("market", "limit") => sell_price,
                 ("limit", "market") => buy_price,
                 _ => (buy_price + sell_price) / 2.0, // Midpoint
@@ -126,7 +138,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
                 // Transfer inventory
                 if let Some(seller_inv) =
-                    state.inventories.get_mut(&(sell_company_id, city_id, resource_type_id))
+                    state
+                        .inventories
+                        .get_mut(&(sell_company_id, city_id, resource_type_id))
                 {
                     seller_inv.quantity -= qty;
                 }
@@ -149,14 +163,25 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 // Statistics
                 total_volume += qty;
                 sum_prices += clearing_price * qty as f64;
-                if open.is_none() { open = Some(clearing_price); }
+                if open.is_none() {
+                    open = Some(clearing_price);
+                }
                 close = clearing_price;
-                if clearing_price > high { high = clearing_price; }
-                if clearing_price < low { low = clearing_price; }
+                if clearing_price > high {
+                    high = clearing_price;
+                }
+                if clearing_price < low {
+                    low = clearing_price;
+                }
 
                 debug!(
-                    city_id, res_id = resource_type_id, qty, price = clearing_price,
-                    "Match: {} bought from {}", buy_company_id, sell_company_id
+                    city_id,
+                    res_id = resource_type_id,
+                    qty,
+                    price = clearing_price,
+                    "Match: {} bought from {}",
+                    buy_company_id,
+                    sell_company_id
                 );
             } else {
                 // Determine fault and void order
@@ -168,11 +193,23 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             }
 
             // Advance pointers if orders fully filled
-            if state.market_orders.get(&b_id).map(|o| o.quantity).unwrap_or(0) == 0 {
+            if state
+                .market_orders
+                .get(&b_id)
+                .map(|o| o.quantity)
+                .unwrap_or(0)
+                == 0
+            {
                 state.market_orders.remove(&b_id);
                 b_idx += 1;
             }
-            if state.market_orders.get(&s_id).map(|o| o.quantity).unwrap_or(0) == 0 {
+            if state
+                .market_orders
+                .get(&s_id)
+                .map(|o| o.quantity)
+                .unwrap_or(0)
+                == 0
+            {
                 state.market_orders.remove(&s_id);
                 s_idx += 1;
             }
@@ -195,9 +232,15 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             state.price_cache.insert((city_id, resource_type_id), close);
 
             let alpha = 0.2;
-            let current_ema = state.ema_prices.get(&(city_id, resource_type_id)).copied().unwrap_or(close);
+            let current_ema = state
+                .ema_prices
+                .get(&(city_id, resource_type_id))
+                .copied()
+                .unwrap_or(close);
             let next_ema = alpha * close + (1.0 - alpha) * current_ema;
-            state.ema_prices.insert((city_id, resource_type_id), next_ema);
+            state
+                .ema_prices
+                .insert((city_id, resource_type_id), next_ema);
         }
     }
 
@@ -208,7 +251,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{Company, Inventory, MarketOrder, SimState, City};
+    use crate::sim::state::{City, Company, Inventory, MarketOrder, SimState};
 
     fn make_company(id: i32, cash: f64) -> Company {
         Company {
@@ -226,30 +269,67 @@ mod tests {
 
     fn setup_test_state() -> SimState {
         let mut state = SimState::new();
-        state.cities.insert(1, City { id: 1, body_id: 1, name: "C1".into(), population: 0, port_tier: 1, port_fee_per_unit: 0.1, port_max_throughput: 1000 });
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "C1".into(),
+                population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
         state.companies.insert(1, make_company(1, 1000.0));
         state.companies.insert(2, make_company(2, 1000.0));
-        state.inventories.insert((1, 1, 1), Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 100 });
+        state.inventories.insert(
+            (1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
         state
     }
 
     #[test]
     fn market_order_matches_limit_order() {
         let mut state = setup_test_state();
-        
+
         // Seller: Limit Sell 10 @ 5.0
-        state.market_orders.insert(1, MarketOrder {
-            id: 1, city_id: 1, company_id: 1, resource_type_id: 1,
-            order_type: "sell".into(), order_kind: "limit".into(),
-            price: 5.0, quantity: 10, created_tick: 0
-        });
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
 
         // Buyer: Market Buy 10
-        state.market_orders.insert(2, MarketOrder {
-            id: 2, city_id: 1, company_id: 2, resource_type_id: 1,
-            order_type: "buy".into(), order_kind: "market".into(),
-            price: 0.0, quantity: 10, created_tick: 0
-        });
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "market".into(),
+                price: 0.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
 
         clear_orders(&mut state, 1);
 

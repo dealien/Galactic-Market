@@ -145,7 +145,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         let sys_a = system_ids[i];
         let sys_b = system_ids[(i + 1) % system_ids.len()];
         sqlx::query(
-            "INSERT INTO system_lanes (system_a_id, system_b_id, distance_ly) VALUES ($1, $2, 5.0)"
+            "INSERT INTO system_lanes (system_a_id, system_b_id, distance_ly) VALUES ($1, $2, 5.0)",
         )
         .bind(sys_a)
         .bind(sys_b)
@@ -335,7 +335,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     // 9. Seed 4 Merchant companies (Arbitrageurs) - one per star system
     for (i, _) in system_ids.iter().enumerate() {
         // Find the first city in this system to place the merchant's home office
-        let city_id = (i * 8) as i32 + 1; 
+        let city_id = (i * 8) as i32 + 1;
 
         sqlx::query(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)

@@ -1,7 +1,7 @@
 use galactic_market::sim::SimState;
 use galactic_market::sim::state::{
     CelestialBody, City, Company, Deposit, Facility, Inventory, Loan, MarketOrder, Recipe,
-    RecipeInput, Sector, StarSystem, TradeRoute,
+    RecipeInput, ResourceType, Sector, StarSystem, TradeRoute,
 };
 
 fn main() {
@@ -79,9 +79,9 @@ fn make_market_state(num_orders: usize) -> SimState {
             body_id: 1,
             name: "Market City".into(),
             population: 0,
-                port_tier: 1,
-                port_fee_per_unit: 0.1,
-                port_max_throughput: 1000,
+            port_tier: 1,
+            port_fee_per_unit: 0.1,
+            port_max_throughput: 1000,
         },
     );
 
@@ -369,9 +369,9 @@ fn make_spatial_state() -> SimState {
             body_id: 1,
             name: "C1".into(),
             population: 0,
-                port_tier: 1,
-                port_fee_per_unit: 0.1,
-                port_max_throughput: 1000,
+            port_tier: 1,
+            port_fee_per_unit: 0.1,
+            port_max_throughput: 1000,
         },
     );
     state.cities.insert(
@@ -381,11 +381,138 @@ fn make_spatial_state() -> SimState {
             body_id: 1,
             name: "C2".into(),
             population: 0,
-                port_tier: 1,
-                port_fee_per_unit: 0.1,
-                port_max_throughput: 1000,
+            port_tier: 1,
+            port_fee_per_unit: 0.1,
+            port_max_throughput: 1000,
         },
     );
+    state
+}
+
+fn make_merchant_state(num_merchants: usize) -> SimState {
+    let mut state = SimState::new();
+
+    // 32 cities
+    for i in 1..=32 {
+        state.cities.insert(
+            i,
+            City {
+                id: i,
+                body_id: (i - 1) / 4 + 1,
+                name: format!("City {i}"),
+                population: 1_000_000,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 10000,
+            },
+        );
+    }
+
+    // 7 resources
+    for i in 1..=7 {
+        state.resource_types.insert(
+            i,
+            ResourceType {
+                id: i,
+                name: format!("Res {i}"),
+                category: "Refined Material".into(),
+            },
+        );
+    }
+
+    // N merchants
+    for i in 1..=(num_merchants as i32) {
+        state.companies.insert(
+            i,
+            Company {
+                id: i,
+                name: format!("Merchant {i}"),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 1_000_000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+    }
+
+    state
+}
+
+fn make_advanced_market_state(num_orders: usize) -> SimState {
+    let mut state = SimState::new();
+    state.cities.insert(
+        1,
+        City {
+            id: 1,
+            body_id: 1,
+            name: "C1".into(),
+            population: 0,
+            port_tier: 1,
+            port_fee_per_unit: 0.1,
+            port_max_throughput: 1000,
+        },
+    );
+
+    // Mixer of Market and Limit orders
+    for i in 1..=(num_orders as i32) {
+        state.companies.insert(
+            i,
+            Company {
+                id: i,
+                name: format!("Co {i}"),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1_000_000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            Inventory::key(i, 1, 1),
+            Inventory {
+                company_id: i,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 1000,
+            },
+        );
+
+        let kind = if i % 2 == 0 { "market" } else { "limit" };
+        state.market_orders.insert(
+            i * 2,
+            MarketOrder {
+                id: i * 2,
+                city_id: 1,
+                company_id: i,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: kind.into(),
+                price: 10.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+        state.market_orders.insert(
+            i * 2 + 1,
+            MarketOrder {
+                id: i * 2 + 1,
+                city_id: 1,
+                company_id: i,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: kind.into(),
+                price: 10.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+    }
+
     state
 }
 
@@ -451,5 +578,23 @@ fn bench_spatial_lookup(bencher: divan::Bencher) {
         .with_inputs(make_spatial_state)
         .bench_local_refs(|state| {
             let _ = galactic_market::sim::logistics::get_transport_info(state, 1, 2);
+        });
+}
+
+#[divan::bench(args = [1, 4, 16])]
+fn bench_merchant_arbitrage_scan(bencher: divan::Bencher, num_merchants: usize) {
+    bencher
+        .with_inputs(|| make_merchant_state(num_merchants))
+        .bench_local_refs(|state| {
+            galactic_market::sim::decisions::run_decisions(state, 1);
+        });
+}
+
+#[divan::bench(args = [32, 128, 512])]
+fn bench_advanced_market_clearing(bencher: divan::Bencher, num_orders: usize) {
+    bencher
+        .with_inputs(|| make_advanced_market_state(num_orders))
+        .bench_local_refs(|state| {
+            galactic_market::sim::markets::clear_orders(state, 1);
         });
 }

@@ -214,7 +214,7 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -226,7 +226,7 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -238,7 +238,7 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
         state.cities.insert(
@@ -250,7 +250,7 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
 
@@ -279,10 +279,10 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
-        
+
         state.celestial_bodies.insert(
             4,
             CelestialBody {
@@ -300,7 +300,7 @@ mod tests {
                 population: 0,
                 port_tier: 1,
                 port_fee_per_unit: fee,
-                port_max_throughput: 1000
+                port_max_throughput: 1000,
             },
         );
 

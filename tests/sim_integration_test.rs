@@ -214,11 +214,11 @@ fn test_market_clearing_balances() {
             price: 5.0,
             quantity: 50,
             created_tick: 1,
-            },
-            );
-            state.market_orders.insert(
-            2,
-            MarketOrder {
+        },
+    );
+    state.market_orders.insert(
+        2,
+        MarketOrder {
             id: 2,
             city_id: 1,
             company_id: 2,
@@ -228,9 +228,8 @@ fn test_market_clearing_balances() {
             price: 5.0,
             quantity: 50,
             created_tick: 1,
-            },
-            );
-
+        },
+    );
 
     galactic_market::sim::markets::clear_orders(&mut state, 1);
 
