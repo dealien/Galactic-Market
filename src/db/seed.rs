@@ -8,7 +8,10 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
     // Initialize name dictionary
     if let Err(e) = namegen::init_dictionary("data/names.json") {
-        info!("Name dictionary already initialized or failed: {}", e);
+        tracing::warn!(
+            "Name dictionary failed to initialize: {}. Default names will be used.",
+            e
+        );
     }
 
     let mut rng = thread_rng();

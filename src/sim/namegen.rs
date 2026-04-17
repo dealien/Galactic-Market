@@ -56,22 +56,38 @@ fn get_dict() -> &'static NameDictionary {
 }
 
 pub fn generate_system_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
-    let cat = get_dict().system.get(loc_type.as_str()).unwrap();
-    generate_standard_name(cat, rng)
+    let dict = get_dict();
+    if let Some(cat) = dict.system.get(loc_type.as_str()) {
+        generate_standard_name(cat, rng)
+    } else {
+        format!("System-{}", rng.gen_range(100..999))
+    }
 }
 
 pub fn generate_planet_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
-    let cat = get_dict().planet.get(loc_type.as_str()).unwrap();
-    generate_standard_name(cat, rng)
+    let dict = get_dict();
+    if let Some(cat) = dict.planet.get(loc_type.as_str()) {
+        generate_standard_name(cat, rng)
+    } else {
+        format!("Planet-{}", rng.gen_range(100..999))
+    }
 }
 
 pub fn generate_city_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
-    let cat = get_dict().city.get(loc_type.as_str()).unwrap();
-    generate_standard_name(cat, rng)
+    let dict = get_dict();
+    if let Some(cat) = dict.city.get(loc_type.as_str()) {
+        generate_standard_name(cat, rng)
+    } else {
+        format!("City-{}", rng.gen_range(100..999))
+    }
 }
 
 pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
-    let cat = get_dict().company.get(loc_type.as_str()).unwrap();
+    let dict = get_dict();
+    let cat = match dict.company.get(loc_type.as_str()) {
+        Some(c) => c,
+        None => return format!("Company-{}", rng.gen_range(100..999)),
+    };
     let prefix = cat.prefixes.choose(rng).map(|s| s.as_str()).unwrap_or("");
     let industry = cat
         .industries

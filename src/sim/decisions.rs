@@ -242,6 +242,58 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 next_prime = next_prime.clamp(0.01, 0.15);
                 state.prime_rates.insert(empire_id, next_prime);
                 debug!(empire_id, next_prime, "Central Bank adjusted Prime Rate");
+
+                // --- Empire Relief AI (Market Buyout during Famines) ---
+                // If a city has a famine, the Empire treasury (Central Bank) buys food at a premium to attract merchants.
+                let central_bank = state.companies.get_mut(&company_id).unwrap();
+                if central_bank.cash > 100_000.0 {
+                    let mut famine_cities = Vec::new();
+                    for event in state.active_events.values() {
+                        if event.event_type == "famine"
+                            && let Some(c_id) = event.target_id
+                            && let Some(city) = state.cities.get(&c_id)
+                            && let Some(body) = state.celestial_bodies.get(&city.body_id)
+                            && let Some(system) = state.star_systems.get(&body.system_id)
+                            && let Some(sector) = state.sectors.get(&system.sector_id)
+                            && sector.empire_id == empire_id
+                        {
+                            famine_cities.push(c_id);
+                        }
+                    }
+
+                    for city_id in famine_cities {
+                        // Post buy orders for common "Food" or "Water" resources (Resource IDs 5, 6 etc)
+                        // In this sim, we check for "Food" (ID 5) and "Water" (ID 6).
+                        for &res_id in &[5, 6] {
+                            let ema_price = state
+                                .ema_prices
+                                .get(&(city_id, res_id))
+                                .copied()
+                                .unwrap_or(50.0);
+                            let relief_price = ema_price * 1.5; // 50% premium
+
+                            orders_to_post.push(crate::sim::state::MarketOrder {
+                                id: state.next_order_id(),
+                                city_id,
+                                company_id,
+                                resource_type_id: res_id,
+                                order_type: "buy".into(),
+                                order_kind: "market".into(),
+                                price: relief_price,
+                                quantity: 100,
+                                created_tick: state.tick,
+                            });
+                            debug!(
+                                city_id,
+                                res_id, relief_price, "Central Bank posted RELIEF BUY ORDER"
+                            );
+                        }
+                    }
+                }
+            }
+            // Commit any relief orders before continuing
+            for order in orders_to_post {
+                state.market_orders.insert(order.id, order);
             }
             continue;
         }
@@ -302,8 +354,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         // --- Merchant AI (Arbitrageur) ──────────────────────────────────────────
         if company_type == "merchant" {
-            let company_cash = state.companies.get(&company_id).unwrap().cash;
-            if company_cash > 1000.0 {
+            let mut company_cash = state.companies.get(&company_id).unwrap().cash;
+            if company_cash > 1000.0
+                || (company_cash < 1000.0
+                    && state.companies.get(&company_id).unwrap().debt < 50000.0)
+            {
                 let mut best_arbitrage = None;
                 let mut best_profit_margin = 0.0;
 
@@ -337,6 +392,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
 
                 if let Some((res_id, origin, _dest, buy_price)) = best_arbitrage {
+                    // If high profit but low cash, take a loan to capitalize on the opportunity
+                    if company_cash < buy_price * 10.0
+                        && best_profit_margin > (buy_price * 0.2)
+                        && request_loan(state, company_id, buy_price * 100.0)
+                    {
+                        company_cash = state.companies.get(&company_id).unwrap().cash;
+                        debug!(company_id, "Merchant took a loan to fund arbitrage");
+                    }
+
                     let max_affordable = (company_cash * 0.5 / buy_price) as i64;
                     let qty = 50.min(max_affordable);
                     if qty > 0 {
@@ -585,7 +649,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         // ─── Consumer AI ──────────────────────────────────────────────────────
         if company_type == "consumer" {
-            let cash = state.companies.get(&company_id).unwrap().cash;
+            let mut cash = state.companies.get(&company_id).unwrap().cash;
+            // If consumer is out of cash (potentially due to famine prices), try to take a loan to continue buying food
+            if cash < 100.0 && request_loan(state, company_id, 5000.0) {
+                cash = state.companies.get(&company_id).unwrap().cash;
+                debug!(company_id, "Consumer took a liquidity loan");
+            }
+
             let target_ids: Vec<i32> = state
                 .resource_types
                 .values()
