@@ -2,8 +2,8 @@ use sqlx::PgPool;
 use tracing::info;
 
 use crate::sim::state::{
-    ActiveEvent, BankAccount, City, Company, Deposit, DiplomaticRelation, Empire, Facility, Inventory,
-    Recipe, RecipeInput, SimState,
+    ActiveEvent, BankAccount, City, Company, Deposit, DiplomaticRelation, Empire, Facility,
+    Inventory, Recipe, RecipeInput, SimState,
 };
 
 /// Load the full simulation state from the database into memory.
