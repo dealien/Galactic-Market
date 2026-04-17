@@ -34,19 +34,21 @@ pub fn run_finance(state: &mut SimState) {
                 if let Some(loan) = state.loans.get_mut(&loan_id) {
                     loan.balance += shortfall;
                     borrower.debt += shortfall;
-                    debug!(borrower_id, shortfall, "Interest shortfall added to loan balance");
+                    debug!(
+                        borrower_id,
+                        shortfall, "Interest shortfall added to loan balance"
+                    );
                 }
             }
         }
 
         // Credit the lender if it's a company (Bank)
-        if paid > 0.0 {
-            if let Some(l_id) = lender_id {
-                if let Some(lender) = state.companies.get_mut(&l_id) {
-                    lender.cash += paid;
-                    debug!(l_id, paid, borrower_id, "Bank received interest payment");
-                }
-            }
+        if paid > 0.0
+            && let Some(l_id) = lender_id
+            && let Some(lender) = state.companies.get_mut(&l_id)
+        {
+            lender.cash += paid;
+            debug!(l_id, paid, borrower_id, "Bank received interest payment");
         }
     }
 
@@ -76,10 +78,10 @@ pub fn run_finance(state: &mut SimState) {
             }
         }
 
-        if actual_yield > 0.0 {
-            if let Some(account) = state.bank_accounts.get_mut(&acc_id) {
-                account.balance += actual_yield;
-            }
+        if actual_yield > 0.0
+            && let Some(account) = state.bank_accounts.get_mut(&acc_id)
+        {
+            account.balance += actual_yield;
         }
     }
 
@@ -129,10 +131,10 @@ pub fn run_finance(state: &mut SimState) {
                 remaining_payment -= loan_payment;
 
                 // Credit the lender if it exists
-                if let Some(l_id) = lender_id {
-                    if let Some(lender) = state.companies.get_mut(&l_id) {
-                        lender.cash += loan_payment;
-                    }
+                if let Some(l_id) = lender_id
+                    && let Some(lender) = state.companies.get_mut(&l_id)
+                {
+                    lender.cash += loan_payment;
                 }
             }
 
@@ -153,14 +155,15 @@ pub fn run_finance(state: &mut SimState) {
             (c.debt, inventory_count > 0)
         };
 
-        if debt <= 0.01 && !has_inventory {
-            if let Some(c) = state.companies.get_mut(&company_id) {
-                c.status = "liquidated".into();
-                debug!(
-                    company_id,
-                    "Company has been fully LIQUIDATED and is now defunct."
-                );
-            }
+        if debt <= 0.01
+            && !has_inventory
+            && let Some(c) = state.companies.get_mut(&company_id)
+        {
+            c.status = "liquidated".into();
+            debug!(
+                company_id,
+                "Company has been fully LIQUIDATED and is now defunct."
+            );
         }
     }
 

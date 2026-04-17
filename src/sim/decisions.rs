@@ -208,49 +208,40 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         // --- Central Bank AI (Monetary Policy) ──────────────────────────────
         if company_type == "central_bank" {
-            if let Some(city) = state.cities.get(&home_city_id) {
-                if let Some(body) = state.celestial_bodies.get(&city.body_id) {
-                    if let Some(system) = state.star_systems.get(&body.system_id) {
-                        if let Some(sector) = state.sectors.get(&system.sector_id) {
-                            let empire_id = sector.empire_id;
+            if let Some(city) = state.cities.get(&home_city_id)
+                && let Some(body) = state.celestial_bodies.get(&city.body_id)
+                && let Some(system) = state.star_systems.get(&body.system_id)
+                && let Some(sector) = state.sectors.get(&system.sector_id)
+            {
+                let empire_id = sector.empire_id;
 
-                            let mut total_empire_cash = 0.0;
-                            let mut total_empire_debt = 0.0;
+                let mut total_empire_cash = 0.0;
+                let mut total_empire_debt = 0.0;
 
-                            for c in state.companies.values() {
-                                if let Some(c_city) = state.cities.get(&c.home_city_id) {
-                                    if let Some(c_body) = state.celestial_bodies.get(&c_city.body_id)
-                                    {
-                                        if let Some(c_sys) = state.star_systems.get(&c_body.system_id)
-                                        {
-                                            if let Some(c_sec) = state.sectors.get(&c_sys.sector_id)
-                                            {
-                                                if c_sec.empire_id == empire_id {
-                                                    total_empire_cash += c.cash;
-                                                    total_empire_debt += c.debt;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            let current_prime =
-                                state.prime_rates.get(&empire_id).copied().unwrap_or(0.05);
-                            let mut next_prime = current_prime;
-
-                            if total_empire_debt > total_empire_cash * 0.4 {
-                                next_prime += 0.005;
-                            } else if total_empire_debt < total_empire_cash * 0.1 {
-                                next_prime -= 0.005;
-                            }
-
-                            next_prime = next_prime.clamp(0.01, 0.15);
-                            state.prime_rates.insert(empire_id, next_prime);
-                            debug!(empire_id, next_prime, "Central Bank adjusted Prime Rate");
-                        }
+                for c in state.companies.values() {
+                    if let Some(c_city) = state.cities.get(&c.home_city_id)
+                        && let Some(c_body) = state.celestial_bodies.get(&c_city.body_id)
+                        && let Some(c_sys) = state.star_systems.get(&c_body.system_id)
+                        && let Some(c_sec) = state.sectors.get(&c_sys.sector_id)
+                        && c_sec.empire_id == empire_id
+                    {
+                        total_empire_cash += c.cash;
+                        total_empire_debt += c.debt;
                     }
                 }
+
+                let current_prime = state.prime_rates.get(&empire_id).copied().unwrap_or(0.05);
+                let mut next_prime = current_prime;
+
+                if total_empire_debt > total_empire_cash * 0.4 {
+                    next_prime += 0.005;
+                } else if total_empire_debt < total_empire_cash * 0.1 {
+                    next_prime -= 0.005;
+                }
+
+                next_prime = next_prime.clamp(0.01, 0.15);
+                state.prime_rates.insert(empire_id, next_prime);
+                debug!(empire_id, next_prime, "Central Bank adjusted Prime Rate");
             }
             continue;
         }
@@ -839,10 +830,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 can_afford = request_loan(state, company_id, expansion_cost);
             }
 
-            if can_afford
-                && best_overall_margin > (selected_ore_cost * 0.10)
-                && roi_ticks < 50.0
-            {
+            if can_afford && best_overall_margin > (selected_ore_cost * 0.10) && roi_ticks < 50.0 {
                 let facility = state.facilities.get_mut(&facility_id).unwrap();
                 facility.capacity += 5;
                 facility.setup_ticks_remaining = 5;
@@ -1100,10 +1088,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     can_afford = request_loan(state, company_id, expansion_cost);
                 }
 
-                if can_afford
-                    && expected_additional_profit > 50.0
-                    && roi_ticks < 60.0
-                {
+                if can_afford && expected_additional_profit > 50.0 && roi_ticks < 60.0 {
                     let facility = state.facilities.get_mut(&facility_id).unwrap();
                     facility.capacity += 5;
                     facility.setup_ticks_remaining = 8;
