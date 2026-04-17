@@ -1,7 +1,7 @@
 use crate::sim::state::{Inventory, SimState};
 use petgraph::algo::dijkstra;
 use petgraph::graphmap::UnGraphMap;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Phase 3: Logistics.
 ///
@@ -77,6 +77,20 @@ pub fn build_system_distances(state: &mut SimState) {
         for (end_node, cost) in shortest_paths {
             state.system_distances.insert((start_node, end_node), cost);
         }
+    }
+
+    // Detect and log changes in network connectivity
+    let components = petgraph::algo::connected_components(&graph);
+    if components != state.last_connected_components {
+        if components > 1 {
+            warn!(
+                "System network fragmentation changed: {} -> {} components (check for blockades)",
+                state.last_connected_components, components
+            );
+        } else if state.last_connected_components > 1 {
+            info!("System network has been fully RECONNECTED.");
+        }
+        state.last_connected_components = components;
     }
 }
 
@@ -159,7 +173,7 @@ pub fn get_transport_info(
         };
     }
 
-    warn!(
+    debug!(
         from_sys = origin_system_id,
         to_sys = dest_system_id,
         "No jump lane path found between systems"
