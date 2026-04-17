@@ -356,6 +356,7 @@ fn make_finance_state(num_companies: usize) -> SimState {
             Loan {
                 id: i,
                 company_id: i,
+                lender_company_id: None,
                 principal: 1000.0,
                 interest_rate: 0.05,
                 balance: 1000.0,
