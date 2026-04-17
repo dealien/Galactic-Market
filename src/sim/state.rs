@@ -289,6 +289,9 @@ pub struct SimState {
     /// Active market orders keyed by order ID. Cleared each tick after matching.
     pub market_orders: HashMap<i32, MarketOrder>,
 
+    /// Count of connected components in the jump lane network during last pathfinding.
+    pub last_connected_components: usize,
+
     /// In-memory buffer of market history deltas — flushed every N ticks.
     pub market_history_buffer: Vec<MarketHistory>,
 
@@ -361,6 +364,7 @@ impl SimState {
             recipes: HashMap::new(),
             trade_routes: HashMap::new(),
             market_orders: HashMap::new(),
+            last_connected_components: 1,
             market_history_buffer: Vec::new(),
             city_consumer_ids: HashMap::new(),
             price_cache: HashMap::new(),
@@ -458,7 +462,7 @@ impl SimState {
             summary.avg_ore_price = ore_total / ore_count as f64;
         }
 
-        // Volume from the latest buffer entries
+        // Total volume accumulated since the last flush
         summary.trade_volume = self.market_history_buffer.iter().map(|h| h.volume).sum();
 
         summary

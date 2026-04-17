@@ -130,11 +130,6 @@ pub fn run_extraction(state: &mut SimState) {
             continue;
         }
 
-        if company.debt > 1000.0 {
-            debug!(debt = company.debt, "Skipping extraction due to high debt");
-            continue;
-        }
-
         // Extract up to capacity units
         let extract_qty = capacity.min(deposit.size_remaining as i32) as i64;
         if extract_qty <= 0 {
@@ -301,9 +296,9 @@ mod tests {
     }
 
     #[test]
-    fn extraction_skips_if_debt_too_high() {
+    fn extraction_skips_if_status_not_active() {
         let mut state = make_state();
-        state.companies.get_mut(&1).unwrap().debt = 2000.0;
+        state.companies.get_mut(&1).unwrap().status = "bankrupt".into();
         run_extraction(&mut state);
         // Deposit should NOT change
         assert_eq!(state.deposits[&1].size_remaining, 1000);
