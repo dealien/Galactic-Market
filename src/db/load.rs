@@ -2,8 +2,8 @@ use sqlx::PgPool;
 use tracing::info;
 
 use crate::sim::state::{
-    ActiveEvent, City, Company, Deposit, DiplomaticRelation, Empire, Facility, Inventory, Recipe,
-    RecipeInput, SimState,
+    ActiveEvent, BankAccount, City, Company, Deposit, DiplomaticRelation, Empire, Facility, Inventory,
+    Recipe, RecipeInput, SimState,
 };
 
 /// Load the full simulation state from the database into memory.
@@ -235,18 +235,19 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.companies.len(), "Loaded companies.");
 
     // ── Loans ─────────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, f64, f64, f64)>(
-        "SELECT id, company_id, principal, interest_rate, balance FROM loans",
+    let rows = sqlx::query_as::<_, (i32, i32, Option<i32>, f64, f64, f64)>(
+        "SELECT id, company_id, lender_company_id, principal, interest_rate, balance FROM loans",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, company_id, principal, interest_rate, balance) in rows {
+    for (id, company_id, lender_company_id, principal, interest_rate, balance) in rows {
         state.loans.insert(
             id,
             crate::sim::state::Loan {
                 id,
                 company_id,
+                lender_company_id,
                 principal,
                 interest_rate,
                 balance,
@@ -255,6 +256,28 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     }
 
     info!(count = state.loans.len(), "Loaded loans.");
+
+    // ── Bank Accounts ────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, i32, f64, f64)>(
+        "SELECT id, company_id, bank_company_id, balance, interest_rate FROM bank_accounts",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, company_id, bank_company_id, balance, interest_rate) in rows {
+        state.bank_accounts.insert(
+            id,
+            BankAccount {
+                id,
+                company_id,
+                bank_company_id,
+                balance,
+                interest_rate,
+            },
+        );
+    }
+
+    info!(count = state.bank_accounts.len(), "Loaded bank accounts.");
 
     // ── Deposits ──────────────────────────────────────────────────────────────
     let rows = sqlx::query_as::<_, (i32, i32, i32, i64, i64, f64)>(

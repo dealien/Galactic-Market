@@ -129,11 +129,22 @@ pub struct Deposit {
     pub extraction_cost_per_unit: f64,
 }
 
+/// A deposit account held by a company at a bank.
+#[derive(Debug, Clone)]
+pub struct BankAccount {
+    pub id: i32,
+    pub company_id: i32,
+    pub bank_company_id: i32,
+    pub balance: f64,
+    pub interest_rate: f64,
+}
+
 /// An outstanding loan for a company.
 #[derive(Debug, Clone)]
 pub struct Loan {
     pub id: i32,
     pub company_id: i32,
+    pub lender_company_id: Option<i32>,
     pub principal: f64,
     pub interest_rate: f64,
     pub balance: f64,
@@ -257,6 +268,9 @@ pub struct SimState {
     /// Outstanding loans keyed by loan ID.
     pub loans: HashMap<i32, Loan>,
 
+    /// All bank accounts keyed by account ID.
+    pub bank_accounts: HashMap<i32, BankAccount>,
+
     /// All resource deposits keyed by deposit ID.
     pub deposits: HashMap<i32, Deposit>,
 
@@ -290,6 +304,9 @@ pub struct SimState {
     /// Metadata for all resource types.
     pub resource_types: HashMap<i32, ResourceType>,
 
+    /// Prime rates set by Central Banks, keyed by Empire ID.
+    pub prime_rates: HashMap<i32, f64>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 
@@ -298,6 +315,9 @@ pub struct SimState {
 
     /// Monotonic counter for generating facility IDs.
     pub next_facility_id: i32,
+
+    /// Monotonic counter for generating loan IDs.
+    pub next_loan_id: i32,
 
     /// All empires keyed by empire ID.
     pub empires: HashMap<i32, Empire>,
@@ -334,6 +354,7 @@ impl SimState {
             sectors: HashMap::new(),
             companies: HashMap::new(),
             loans: HashMap::new(),
+            bank_accounts: HashMap::new(),
             deposits: HashMap::new(),
             inventories: HashMap::new(),
             facilities: HashMap::new(),
@@ -345,9 +366,11 @@ impl SimState {
             price_cache: HashMap::new(),
             ema_prices: HashMap::new(),
             resource_types: HashMap::new(),
+            prime_rates: HashMap::new(),
             next_order_id: 1,
             next_trade_route_id: 1,
             next_facility_id: 1,
+            next_loan_id: 1,
             empires: HashMap::new(),
             diplomatic_relations: HashMap::new(),
             active_events: HashMap::new(),
@@ -374,6 +397,13 @@ impl SimState {
     pub fn next_facility_id(&mut self) -> i32 {
         let id = self.next_facility_id;
         self.next_facility_id += 1;
+        id
+    }
+
+    /// Generate a unique loan ID.
+    pub fn next_loan_id(&mut self) -> i32 {
+        let id = self.next_loan_id;
+        self.next_loan_id += 1;
         id
     }
 }

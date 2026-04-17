@@ -174,6 +174,57 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         body_ids.len()
     );
 
+    // 6.1 Seed Central Banks (one per empire)
+    let mut central_bank_ids = Vec::new();
+    for (i, &_empire_id) in empire_ids.iter().enumerate() {
+        let name = if i == 0 {
+            "Republic Central Reserve"
+        } else {
+            "Syndicate Monetary Fund"
+        };
+        let city_id = if i == 0 { city_ids[0] } else { city_ids[16] };
+        let id = sqlx::query_as::<_, (i32,)>(
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+        )
+        .bind(name).bind("central_bank").bind(city_id)
+        .bind(10_000_000.0_f64).bind(0.0_f64).bind("active")
+        .fetch_one(&mut *tx).await?.0;
+        central_bank_ids.push(id);
+    }
+    info!("Seeded {} central banks.", central_bank_ids.len());
+
+    // 6.2 Seed Commercial Banks (one per sector)
+    let mut sector_bank_ids = std::collections::HashMap::new();
+    for (i, &sector_id) in sector_ids.iter().enumerate() {
+        // Use the first city of the sector as the bank's headquarters
+        let city_id = if i == 0 { city_ids[0] } else { city_ids[16] };
+        let name = if i == 0 {
+            "Core Industrial Bank"
+        } else {
+            "Rim Frontier Credit"
+        };
+        let id = sqlx::query_as::<_, (i32,)>(
+            "INSERT INTO companies (name, company_type, home_city_id, cash, debt, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+        )
+        .bind(name).bind("commercial_bank").bind(city_id)
+        .bind(2_000_000.0_f64).bind(0.0_f64).bind("active")
+        .fetch_one(&mut *tx).await?.0;
+        sector_bank_ids.insert(sector_id, id);
+
+        // Commercial banks take a loan from the Central Bank for initial liquidity
+        let central_bank_id = if i == 0 {
+            central_bank_ids[0]
+        } else {
+            central_bank_ids[1]
+        };
+        sqlx::query(
+            "INSERT INTO loans (company_id, lender_company_id, principal, interest_rate, balance) VALUES ($1, $2, $3, $4, $5)"
+        )
+        .bind(id).bind(central_bank_id).bind(1_000_000.0_f64).bind(0.02_f64).bind(1_000_000.0_f64)
+        .execute(&mut *tx).await?;
+    }
+    info!("Seeded {} commercial banks.", sector_bank_ids.len());
+
     // 6.1 Seed System Lanes (Structured Ring Topology for Debugging)
     // 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
     for i in 0..system_ids.len() {
@@ -246,6 +297,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     for (idx, &city_id) in city_ids.iter().enumerate() {
         // Which planet does this city belong to?
         let body_id = body_ids[idx / 4];
+        let sector_id = sector_ids[idx / 16];
+        let bank_company_id = sector_bank_ids[&sector_id];
+
         let loc_type = if idx < 16 {
             LocationType::Core
         } else {
@@ -268,17 +322,27 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
 
         // Give the company its startup loan; initial cash float equals loan principal
         sqlx::query(
-            "INSERT INTO loans (company_id, principal, interest_rate, balance) VALUES ($1, $2, $3, $4)"
+            "INSERT INTO loans (company_id, lender_company_id, principal, interest_rate, balance) VALUES ($1, $2, $3, $4, $5)"
         )
-        .bind(company_id).bind(startup_loan_amount).bind(loan_interest_rate).bind(startup_loan_amount)
+        .bind(company_id).bind(bank_company_id).bind(startup_loan_amount).bind(loan_interest_rate).bind(startup_loan_amount)
         .execute(&mut *tx).await?;
 
-        // Seed the loan proceeds into cash
-        sqlx::query("UPDATE companies SET cash = $1 WHERE id = $2")
+        // Seed the loan proceeds: 10% working cash, 90% bank deposit
+        let working_cash = startup_loan_amount * 0.1;
+        let deposit_balance = startup_loan_amount * 0.9;
+
+        sqlx::query("UPDATE companies SET cash = $1, debt = $2 WHERE id = $3")
+            .bind(working_cash)
             .bind(startup_loan_amount)
             .bind(company_id)
             .execute(&mut *tx)
             .await?;
+
+        sqlx::query(
+            "INSERT INTO bank_accounts (company_id, bank_company_id, balance, interest_rate) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(company_id).bind(bank_company_id).bind(deposit_balance).bind(0.01_f64)
+        .execute(&mut *tx).await?;
 
         // Create an Iron Ore, Copper Ore, and Tin Ore deposit on this planet
         // Only create once per planet (on the first company of each planet group)
@@ -351,23 +415,34 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
             .await?;
 
         let treasury = pop as f64 * 10.0; // starting credits = population × 10
+        let working_cash = treasury * 0.2;
+        let deposit_balance = treasury * 0.8;
         let company_name = format!("{} Consumers", city_names[idx]);
 
-        sqlx::query(
+        let sector_id = sector_ids[idx / 16];
+        let bank_company_id = sector_bank_ids[&sector_id];
+
+        let company_id = sqlx::query_as::<_, (i32,)>(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
         )
         .bind(&company_name)
         .bind("consumer")
         .bind(city_id)
-        .bind(treasury)
+        .bind(working_cash)
         .bind(0.0_f64)
         .bind("A") // consumers are always good for their purchases
         .bind(1_i64)
         .bind("active")
         .bind(0_i64)
-        .execute(&mut *tx)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?.0;
+
+        sqlx::query(
+            "INSERT INTO bank_accounts (company_id, bank_company_id, balance, interest_rate) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(company_id).bind(bank_company_id).bind(deposit_balance).bind(0.01_f64)
+        .execute(&mut *tx).await?;
     }
 
     info!("Seeded 32 consumer companies (one per city).");
@@ -376,22 +451,34 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     for (i, &_system_id) in system_ids.iter().enumerate() {
         // Find the first city in this system to place the merchant's home office
         let city_id = city_ids[i * 8];
+        let sector_id = sector_ids[i / 2]; // 2 systems per sector
+        let bank_company_id = sector_bank_ids[&sector_id];
 
-        sqlx::query(
+        let initial_capital = 100_000.0_f64;
+        let working_cash = initial_capital * 0.3;
+        let deposit_balance = initial_capital * 0.7;
+
+        let company_id = sqlx::query_as::<_, (i32,)>(
             "INSERT INTO companies (name, company_type, home_city_id, cash, debt, credit_rating, next_eval_tick, status, last_trade_tick)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id"
         )
         .bind(format!("{} Merchant", system_names[i]))
         .bind("merchant")
         .bind(city_id)
-        .bind(100_000.0_f64) // High initial capital for arbitrage
+        .bind(working_cash)
         .bind(0.0_f64)
         .bind("A")
         .bind(1_i64)
         .bind("active")
         .bind(0_i64)
-        .execute(&mut *tx)
-        .await?;
+        .fetch_one(&mut *tx)
+        .await?.0;
+
+        sqlx::query(
+            "INSERT INTO bank_accounts (company_id, bank_company_id, balance, interest_rate) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(company_id).bind(bank_company_id).bind(deposit_balance).bind(0.01_f64)
+        .execute(&mut *tx).await?;
     }
     info!("Seeded 4 merchant arbitrageurs.");
 
