@@ -262,9 +262,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     }
 
                     for city_id in famine_cities {
-                        // Post buy orders for common "Food" or "Water" resources (Resource IDs 5, 6 etc)
-                        // In this sim, we check for "Food" (ID 5) and "Water" (ID 6).
-                        for &res_id in &[5, 6] {
+                        // Post buy orders for common "Food" or "Water" resources
+                        let relief_resources: Vec<i32> = state
+                            .resource_types
+                            .values()
+                            .filter(|r| r.name.contains("Food") || r.name.contains("Water"))
+                            .map(|r| r.id)
+                            .collect();
+
+                        for res_id in relief_resources {
                             let ema_price = state
                                 .ema_prices
                                 .get(&(city_id, res_id))
