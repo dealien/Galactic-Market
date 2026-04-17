@@ -190,21 +190,22 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 if affordable_by_buyer == 0 && actual_buyer_cash < clearing_price {
                     debug!(buy_company_id, "Voiding buy order due to lack of cash");
                     state.market_orders.remove(&b_id);
+                    b_idx += 1;
                 } else if actual_seller_inventory == 0 {
                     debug!(
                         sell_company_id,
                         "Voiding sell order due to lack of inventory"
                     );
                     state.market_orders.remove(&s_id);
+                    s_idx += 1;
                 } else {
-                    // Logic safety catch: if we can't trade and it's not cash/inv,
-                    // something is wrong with the match. Skip it to avoid infinite loop.
+                    // Logic safety catch: skip this buy order if it's stuck
                     warn!(
                         city_id,
                         res_id = resource_type_id,
-                        "Zero quantity match catch-all triggered"
+                        "Zero quantity match catch-all; skipping buyer"
                     );
-                    break;
+                    b_idx += 1;
                 }
             }
 
@@ -259,6 +260,33 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             state
                 .ema_prices
                 .insert((city_id, resource_type_id), next_ema);
+        } else {
+            // --- Price Discovery Drift (Stage 1.5 Patch) ---
+            // If no trades occurred, drift the EMA based on unsatisfied sentiment.
+            // This breaks deadlocks where prices are too far apart for merchants to bridge cities.
+            let current_ema = state
+                .ema_prices
+                .get(&(city_id, resource_type_id))
+                .copied()
+                .unwrap_or(20.0);
+
+            let has_buys = !buys.is_empty();
+            let has_sells = !sells.is_empty();
+
+            let drift_alpha = 0.01; // Slow drift
+            if has_buys && !has_sells {
+                // High demand, no supply -> price should go up
+                state.ema_prices.insert(
+                    (city_id, resource_type_id),
+                    current_ema * (1.0 + drift_alpha),
+                );
+            } else if has_sells && !has_buys {
+                // High supply, no demand -> price should go down
+                state.ema_prices.insert(
+                    (city_id, resource_type_id),
+                    current_ema * (1.0 - drift_alpha),
+                );
+            }
         }
     }
 

@@ -1,10 +1,10 @@
-pub mod namegen;
-pub mod events;
 pub mod consumption;
 pub mod decisions;
+pub mod events;
 pub mod finance;
 pub mod logistics;
 pub mod markets;
+pub mod namegen;
 pub mod production;
 pub mod resources;
 pub mod state;
@@ -22,7 +22,11 @@ const FLUSH_INTERVAL: u64 = 100;
 
 impl SimState {
     /// Advance the simulation by one tick, running all active phases in order.
-    pub async fn run_tick(&mut self, pool: &PgPool, rng: &mut impl rand::Rng) -> Result<(), sqlx::Error> {
+    pub async fn run_tick(
+        &mut self,
+        pool: &PgPool,
+        rng: &mut impl rand::Rng,
+    ) -> Result<(), sqlx::Error> {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log

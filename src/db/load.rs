@@ -453,7 +453,10 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         state.ema_prices.insert((city_id, res_id), price);
     }
 
-    info!(count = state.price_cache.len(), "Primed market price cache.");
+    info!(
+        count = state.price_cache.len(),
+        "Primed market price cache."
+    );
 
     Ok(state)
 }

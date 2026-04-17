@@ -81,7 +81,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let events_json = std::fs::read_to_string("data/events.json")?;
     let event_config: serde_json::Value = serde_json::from_str(&events_json)?;
     state.event_definitions = serde_json::from_value(event_config["events"].clone())?;
-    info!("Loaded {} event definitions.", state.event_definitions.len());
+    info!(
+        "Loaded {} event definitions.",
+        state.event_definitions.len()
+    );
 
     // Initialize RNG
     use rand::SeedableRng;

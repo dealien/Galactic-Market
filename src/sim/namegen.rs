@@ -43,12 +43,16 @@ static DICTIONARY: OnceLock<NameDictionary> = OnceLock::new();
 pub fn init_dictionary(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
     let dict: NameDictionary = serde_json::from_str(&content)?;
-    DICTIONARY.set(dict).map_err(|_| "Dictionary already initialized")?;
+    DICTIONARY
+        .set(dict)
+        .map_err(|_| "Dictionary already initialized")?;
     Ok(())
 }
 
 fn get_dict() -> &'static NameDictionary {
-    DICTIONARY.get().expect("Name dictionary not initialized. Call init_dictionary first.")
+    DICTIONARY
+        .get()
+        .expect("Name dictionary not initialized. Call init_dictionary first.")
 }
 
 pub fn generate_system_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
@@ -69,7 +73,11 @@ pub fn generate_city_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> S
 pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
     let cat = get_dict().company.get(loc_type.as_str()).unwrap();
     let prefix = cat.prefixes.choose(rng).map(|s| s.as_str()).unwrap_or("");
-    let industry = cat.industries.choose(rng).map(|s| s.as_str()).unwrap_or("Unknown");
+    let industry = cat
+        .industries
+        .choose(rng)
+        .map(|s| s.as_str())
+        .unwrap_or("Unknown");
     let suffix = cat.suffixes.choose(rng).map(|s| s.as_str()).unwrap_or("");
 
     // Core companies are more "formal" with prefixes; Outposts are often just [Industry] [Suffix]
@@ -100,20 +108,48 @@ pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -
 }
 
 fn generate_standard_name(category: &NameCategory, rng: &mut impl rand::Rng) -> String {
-    let prefix = category.prefixes.choose(rng).map(|s| s.as_str()).unwrap_or("");
-    let core = category.cores.choose(rng).map(|s| s.as_str()).unwrap_or("Unknown");
-    let suffix = category.suffixes.choose(rng).map(|s| s.as_str()).unwrap_or("");
-    
+    let prefix = category
+        .prefixes
+        .choose(rng)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+    let core = category
+        .cores
+        .choose(rng)
+        .map(|s| s.as_str())
+        .unwrap_or("Unknown");
+    let suffix = category
+        .suffixes
+        .choose(rng)
+        .map(|s| s.as_str())
+        .unwrap_or("");
+
     // Weighted patterns
     match rng.gen_range(0..10) {
         0..=2 => core.to_string(), // 30% core only
-        3..=5 => if !prefix.is_empty() { format!("{} {}", prefix, core) } else { core.to_string() },
-        6..=8 => if !suffix.is_empty() { format!("{} {}", core, suffix) } else { core.to_string() },
+        3..=5 => {
+            if !prefix.is_empty() {
+                format!("{} {}", prefix, core)
+            } else {
+                core.to_string()
+            }
+        }
+        6..=8 => {
+            if !suffix.is_empty() {
+                format!("{} {}", core, suffix)
+            } else {
+                core.to_string()
+            }
+        }
         _ => {
             let mut parts = Vec::new();
-            if !prefix.is_empty() { parts.push(prefix); }
+            if !prefix.is_empty() {
+                parts.push(prefix);
+            }
             parts.push(core);
-            if !suffix.is_empty() { parts.push(suffix); }
+            if !suffix.is_empty() {
+                parts.push(suffix);
+            }
             parts.join(" ")
         }
     }

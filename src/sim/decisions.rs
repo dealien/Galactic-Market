@@ -407,7 +407,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .get(&(home_city_id, r_id))
                         .copied()
                         .unwrap_or(20.0);
-                    let bid_price = (target_price * 1.02).min(250.0);
+                    let bid_price = (target_price * 1.02).min(1000.0);
                     let qty = (budget_per_product / bid_price) as i64;
                     if qty > 0 {
                         orders_to_post.push(MarketOrder {
@@ -597,11 +597,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         let ask_price = if inv.quantity > (facility_capacity * 10) as i64
                             || ticks_since_trade > 100
                         {
-                            cost * 1.01
+                            cost * 0.95 // Liquidation!
                         } else if inv.quantity > (facility_capacity * 5) as i64
                             || ticks_since_trade > 50
                         {
-                            cost * 1.05
+                            cost * 1.01
                         } else if inv.quantity > (facility_capacity * 2) as i64
                             || ticks_since_trade > 20
                         {
@@ -852,11 +852,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             }
 
                             let target_bid = if raw_inv_qty == 0 || ticks_since_trade > 100 {
-                                in_price * 1.50
+                                in_price * 2.50
                             } else if ticks_since_trade > 50 {
-                                in_price * 1.25
+                                in_price * 1.50
                             } else if ticks_since_trade > 20 {
-                                in_price * 1.10
+                                in_price * 1.20
                             } else {
                                 in_price * 0.98
                             };

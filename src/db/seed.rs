@@ -1,7 +1,7 @@
-use sqlx::PgPool;
-use tracing::info;
 use crate::sim::namegen::{self, LocationType};
 use rand::thread_rng;
+use sqlx::PgPool;
+use tracing::info;
 
 pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     info!("Seeding universe...");
@@ -105,7 +105,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     let mut system_names = Vec::new();
     for (i, sector_id) in sector_ids.iter().enumerate() {
         for _ in 1..=2 {
-            let loc_type = if i == 0 { LocationType::Core } else { LocationType::Outpost };
+            let loc_type = if i == 0 {
+                LocationType::Core
+            } else {
+                LocationType::Outpost
+            };
             let name = namegen::generate_system_name(loc_type, &mut rng);
             let id = sqlx::query_as::<_, (i32,)>(
                 "INSERT INTO star_systems (sector_id, name, star_type, resource_modifier) VALUES ($1, $2, $3, $4) RETURNING id"
@@ -120,7 +124,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     // 5. Celestial Bodies (2 per system = 8)
     let mut body_ids = Vec::new();
     for (i, system_id) in system_ids.iter().enumerate() {
-        let loc_type = if i < 2 { LocationType::Core } else { LocationType::Outpost };
+        let loc_type = if i < 2 {
+            LocationType::Core
+        } else {
+            LocationType::Outpost
+        };
         for _ in 1..=2 {
             let name = namegen::generate_planet_name(loc_type, &mut rng);
             let id = sqlx::query_as::<_, (i32,)>(
@@ -136,7 +144,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     let mut city_ids = Vec::new();
     let mut city_names = Vec::new();
     for (i, body_id) in body_ids.iter().enumerate() {
-        let loc_type = if i < 4 { LocationType::Core } else { LocationType::Outpost };
+        let loc_type = if i < 4 {
+            LocationType::Core
+        } else {
+            LocationType::Outpost
+        };
         for j in 1..=4 {
             // Tiered ports: First city of each planet is a Hub (higher throughput, lower fee)
             let (fee, throughput, tier) = if j == 1 {
@@ -156,7 +168,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         }
     }
 
-    info!("Seeded geography: 2 empires, {} systems, {} planets, 32 cities.", system_ids.len(), body_ids.len());
+    info!(
+        "Seeded geography: 2 empires, {} systems, {} planets, 32 cities.",
+        system_ids.len(),
+        body_ids.len()
+    );
 
     // 6.1 Seed System Lanes (Structured Ring Topology for Debugging)
     // 1 -> 2, 2 -> 3, 3 -> 4, 4 -> 1
@@ -230,7 +246,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     for (idx, &city_id) in city_ids.iter().enumerate() {
         // Which planet does this city belong to?
         let body_id = body_ids[idx / 4];
-        let loc_type = if idx < 16 { LocationType::Core } else { LocationType::Outpost };
+        let loc_type = if idx < 16 {
+            LocationType::Core
+        } else {
+            LocationType::Outpost
+        };
 
         // Create the mining company
         let company_name = namegen::generate_company_name(loc_type, &mut rng);

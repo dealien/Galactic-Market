@@ -1,6 +1,6 @@
 use crate::sim::state::{ActiveEvent, SimState};
-use rand::distributions::{Distribution, WeightedIndex};
 use rand::Rng;
+use rand::distributions::{Distribution, WeightedIndex};
 use tracing::info;
 
 pub fn run_events(state: &mut SimState, rng: &mut impl Rng) {
@@ -30,10 +30,10 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
     let def = &state.event_definitions[dist.sample(rng)].clone();
 
     let severity = rng.gen_range(def.severity_range[0]..=def.severity_range[1]);
-    
+
     for effect_def in &def.effects {
         let duration = rng.gen_range(effect_def.duration_range[0]..=effect_def.duration_range[1]);
-        
+
         let mut event = ActiveEvent {
             id: state.next_event_id,
             event_type: effect_def.effect_type.clone(),
@@ -52,9 +52,11 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                     event.target_id = Some(find_lane_id(state, sys_a, sys_b));
                     let name_a = &state.star_systems[&sys_a].name;
                     let name_b = &state.star_systems[&sys_b].name;
-                    event.flavor_text = Some(def.flavor_text
-                        .replace("{system_a}", name_a)
-                        .replace("{system_b}", name_b));
+                    event.flavor_text = Some(
+                        def.flavor_text
+                            .replace("{system_a}", name_a)
+                            .replace("{system_b}", name_b),
+                    );
                 }
             }
             "infrastructure_damage" | "famine" => {
@@ -69,15 +71,24 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                     event.target_id = None; // Effect applied immediately to relations
                     let name_a = &state.empires[&emp_a].name;
                     let name_b = &state.empires[&emp_b].name;
-                    event.flavor_text = Some(def.flavor_text
-                        .replace("{empire_a}", name_a)
-                        .replace("{empire_b}", name_b));
-                    
+                    event.flavor_text = Some(
+                        def.flavor_text
+                            .replace("{empire_a}", name_a)
+                            .replace("{empire_b}", name_b),
+                    );
+
                     // Apply tension increase immediately
-                    let key = if emp_a < emp_b { (emp_a, emp_b) } else { (emp_b, emp_a) };
+                    let key = if emp_a < emp_b {
+                        (emp_a, emp_b)
+                    } else {
+                        (emp_b, emp_a)
+                    };
                     if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
                         rel.tension += 10.0 * severity;
-                        info!("Tension increased between {} and {}: {:.1}", name_a, name_b, rel.tension);
+                        info!(
+                            "Tension increased between {} and {}: {:.1}",
+                            name_a, name_b, rel.tension
+                        );
                     }
                 }
             }
@@ -87,7 +98,7 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
         if let Some(text) = &event.flavor_text {
             info!("EVENT: {}", text);
         }
-        
+
         state.active_events.insert(event.id, event);
     }
 }
@@ -105,7 +116,7 @@ fn process_politics(state: &mut SimState, _rng: &mut impl Rng) {
             let name_a = &state.empires[&rel.empire_a_id].name;
             let name_b = &state.empires[&rel.empire_b_id].name;
             info!("WAR DECLARED between {} and {}!", name_a, name_b);
-            
+
             // Create a war event
             let event = ActiveEvent {
                 id: state.next_event_id,
@@ -124,7 +135,9 @@ fn process_politics(state: &mut SimState, _rng: &mut impl Rng) {
 
 fn pick_random_lane<'a>(state: &'a SimState, rng: &mut impl Rng) -> Option<&'a (i32, i32)> {
     let keys: Vec<_> = state.system_lanes.keys().collect();
-    if keys.is_empty() { return None; }
+    if keys.is_empty() {
+        return None;
+    }
     Some(keys[rng.gen_range(0..keys.len())])
 }
 
@@ -135,13 +148,17 @@ fn find_lane_id(_state: &SimState, sys_a: i32, sys_b: i32) -> i32 {
 
 fn pick_random_city<'a>(state: &'a SimState, rng: &mut impl Rng) -> Option<&'a i32> {
     let keys: Vec<_> = state.cities.keys().collect();
-    if keys.is_empty() { return None; }
+    if keys.is_empty() {
+        return None;
+    }
     Some(keys[rng.gen_range(0..keys.len())])
 }
 
 fn pick_random_empire_pair(state: &SimState, rng: &mut impl Rng) -> Option<(i32, i32)> {
     let keys: Vec<_> = state.empires.keys().cloned().collect();
-    if keys.len() < 2 { return None; }
+    if keys.len() < 2 {
+        return None;
+    }
     let a = keys[rng.gen_range(0..keys.len())];
     let mut b = keys[rng.gen_range(0..keys.len())];
     while a == b {

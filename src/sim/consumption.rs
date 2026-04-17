@@ -40,7 +40,9 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 
     for (city_id, population, company_id) in consumers {
         // Check for active famine in this city
-        let famine_severity = state.active_events.values()
+        let famine_severity = state
+            .active_events
+            .values()
             .filter(|e| e.event_type == "famine" && e.target_id == Some(city_id))
             .map(|e| e.severity)
             .sum::<f64>();
@@ -54,6 +56,11 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
             available_cash = company.cash;
         }
 
+        // Clear existing orders for this consumer to prevent leaking orders every tick
+        state
+            .market_orders
+            .retain(|_, order| order.company_id != company_id);
+
         // 2. Budgeting: Split 80% of available cash among target resources
         let total_budget = available_cash * 0.8;
         let budget_per_resource = total_budget / target_resource_ids.len() as f64;
@@ -66,7 +73,7 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
             // Spikes significantly during famine for Food Rations.
             let mut bid_modifier = 1.1;
             let mut demand_modifier = 1.0;
-            
+
             if res.name == "Food Rations" && famine_severity > 0.0 {
                 bid_modifier += famine_severity * 2.0; // Desperation price
                 demand_modifier += famine_severity * 3.0; // Inelastic demand spike
@@ -75,7 +82,8 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
             let bid_price = (market_price * bid_modifier).min(1000.0);
 
             // Demand scales with population
-            let ideal_demand = ((population / 1000).max(1) * DEMAND_PER_1K_POPULATION) as f64 * demand_modifier;
+            let ideal_demand =
+                ((population / 1000).max(1) * DEMAND_PER_1K_POPULATION) as f64 * demand_modifier;
             let ideal_demand = ideal_demand as i64;
 
             // Can we afford the ideal demand?
