@@ -32,9 +32,29 @@ pub fn run_events(state: &mut SimState, rng: &mut impl Rng) {
 }
 
 fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
-    let weights: Vec<u32> = state.event_definitions.iter().map(|d| d.weight).collect();
-    let dist = WeightedIndex::new(&weights).unwrap();
-    let def = &state.event_definitions[dist.sample(rng)].clone();
+    let valid_defs: Vec<_> = state
+        .event_definitions
+        .iter()
+        .filter(|d| d.weight > 0)
+        .collect();
+
+    if valid_defs.is_empty() {
+        info!("Skipping random event: no event definitions with positive weight");
+        return;
+    }
+
+    let weights: Vec<u32> = valid_defs.iter().map(|d| d.weight).collect();
+    let dist = match WeightedIndex::new(&weights) {
+        Ok(d) => d,
+        Err(err) => {
+            info!(
+                "Skipping random event due to invalid event weights: {}",
+                err
+            );
+            return;
+        }
+    };
+    let def = valid_defs[dist.sample(rng)].clone();
 
     let severity = rng.gen_range(def.severity_range[0]..=def.severity_range[1]);
 

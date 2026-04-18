@@ -288,11 +288,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     }
 
                     for city_id in famine_cities {
-                        // Post buy orders for common "Food" or "Water" resources
+                        // Post buy orders for vital resources (food, water, etc.) used by famine/consumption logic
                         let relief_resources: Vec<i32> = state
                             .resource_types
                             .values()
-                            .filter(|r| r.name.contains("Food") || r.name.contains("Water"))
+                            .filter(|r| r.is_vital)
                             .map(|r| r.id)
                             .collect();
 

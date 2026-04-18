@@ -142,12 +142,24 @@ impl SimState {
         }
 
         // ── Loans ─────────────────────────────────────────────────────────────
+        // Use UPSERT so that loans created in-memory during the tick are also persisted
+        // and mutable columns (balance, interest_rate) are kept up to date.
         for loan in self.loans.values() {
-            sqlx::query("UPDATE loans SET balance = $1 WHERE id = $2")
-                .bind(loan.balance)
-                .bind(loan.id)
-                .execute(&mut *tx)
-                .await?;
+            sqlx::query(
+                "INSERT INTO loans (id, company_id, lender_company_id, principal, interest_rate, balance)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (id) DO UPDATE SET
+                     interest_rate = EXCLUDED.interest_rate,
+                     balance = EXCLUDED.balance",
+            )
+            .bind(loan.id)
+            .bind(loan.company_id)
+            .bind(loan.lender_company_id)
+            .bind(loan.principal)
+            .bind(loan.interest_rate)
+            .bind(loan.balance)
+            .execute(&mut *tx)
+            .await?;
         }
 
         // ── Bank Accounts ─────────────────────────────────────────────────────

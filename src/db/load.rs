@@ -178,8 +178,17 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         rows
     {
         // Reconstruct the target tuple from the two stored components.
-        // For blockade_lane events: (sys_a, sys_b). For others: (city_id, 0).
-        let decoded_target_id = target_id.map(|a| (a, target_id_b.unwrap_or(0)));
+        // For blockade_lane events, both components must be present; fall back to None
+        // for legacy rows that predate the target_id_b column to avoid invalid lane targets.
+        // For other events: (city_id, 0).
+        let decoded_target_id = if event_type == "blockade_lane" {
+            match (target_id, target_id_b) {
+                (Some(a), Some(b)) => Some((a, b)),
+                _ => None,
+            }
+        } else {
+            target_id.map(|a| (a, 0))
+        };
 
         state.active_events.insert(
             id,

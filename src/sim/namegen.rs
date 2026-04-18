@@ -1,5 +1,4 @@
 use rand::seq::SliceRandom;
-use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -113,8 +112,10 @@ pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -
                 } else {
                     format!("{} {}", prefix, industry)
                 }
-            } else {
+            } else if !suffix.is_empty() {
                 format!("{} {}", industry, suffix)
+            } else {
+                industry.to_string()
             }
         }
         LocationType::Outpost => {
@@ -124,8 +125,10 @@ pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -
                 } else {
                     format!("{} {}", prefix, industry)
                 }
-            } else {
+            } else if !suffix.is_empty() {
                 format!("{} {}", industry, suffix)
+            } else {
+                industry.to_string()
             }
         }
     }
