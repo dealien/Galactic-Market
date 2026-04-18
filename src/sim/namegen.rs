@@ -50,9 +50,9 @@ static DICTIONARY: OnceLock<NameDictionary> = OnceLock::new();
 pub fn init_dictionary(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
     let dict: NameDictionary = serde_json::from_str(&content)?;
-    DICTIONARY
-        .set(dict)
-        .map_err(|_| "Dictionary already initialized")?;
+    // Treat "already initialized" as a no-op so that calling this function
+    // multiple times in the same process (e.g., across test runs) is safe.
+    let _ = DICTIONARY.set(dict);
     Ok(())
 }
 

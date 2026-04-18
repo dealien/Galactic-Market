@@ -6,17 +6,6 @@ use tracing::info;
 pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     info!("Seeding universe...");
 
-    // Initialize name dictionary
-    namegen::init_dictionary("data/names.json").map_err(|e| {
-        tracing::error!(
-            "Name dictionary failed to initialize: {}. This is a required resource.",
-            e
-        );
-        sqlx::Error::RowNotFound
-    })?;
-
-    let mut rng = thread_rng();
-
     // Check if empires exist; skip if already seeded
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
         .fetch_one(pool)
@@ -26,6 +15,19 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
         info!("Database already seeded, skipping.");
         return Ok(());
     }
+
+    // Initialize name dictionary after confirming we need to seed.
+    // Placed after the early-return check so that repeated calls to run_seed()
+    // (e.g., across test runs) never hit the OnceLock before the skip path.
+    namegen::init_dictionary("data/names.json").map_err(|e| {
+        tracing::error!(
+            "Name dictionary failed to initialize: {}. This is a required resource.",
+            e
+        );
+        sqlx::Error::RowNotFound
+    })?;
+
+    let mut rng = thread_rng();
 
     let mut tx = pool.begin().await?;
 
