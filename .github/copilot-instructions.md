@@ -139,7 +139,7 @@ Every entity in the database is part of this hierarchy (enforced by foreign keys
 
 ### Simulation Principles
 
-- **Deterministic where possible**: Use seeded RNG for reproducible runs (see `--random_seed` flag).
+- **Deterministic where possible**: Use seeded RNG for reproducible runs (see `--random-seed` flag).
 - **Phase separation**: Maintain the 10-phase tick loop as defined; don't mix logic across phases.
 - **In-memory hot path**: Keep ticks as fast as possible — no database queries during tick execution.
 - **Entity lifecycle**: Entities have clear creation/lifecycle/deletion states; track these in simulation state.
