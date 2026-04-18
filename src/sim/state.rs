@@ -272,6 +272,10 @@ pub struct SimState {
     /// Outstanding loans keyed by loan ID.
     pub loans: HashMap<i32, Loan>,
 
+    /// Reverse index: company_id → [loan_ids] for O(1) lookup of all loans for a company.
+    /// Maintained to avoid O(loans) filtering in reconciliation.
+    pub company_to_loans: HashMap<i32, Vec<i32>>,
+
     /// All bank accounts keyed by account ID.
     pub bank_accounts: HashMap<i32, BankAccount>,
 
@@ -361,6 +365,7 @@ impl SimState {
             sectors: HashMap::new(),
             companies: HashMap::new(),
             loans: HashMap::new(),
+            company_to_loans: HashMap::new(),
             bank_accounts: HashMap::new(),
             deposits: HashMap::new(),
             inventories: HashMap::new(),
@@ -414,22 +419,37 @@ impl SimState {
         self.next_loan_id += 1;
         id
     }
-}
 
-/// A high-level snapshot of the simulation state for debugging and logging.
-#[derive(Debug, Default)]
-pub struct TickSummary {
-    pub tick: u64,
-    pub total_cash: f64,
-    pub total_debt: f64,
-    pub total_inventory: i64,
-    pub active_orders: usize,
-    pub trade_volume: i64,
-    pub avg_ore_price: f64,
-    pub ingot_prices: HashMap<String, f64>,
-}
+    /// Add a loan and update the company_to_loans reverse index.
+    pub fn add_loan(&mut self, loan: crate::sim::state::Loan) {
+        let company_id = loan.company_id;
+        let loan_id = loan.id;
+        self.loans.insert(loan_id, loan);
+        self.company_to_loans
+            .entry(company_id)
+            .or_default()
+            .push(loan_id);
+    }
 
-impl SimState {
+    /// Remove a loan and update the company_to_loans reverse index.
+    pub fn remove_loan(&mut self, loan_id: i32) -> Option<crate::sim::state::Loan> {
+        if let Some(loan) = self.loans.remove(&loan_id) {
+            if let Some(loans) = self.company_to_loans.get_mut(&loan.company_id) {
+                loans.retain(|id| *id != loan_id);
+            }
+            return Some(loan);
+        }
+        None
+    }
+
+    /// Get all loan IDs for a company efficiently (O(1) lookup).
+    pub fn get_company_loans(&self, company_id: i32) -> Vec<i32> {
+        self.company_to_loans
+            .get(&company_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
     /// Calculate a summary of the current simulation state.
     pub fn generate_summary(&self) -> TickSummary {
         let mut summary = TickSummary {
@@ -471,4 +491,17 @@ impl SimState {
 
         summary
     }
+}
+
+/// A high-level snapshot of the simulation state for debugging and logging.
+#[derive(Debug, Default)]
+pub struct TickSummary {
+    pub tick: u64,
+    pub total_cash: f64,
+    pub total_debt: f64,
+    pub total_inventory: i64,
+    pub active_orders: usize,
+    pub trade_volume: i64,
+    pub avg_ore_price: f64,
+    pub ingot_prices: HashMap<String, f64>,
 }

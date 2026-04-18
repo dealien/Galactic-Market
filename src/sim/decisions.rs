@@ -48,17 +48,14 @@ fn request_loan(state: &mut SimState, company_id: i32, amount: f64) -> bool {
             }
 
             let loan_id = state.next_loan_id();
-            state.loans.insert(
-                loan_id,
-                crate::sim::state::Loan {
-                    id: loan_id,
-                    company_id,
-                    lender_company_id: Some(bank_id),
-                    principal: amount,
-                    interest_rate: 0.05,
-                    balance: amount,
-                },
-            );
+            state.add_loan(crate::sim::state::Loan {
+                id: loan_id,
+                company_id,
+                lender_company_id: Some(bank_id),
+                principal: amount,
+                interest_rate: 0.05,
+                balance: amount,
+            });
             debug!(company_id, amount, "Loan approved by bank");
             return true;
         }

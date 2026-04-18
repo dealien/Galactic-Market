@@ -257,17 +257,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .await?;
 
     for (id, company_id, lender_company_id, principal, interest_rate, balance) in rows {
-        state.loans.insert(
+        state.add_loan(crate::sim::state::Loan {
             id,
-            crate::sim::state::Loan {
-                id,
-                company_id,
-                lender_company_id,
-                principal,
-                interest_rate,
-                balance,
-            },
-        );
+            company_id,
+            lender_company_id,
+            principal,
+            interest_rate,
+            balance,
+        });
     }
 
     info!(count = state.loans.len(), "Loaded loans.");

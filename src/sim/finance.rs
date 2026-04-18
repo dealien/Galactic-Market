@@ -179,13 +179,13 @@ pub fn run_finance(state: &mut SimState) {
 
     // ─── Reconciliation: Ensure company.debt matches total loan balance ───
     // This prevents double-counting bugs where debt is tracked in multiple places.
+    // Uses company_to_loans reverse index for O(1) lookup instead of O(loans) filtering.
     let company_ids: Vec<i32> = state.companies.keys().cloned().collect();
     for company_id in company_ids {
-        let total_debt: f64 = state
-            .loans
-            .values()
-            .filter(|loan| loan.company_id == company_id)
-            .map(|loan| loan.balance)
+        let loan_ids = state.get_company_loans(company_id);
+        let total_debt: f64 = loan_ids
+            .iter()
+            .filter_map(|loan_id| state.loans.get(loan_id).map(|l| l.balance))
             .sum();
 
         if let Some(company) = state.companies.get_mut(&company_id)
