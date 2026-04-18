@@ -315,17 +315,14 @@ fn test_debt_reconciliation_after_interest_shortfall() {
     );
 
     // Create a loan for $1000
-    state.loans.insert(
-        1,
-        galactic_market::sim::state::Loan {
-            id: 1,
-            company_id,
-            lender_company_id: Some(100), // Central Bank
-            principal: 1000.0,
-            interest_rate: 0.05, // 5% annual = 0.05/52 per tick ≈ 0.00096
-            balance: 1000.0,
-        },
-    );
+    state.add_loan(galactic_market::sim::state::Loan {
+        id: 1,
+        company_id,
+        lender_company_id: Some(100), // Central Bank
+        principal: 1000.0,
+        interest_rate: 0.05, // 5% annual = 0.05/52 per tick ≈ 0.00096
+        balance: 1000.0,
+    });
 
     // Manually run finance phase
     galactic_market::sim::finance::run_finance(&mut state);
