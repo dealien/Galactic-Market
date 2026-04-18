@@ -62,31 +62,98 @@ impl SimState {
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
             let summary = self.generate_summary();
 
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_header(vec!["Metric", "Value"]);
-            table.add_row(vec!["Tick", &summary.tick.to_string()]);
-            table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
-            table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
-            table.add_row(vec![
+            // ═══════════════════════════════════════════════════════════════════
+            // Build a comprehensive multi-column Economic Pulse display
+            // ═══════════════════════════════════════════════════════════════════
+
+            // --- Table 1: Financial Summary ---
+            let mut financial_table = Table::new();
+            financial_table.load_preset(UTF8_FULL_CONDENSED);
+            financial_table.set_header(vec!["Financial Metric", "Value"]);
+            financial_table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
+            financial_table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
+            financial_table.add_row(vec![
+                "Debt-to-Cash Ratio",
+                &format!("{:.2}", summary.avg_debt_to_cash),
+            ]);
+            financial_table.add_row(vec![
                 "Total Inventory",
                 &summary.total_inventory.to_string(),
             ]);
-            table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
-            table.add_row(vec!["Trade Volume", &summary.trade_volume.to_string()]);
-            table.add_row(vec![
+            financial_table.add_row(vec![
+                "Trade Volume (This Flush)",
+                &summary.trade_volume.to_string(),
+            ]);
+
+            // --- Table 2: Market Activity ---
+            let mut market_table = Table::new();
+            market_table.load_preset(UTF8_FULL_CONDENSED);
+            market_table.set_header(vec!["Market Metric", "Value"]);
+            market_table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
+            market_table.add_row(vec!["  ├─ Buy Orders", &summary.buy_orders.to_string()]);
+            market_table.add_row(vec!["  └─ Sell Orders", &summary.sell_orders.to_string()]);
+            market_table.add_row(vec![
                 "Avg Ore Price",
                 &format!("{:.2}", summary.avg_ore_price),
             ]);
 
+            // Add refined material prices
             let mut ingot_prices: Vec<_> = summary.ingot_prices.iter().collect();
             ingot_prices.sort_by_key(|(name, _)| *name);
-
             for (name, price) in ingot_prices {
-                table.add_row(vec![&format!("Price: {}", name), &format!("{:.2}", price)]);
+                market_table.add_row(vec![
+                    &format!("  Price: {}", name),
+                    &format!("{:.2}", price),
+                ]);
             }
 
-            info!("\n=== Economic Pulse ===\n{table}");
+            // --- Table 3: Economy & Population ---
+            let mut economy_table = Table::new();
+            economy_table.load_preset(UTF8_FULL_CONDENSED);
+            economy_table.set_header(vec!["Economy Metric", "Value"]);
+            economy_table.add_row(vec![
+                "Total Population",
+                &summary.total_population.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Food in Circulation",
+                &summary.total_food_inventory.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Active Plantations",
+                &summary.active_plantations.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Active Events",
+                &summary.total_active_events.to_string(),
+            ]);
+
+            // --- Table 4: Companies ---
+            let mut company_table = Table::new();
+            company_table.load_preset(UTF8_FULL_CONDENSED);
+            company_table.set_header(vec!["Company Type", "Count"]);
+            company_table.add_row(vec![
+                "Total Companies",
+                &summary.total_companies.to_string(),
+            ]);
+
+            let mut company_types: Vec<_> = summary.company_breakdown.iter().collect();
+            company_types.sort_by_key(|(name, _)| *name);
+            for (company_type, count) in company_types {
+                company_table.add_row(vec![&format!("  ├─ {}", company_type), &count.to_string()]);
+            }
+
+            info!("\n╔════════════════════════════════════════════════════════════════════════╗");
+            info!(
+                "║                        ECONOMIC PULSE - TICK {}                         ║",
+                summary.tick
+            );
+            info!("╚════════════════════════════════════════════════════════════════════════╝");
+            info!("\n📊 FINANCIAL SUMMARY\n{financial_table}");
+            info!("\n💱 MARKET ACTIVITY\n{market_table}");
+            info!("\n🌍 ECONOMY & POPULATION\n{economy_table}");
+            info!("\n🏢 COMPANY BREAKDOWN\n{company_table}");
+
             self.flush(pool).await?;
         }
 

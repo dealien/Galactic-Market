@@ -469,19 +469,72 @@ impl SimState {
         let mut summary = TickSummary {
             tick: self.tick,
             active_orders: self.market_orders.len(),
+            total_companies: self.companies.len(),
             ..Default::default()
         };
 
+        // --- Companies & Finance ---
+        let mut total_company_debt = 0.0;
+        let mut company_count_for_ratio = 0;
         for c in self.companies.values() {
             summary.total_cash += c.cash;
             summary.total_debt += c.debt;
+
+            // Track company type breakdown
+            summary
+                .company_breakdown
+                .entry(c.company_type.clone())
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
+            // Accumulate for debt-to-cash ratio
+            if c.cash + c.debt > 0.0 {
+                total_company_debt += c.debt;
+                company_count_for_ratio += 1;
+            }
         }
 
+        if company_count_for_ratio > 0 {
+            summary.avg_debt_to_cash = total_company_debt / (company_count_for_ratio as f64);
+        }
+
+        // --- Population ---
+        for city in self.cities.values() {
+            summary.total_population += city.population;
+        }
+
+        // --- Inventory & Food ---
         for inv in self.inventories.values() {
             summary.total_inventory += inv.quantity;
+
+            // Check if this is food
+            if let Some(res) = self.resource_types.get(&inv.resource_type_id)
+                && res.is_vital
+            {
+                summary.total_food_inventory += inv.quantity;
+            }
         }
 
-        // Use the persistent price cache for averages across all cities
+        // --- Plantations ---
+        for facility in self.facilities.values() {
+            if facility.facility_type == "plantation" {
+                summary.active_plantations += 1;
+            }
+        }
+
+        // --- Active Events ---
+        summary.total_active_events = self.active_events.len();
+
+        // --- Market Orders Breakdown ---
+        for order in self.market_orders.values() {
+            match order.order_type.as_str() {
+                "buy" => summary.buy_orders += 1,
+                "sell" => summary.sell_orders += 1,
+                _ => {}
+            }
+        }
+
+        // --- Prices ---
         let mut ore_total = 0.0;
         let mut ore_count = 0;
 
@@ -518,4 +571,14 @@ pub struct TickSummary {
     pub trade_volume: i64,
     pub avg_ore_price: f64,
     pub ingot_prices: HashMap<String, f64>,
+    // New metrics for enhanced display
+    pub total_companies: usize,
+    pub company_breakdown: HashMap<String, usize>, // company_type -> count
+    pub total_population: i64,
+    pub total_food_inventory: i64,
+    pub active_plantations: usize,
+    pub avg_debt_to_cash: f64,
+    pub total_active_events: usize,
+    pub buy_orders: usize,
+    pub sell_orders: usize,
 }
