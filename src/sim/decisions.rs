@@ -1,5 +1,3 @@
-#![allow(clippy::expect_fun_call)]
-
 use rand::Rng;
 use tracing::debug;
 
