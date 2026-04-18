@@ -104,6 +104,8 @@ pub struct ResourceType {
     pub id: i32,
     pub name: String,
     pub category: String,
+    /// True for resources (food, water) whose absence triggers population crises.
+    pub is_vital: bool,
 }
 
 /// An economic actor (freelancer, company, corp, megacorp).

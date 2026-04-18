@@ -77,19 +77,26 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                             .replace("{empire_b}", name_b),
                     );
 
-                    // Apply tension increase immediately
+                    // Apply tension increase immediately; create the relation if it doesn't exist.
                     let key = if emp_a < emp_b {
                         (emp_a, emp_b)
                     } else {
                         (emp_b, emp_a)
                     };
-                    if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
-                        rel.tension += 10.0 * severity;
-                        info!(
-                            "Tension increased between {} and {}: {:.1}",
-                            name_a, name_b, rel.tension
-                        );
-                    }
+                    let rel = state
+                        .diplomatic_relations
+                        .entry(key)
+                        .or_insert_with(|| crate::sim::state::DiplomaticRelation {
+                            empire_a_id: key.0,
+                            empire_b_id: key.1,
+                            tension: 0.0,
+                            status: "neutral".to_string(),
+                        });
+                    rel.tension += 10.0 * severity;
+                    info!(
+                        "Tension increased between {} and {}: {:.1}",
+                        name_a, name_b, rel.tension
+                    );
                 }
             }
             _ => {}

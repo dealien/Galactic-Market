@@ -186,11 +186,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     sell_company_id
                 );
             } else {
-                // Determine fault and void order
+                // Determine fault and void order. Each arm `continue`s so the
+                // "fully filled" pointer-advance block below is only reached on
+                // the successful trade path (qty > 0).
                 if affordable_by_buyer == 0 && actual_buyer_cash < clearing_price {
                     debug!(buy_company_id, "Voiding buy order due to lack of cash");
                     state.market_orders.remove(&b_id);
                     b_idx += 1;
+                    continue;
                 } else if actual_seller_inventory == 0 {
                     debug!(
                         sell_company_id,
@@ -198,6 +201,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     );
                     state.market_orders.remove(&s_id);
                     s_idx += 1;
+                    continue;
                 } else {
                     // Logic safety catch: skip this buy order if it's stuck
                     warn!(
@@ -206,10 +210,12 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         "Zero quantity match catch-all; skipping buyer"
                     );
                     b_idx += 1;
+                    continue;
                 }
             }
 
-            // Advance pointers if orders fully filled
+            // Advance pointers if orders fully filled after a successful trade.
+            // Only reached when qty > 0 (the void branches above all `continue`).
             if state
                 .market_orders
                 .get(&b_id)

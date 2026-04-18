@@ -69,9 +69,15 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4)"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5)"
     )
-    .bind("Food Rations").bind("Consumer Good").bind(1.0).bind(true)
+    .bind("Food Rations").bind("Consumer Good").bind(1.0).bind(true).bind(true)
+    .execute(&mut *tx).await?;
+
+    sqlx::query(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5)"
+    )
+    .bind("Water").bind("Consumer Good").bind(1.0).bind(true).bind(true)
     .execute(&mut *tx).await?;
 
     info!("Seeded resource types.");

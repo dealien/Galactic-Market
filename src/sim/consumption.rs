@@ -70,11 +70,11 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
             let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(20.0);
 
             // Consumers are willing to pay slightly above market to ensure fulfillment.
-            // Spikes significantly during famine for Food Rations.
+            // Spikes significantly during famine for vital resources (food, water).
             let mut bid_modifier = 1.1;
             let mut demand_modifier = 1.0;
 
-            if res.name == "Food Rations" && famine_severity > 0.0 {
+            if res.is_vital && famine_severity > 0.0 {
                 bid_modifier += famine_severity * 2.0; // Desperation price
                 demand_modifier += famine_severity * 3.0; // Inelastic demand spike
             }

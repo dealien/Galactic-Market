@@ -155,7 +155,10 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             .map(|a| a.id);
 
         if let Some(acc_id) = account_id {
-            let bank_balance = state.bank_accounts[&acc_id].balance;
+            let (bank_company_id, bank_balance) = {
+                let a = &state.bank_accounts[&acc_id];
+                (a.bank_company_id, a.balance)
+            };
             let company_cash = state.companies[&company_id].cash;
 
             let buffer = 5000.0;
@@ -167,19 +170,37 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
                     a.balance += deposit;
                 }
+                // Credit bank's cash so it has liquidity for lending
+                if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+                    bank.cash += deposit;
+                }
                 debug!(company_id, deposit, "Company deposited excess cash to bank");
             } else if company_cash < buffer * 0.5 && bank_balance > 0.0 {
-                let withdraw = (buffer - company_cash).min(bank_balance);
-                if let Some(c) = state.companies.get_mut(&company_id) {
-                    c.cash += withdraw;
+                let bank_available = state
+                    .companies
+                    .get(&bank_company_id)
+                    .map(|b| b.cash)
+                    .unwrap_or(0.0);
+                // Limit withdrawal to what both the account and the bank actually hold
+                let withdraw = (buffer - company_cash)
+                    .min(bank_balance)
+                    .min(bank_available)
+                    .max(0.0);
+                if withdraw > 0.0 {
+                    if let Some(c) = state.companies.get_mut(&company_id) {
+                        c.cash += withdraw;
+                    }
+                    if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
+                        a.balance -= withdraw;
+                    }
+                    if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+                        bank.cash -= withdraw;
+                    }
+                    debug!(
+                        company_id,
+                        withdraw, "Company withdrew cash from bank for operations"
+                    );
                 }
-                if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
-                    a.balance -= withdraw;
-                }
-                debug!(
-                    company_id,
-                    withdraw, "Company withdrew cash from bank for operations"
-                );
             }
         }
 

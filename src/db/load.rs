@@ -384,14 +384,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     // ── Resource Types ────────────────────────────────────────────────────────
     let rows =
-        sqlx::query_as::<_, (i32, String, String)>("SELECT id, name, category FROM resource_types")
+        sqlx::query_as::<_, (i32, String, String, bool)>("SELECT id, name, category, is_vital FROM resource_types")
             .fetch_all(pool)
             .await?;
 
-    for (id, name, category) in rows {
+    for (id, name, category, is_vital) in rows {
         state
             .resource_types
-            .insert(id, crate::sim::state::ResourceType { id, name, category });
+            .insert(id, crate::sim::state::ResourceType { id, name, category, is_vital });
     }
 
     info!(count = state.resource_types.len(), "Loaded resource types.");
