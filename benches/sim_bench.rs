@@ -463,6 +463,7 @@ fn make_merchant_state(num_merchants: usize) -> SimState {
                 id: i,
                 name: format!("Res {i}"),
                 category: "Refined Material".into(),
+                is_vital: false,
             },
         );
     }
