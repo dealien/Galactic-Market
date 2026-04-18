@@ -7,6 +7,8 @@ v0.2 — Draft
 
 **Stack:** Rust · SQL/PostgreSQL · WebAssembly/SvelteKit
 
+**Updated:** April 2026. This document reflects the current implemented state. Political simulation and web UI are still in development.
+
 ---
 
 ## Table of Contents
@@ -242,22 +244,25 @@ The engine flushes state back to the database periodically (e.g., every 100 tick
 
 ### 4.3 Tick Architecture
 
-The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or week). Each tick the engine performs a fixed sequence of phases:
+The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or week). Each tick the engine performs a fixed sequence of phases **entirely in memory**, then periodically flushes state to the database:
 
-| Phase | Operations | Key Tables Written |
-| --- | --- | --- |
-| 1. Resource | Advance extraction jobs; deplete deposits; trigger discovery checks | `deposits`, `production_jobs` |
-| 2. Production | Advance all production_jobs; consume inputs; create output inventory | `production_jobs`, `inventory` |
-| 3. Logistics | Advance in-transit shipments; deliver cargo at destination | `trade_routes`, `inventory` |
-| 4. Markets | Match buy/sell orders; compute clearing prices; record history | `market_orders`, `market_history` |
-| 5. Finance | Pay wages, loan interest, dividends; update cash/debt balances | `companies`, `employees` |
-| 6. Decisions | Each company AI evaluates state and queues new jobs/orders/routes | `production_jobs`, `market_orders` |
-| 7. Population | Update city populations; shift consumer demand; migrate labor | `cities`, `employees` |
-| 8. Politics | Advance diplomatic tension; resolve treaties; apply tax changes | `diplomatic_relations`, `treaties` |
-| 9. Events | Roll random events; apply effects; log to events_log | `events_log`, *(affected tables)* |
-| 10. Flush | Periodically write dirty state to DB; always append `events_log` and `market_history` deltas; update tick counter | `simulation_meta`, `events_log`, `market_history`, *(dirty tables)* |
+| Phase | Operations | Module | State Modified |
+| --- | --- | --- | --- |
+| 1. Resource Extraction | Advance extraction jobs; deplete deposits | `resources::run_extraction()` | deposits, companies, inventory |
+| 2. Production | Advance production jobs; consume inputs; create output | `production::run_production()` | production jobs, inventory |
+| 3. Logistics | Advance in-transit shipments; deliver cargo at destination | `logistics::run_logistics()` | trade routes, inventory |
+| 4. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
+| 5. Population Consumption | Populations consume goods; update demand and food shortages | `consumption::run_consumption()` | companies, inventory, populations |
+| 6. Market Clearing | Match buy/sell orders; compute clearing prices | `markets::clear_orders()` | market orders, inventory |
+| 7. Finance | Pay wages, loan interest; update company cash/debt | `finance::run_finance()` | companies, bank accounts |
+| 8. Random Events | Roll random events; trigger blockades, disasters, tech breakthroughs | `events::run_events()` | active events, various (event-dependent) |
 
-> **Note:** Each phase should be implementable as a separate Rust module. The tick loop runs entirely in memory; the periodic DB flush uses an atomic transaction so a crash between flushes can recover to the last clean checkpoint rather than landing in a partially-advanced state.
+**Periodic Flush (every 100 ticks):**
+- All dirty state written to database in a single transaction
+- `events_log` and `market_history` appended; `simulation_meta.current_tick` updated
+- Crash recovery: can restart from last clean checkpoint (see §5.4)
+
+> **Note:** Each phase is a separate Rust module. The tick loop runs entirely in memory for performance. Politics phase (diplomacy, faction relations, taxation) is currently integrated into the Events phase but is planned as a separate phase in future development.
 
 ---
 
@@ -265,61 +270,90 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 
 Rust is an excellent choice for this project. The simulation is CPU-bound, handles large volumes of data per tick, and needs to be fast enough to simulate many ticks in reasonable time. Rust's ownership model also prevents entire classes of bugs that would be catastrophic in a long-running simulation.
 
-### 5.1 Recommended Crates
+### 5.1 Dependency Stack
 
-| Crate | Purpose | Notes |
-| --- | --- | --- |
-| `sqlx` | Async SQL queries with compile-time checking | Supports PostgreSQL; queries checked against DB schema at compile time |
-| `tokio` | Async runtime | sqlx and most IO crates are built on tokio; use `tokio::main` |
-| `serde` / `serde_json` | Serialization | Used for config files, `effects_json` in events, API responses |
-| `rand` / `rand_distr` | Random number generation | For event rolls, procedural generation, market noise |
-| `petgraph` | Graph data structures | Model the star system jump network; run Dijkstra for routing |
-| `clap` | CLI argument parsing | Control tick speed, load scenarios, etc. |
-| `tracing` / `tracing-subscriber` | Structured logging | Far better than `println!` for a complex simulation; filterable by module |
-| `anyhow` / `thiserror` | Error handling | `anyhow` for application errors; `thiserror` for library error types |
-| `rayon` | Data parallelism | Parallelize per-company decision phase across CPU cores |
-| `axum` | HTTP server *(future)* | For the REST API layer that will serve the web UI |
+| Crate | Version | Purpose | Status |
+| --- | --- | --- | --- |
+| `sqlx` | 0.7 | Async SQL with compile-time checking; PostgreSQL support | ✅ Active |
+| `tokio` | 1.x | Async runtime (full features enabled) | ✅ Active |
+| `tracing` / `tracing-subscriber` | 0.1 / 0.3 | Structured logging with environment filtering | ✅ Active |
+| `clap` | 4.x | CLI argument parsing (derive macros) | ✅ Active |
+| `dotenvy` | 0.15 | Load `.env` files for configuration | ✅ Active |
+| `rand` | 0.8 | Random number generation for events, AI decisions | ✅ Active |
+| `anyhow` | 1.0 | Ergonomic error handling | ✅ Active |
+| `serde` / `serde_json` | 1.0 | Serialization for config, effects, API responses | ✅ Active |
+| `comfy-table` | 7.1 | Terminal tables for Economic Pulse display at flush time | ✅ Active |
+| `petgraph` | 0.8.3 | Graph structures for jump lane routing (Dijkstra) | ✅ Active |
+| `divan` (codspeed-divan-compat) | 4.4.1 | Performance benchmarking (CodSpeed integration) | ✅ Dev |
+
+**Not yet integrated (planned):**
+- `rayon` — Data parallelism for decision phase across companies
+- `axum` — HTTP server for REST API / web UI
+- `thiserror` — Custom error types (use `anyhow` for now)
 
 ### 5.2 Project Structure
 
 ```text
-galactic-sim/
+galactic-market/
   Cargo.toml
   src/
-    main.rs              # CLI entry point, tick loop
-    db/                  # Database connection pool, migrations
-      mod.rs
-      migrations/        # SQL migration files
-    sim/                 # Core simulation modules (one per tick phase)
-      mod.rs
-      resources.rs       # Phase 1: extraction & depletion
-      production.rs      # Phase 2: manufacturing
-      logistics.rs       # Phase 3: cargo transit
-      markets.rs         # Phase 4: order matching, price history
-      finance.rs         # Phase 5: wages, interest, dividends
-      decisions.rs       # Phase 6: company AI
-      population.rs      # Phase 7: demographics
-      politics.rs        # Phase 8: diplomacy, war
-      events.rs          # Phase 9: random events
-    models/              # Rust structs mirroring DB tables
-      company.rs
-      market.rs
-      geography.rs
-      ...
-    config.rs            # Simulation parameters (tick speed, etc.)
-    worldgen/            # Optional: procedural universe generation
+    main.rs                     # CLI entry point; handles args and tick loop runner
+    lib.rs                      # Library entry point
+    db/
+      mod.rs                    # Database module exports
+      load.rs                   # Load full simulation state from Postgres into memory
+      seed.rs                   # Procedural world generation (empires, sectors, systems, cities, etc.)
+      utils.rs                  # Utilities (clear_database, etc.)
+      migrations/               # SQL migration files (run by sqlx::migrate!() on startup)
+    sim/
+      mod.rs                    # Tick loop implementation; coordinates all phases
+      state.rs                  # In-memory SimState struct; mirrors DB schema
+      resources.rs              # Phase 1: resource extraction & deposit management
+      production.rs             # Phase 2: production job execution
+      logistics.rs              # Phase 3: cargo routing & transit
+      decisions.rs              # Phase 4: company AI decision-making
+      consumption.rs            # Phase 5: population consumption & demand updates
+      markets.rs                # Phase 6: order matching & price discovery
+      finance.rs                # Phase 7: wages, interest, cash/debt tracking
+      events.rs                 # Phase 8: random events & political mechanics
+      namegen.rs                # Procedural name generation for entities
+  benches/
+    sim_bench.rs                # Performance benchmarks (Divan + CodSpeed)
+  migrations/                   # SQL schema definitions
+  tests/                        # Integration tests
+  docker-compose.yml            # PostgreSQL 16 container definition
+  .env                          # Environment variables (DATABASE_URL, etc.)
 ```
+
+**Key Design Principle:** All simulation state is loaded into memory (`SimState` struct) on startup. The tick loop mutates this struct entirely in-memory. Every 100 ticks, dirty state is flushed back to Postgres in a single atomic transaction. This separation keeps the hot path fast and Postgres as a durability/analytics layer (see §5.4).
 
 ### 5.3 Company Decision AI
 
-Each company runs a lightweight decision algorithm each tick. Rule-based heuristics produce surprisingly rich emergent behavior:
+The simulation implements adaptive company AI driven by **re-evaluation intervals** — not all companies make decisions every tick. Companies re-evaluate periodically (based on type) and make greedy, locally-informed decisions.
 
-- **Miners:** check market price for their extractable resources; extract if `price > cost + margin_threshold`; idle or diversify otherwise
-- **Manufacturers:** check recipe profitability (`output_price − input_costs − labor − facility_depreciation`); queue production if profitable
-- **Traders:** scan all reachable market pairs for arbitrage opportunities (`buy_price_here + transport_cost < sell_price_there`); execute if margin > threshold
-- **Investors:** if `cash_balance > capex_threshold`, evaluate ROI of expanding facilities vs. acquiring a competitor vs. paying dividends
+**Re-evaluation Intervals by Type:**
+- **Freelancers / Merchants:** 1–5 ticks (respond quickly to price changes)
+- **Small Companies:** 5–20 ticks (moderate planning horizon)
+- **Corporations:** 20–60 ticks (slower, more strategic)
+- **Megacorps:** 60–200 ticks (long-term planning)
+- **Commercial Banks:** 5–20 ticks
+- **Central Banks:** 50–100 ticks
 
-> **Note:** The richness of the simulation scales with the sophistication of these heuristics. Start simple (greedy, local information only) and add complexity once the basic loop works.
+**Decision Types (implemented in Phase 4 — Decisions):**
+
+1. **Liquidation (Bankrupt Companies):** Post fire-sale orders at 50% market price to quickly convert inventory to cash.
+
+2. **Corporate Treasury:** Manage deposits/withdrawals from commercial banks; request loans if cash is low and Debt-to-Asset ratio is sustainable (<0.8).
+
+3. **Resource Extraction:** Evaluate ore prices; queue extraction jobs if `price > extraction_cost * (1 + profit_margin)`.
+
+4. **Production:** Evaluate recipe profitability; queue production jobs if inputs are available and output price exceeds all costs.
+
+5. **Trading & Arbitrage:** Scan all reachable city pairs for price differences; execute trade routes if `buy_price + transport_cost < sell_price − trading_margin`.
+
+6. **Market Orders:** Post buy/sell orders on local markets at prices informed by EMA prices and inventory levels.
+
+> **Note:** Future sophistication could include multi-step planning (e.g., pathfinding to distant high-profit markets), learning algorithms that tune decision thresholds, or faction-aligned behavior. Current implementation prioritizes speed and determinism.
 
 ### 5.4 State Management & Database Access Pattern
 
@@ -345,11 +379,13 @@ This minimizes round-trips, keeps tick duration predictable, and ensures Postgre
 
 ---
 
-## 6. Political Simulation
+## 6. Political Simulation *(Planned / Partial Implementation)*
 
 Politics is the second simulation layer sitting above economics. It does not replace economic logic — it modifies it. Wars raise taxes and disrupt trade; alliances open new markets; political instability increases risk premiums.
 
-### 6.1 Diplomatic States
+> **Status:** This section describes the intended design. Current implementation includes basic `DiplomaticRelation` structures and blockade event mechanics, but full diplomatic states, faction politics, and war mechanics are **not yet implemented**. Political effects are currently integrated into the Events phase. A dedicated Politics phase is planned for future development.
+
+### 6.1 Diplomatic States *(Planned)*
 
 | State | Economic Effect | Trigger Conditions |
 | --- | --- | --- |
@@ -359,16 +395,16 @@ Politics is the second simulation layer sitting above economics. It does not rep
 | War | Blockades; territorial seizures; supply chain disruption; defense spending spike | Formal declaration or border incident |
 | Occupation | Occupied territories taxed at higher rate; resistance events | War victory condition met |
 
-### 6.2 Political Event Types
+### 6.2 Political Event Types *(Planned)*
 
 - **Leadership change** — new ruler may change tax policy, alliances, or trigger military buildup
 - **Election / Coup** — faction government type may shift; economic policy uncertainty spike
 - **Trade deal signed** — tariff reduction between factions; new trade route profitability
-- **Blockade declared** — specific jump lane(s) blocked; prices diverge between systems
+- **Blockade declared** — specific jump lane(s) blocked; prices diverge between systems *(currently implemented as event type)*
 - **Sanction imposed** — specific goods cannot cross faction borders; new smuggling opportunity
 - **Rebellion** — city or sector breaks away; creates a new mini-faction or joins neighbor
 
-### 6.3 War Mechanics (Simplified)
+### 6.3 War Mechanics *(Planned - Simplified Model)*
 
 Full military simulation is out of scope for v1. A simplified war model:
 
@@ -382,114 +418,146 @@ Full military simulation is out of scope for v1. A simplified war model:
 
 ## 7. Random Event Engine
 
-Events are the third simulation layer. They inject irreducible uncertainty — even a perfectly-managed company can be disrupted by a supernova remnant gas cloud blocking a trade lane, or a charismatic leader dying at a critical moment.
+Events are the third simulation layer (Phase 8 of the tick loop). They inject irreducible uncertainty — even a perfectly-managed company can be disrupted by blockade events or market crashes.
 
-### 7.1 Event Definition Structure
+### 7.1 Event System *(Current Implementation)*
 
-Events are defined in a configuration file (TOML or JSON), not hard-coded. Each event definition has:
+Events are stored in memory as `EventDefinition` structs loaded from the database. Each definition has:
 
-- `id` and `name`
-- `scope` — what entities can be targeted (city, planet, system, sector, empire, company, person)
-- `trigger_weight` — base probability per tick per eligible entity
-- `trigger_conditions` — optional filter (e.g., only fires if `city.infrastructure_lvl < 3`)
-- `effects` — a list of modifiers applied on firing (parameterized with ranges for variability with the strength of the event)
-- `duration_ticks` — how long the effect persists (`0` = instant)
+- `id` and `name` — unique identifier and display name
+- `weight` — base probability (0–100) relative to other events; weighted sampling per tick
+- `severity_range` — [min, max] severity multiplier applied to effects
+- `effects` — array of effect definitions, each with:
+  - `effect_type` — string identifier (e.g., "blockade_lane", "price_spike")
+  - `duration_range` — [min, max] ticks the effect persists
+  - Additional effect-specific parameters
 
-### 7.2 Sample Event Catalog
+**Tick 8 Event Flow:**
+1. **Expiration:** Remove events whose `end_tick < current_tick`; increment `blockade_version` if any blockade expires (triggers rerouting logic)
+2. **New Events:** 5% chance per tick to fire a random event (weighted by event definition weights)
+3. **Politics:** Process diplomatic tensions and war status (integrated into events phase; planned as separate phase)
 
-| Event | Scope | Effect |
-| --- | --- | --- |
-| Asteroid Strike | City | Infrastructure damage; population loss; resource crater (new deposit) possible |
-| Disease Outbreak | City / Planet | Population decline; labor shortage; demand spike for medical goods |
-| Tech Breakthrough | Company / Empire | Recipe efficiency +N%; possible new recipe unlocked |
-| Megacorp Scandal | Company | Credit rating drop; stock price crash; acquisition vulnerability |
-| Resource Discovery | Continent | New deposit revealed; local price crash for that resource type |
-| Pirate Surge | Star System | Trade route risk increases; insurance costs rise; possible cargo seizures |
-| Political Assassination | Person | Diplomatic tension +N; possible government type change; treaty renegotiation |
-| Solar Flare | Star System | Communications disrupted; in-system transit slowed for N ticks |
-| Infrastructure Boom | Sector | Construction costs temporarily reduced; rapid city development |
-| Famine | Planet | Food demand spikes; imports surge; population growth halted |
+### 7.2 Implemented Event Types
+
+| Event Type | Effect | Target | Duration |
+| --- | --- | --- | --- |
+| `blockade_lane` | Blocks specific star system jump lane; disrupts trade routes; prices diverge | Jump lane (sys_a, sys_b) | 10–100 ticks |
+| `price_spike` | Multiplies resource price in a city | (city_id, resource_type_id) | 5–50 ticks |
+| `population_surge` | Increases city population by percentage | city_id | 1–20 ticks |
+| `food_shortage` | Reduces food availability; triggers population crisis if severe | city_id | 5–30 ticks |
+
+### 7.3 Planned Event Types *(Future)*
+
+- **Asteroid Strike** — City infrastructure damage; population loss; potential new ore deposit
+- **Disease Outbreak** — Population decline; labor shortage; demand spike for medical goods
+- **Tech Breakthrough** — Recipe efficiency bonus; possible new recipe unlocked
+- **Megacorp Scandal** — Company credit rating drop; acquisition vulnerability
+- **Resource Discovery** — New deposit revealed; local price crash
+- **Pirate Surge** — Trade route risk increases; insurance costs rise; cargo seizure events
+- **Solar Flare** — In-system transit slowed for duration
+- **Infrastructure Boom** — Construction costs temporarily reduced
 
 ---
 
-## 8. Development Roadmap
+## 8. Development Roadmap & Current Status
 
-This is a large project. Tackling it in stages prevents overengineering and ensures there is always a working (if simple) simulation to experiment with.
+### Current Implementation Status (April 2026)
 
-### Stage 0 — Foundation
+The project is in **active development**, past the foundation stages and into core economic simulation refinement. Below is the actual status vs. the roadmap.
 
-**Goal:** Rust project boots, connects to Postgres, creates schema, seeds a tiny universe, runs a tick loop.
+#### ✅ Completed (Stage 0–2)
 
-- [ ] Set up Cargo workspace; add `sqlx`, `tokio`, `tracing`, `clap`
-- [ ] Write initial SQL migration: `empires`, `sectors`, `star_systems`, `cities`, `resource_types`
-- [ ] Write world-gen seed script: 2 empires, 4 systems, 8 planets, 32 cities, 3 resource types
-- [ ] Implement tick loop: increment tick counter and log — nothing else yet
-- [ ] **Verify:** `cargo run -- --ticks 100` completes without error
+**Stage 0 — Foundation:**
+- ✅ Rust project with sqlx, tokio, tracing, clap configured
+- ✅ PostgreSQL schema with migrations (empires, sectors, systems, cities, resources, etc.)
+- ✅ Procedural world generation (seeding ~1000+ entities)
+- ✅ Tick loop framework with all 8 phases
+- ✅ CLI arguments: `--ticks`, `--seed`, `--clear`, `--debug`, `--random-seed`
 
-### Stage 1 — Basic Economy
+**Stage 1 — Basic Economy:**
+- ✅ Resource extraction with deposits and depletion
+- ✅ Production system with job queues
+- ✅ Market order books with buy/sell matching
+- ✅ Basic company AI (limited re-evaluation, greedy heuristics)
+- ✅ Price history (`market_history` table; OHLCV data)
+- ✅ Trade routes and cargo logistics
+- ✅ Basic consumption model (population demands food)
 
-**Goal:** Resources flow through a single production chain; prices change.
+**Stage 2 — Company Lifecycle:**
+- ✅ Finance phase: wages, debt tracking, cash management
+- ✅ Loan system: companies can borrow from commercial banks
+- ✅ Bankruptcy detection: companies with negative cash and unpayable debt
+- ✅ Fire-sale liquidation: bankrupt companies post discounted inventory
 
-- [ ] Implement `deposits` table and extraction phase (miners consume deposit, produce inventory)
-- [ ] Implement markets and order book (companies post sell orders; simple price averaging)
-- [ ] Implement one production recipe (ore → ingots)
-- [ ] Implement trade routes (instant delivery for now; model timing later)
-- [ ] Implement basic company AI: mine if `price > cost`; sell output
-- [ ] **Verify:** `market_history` fills with price data; `deposit.size_remaining` declines
+#### 🔶 In Progress (Stage 2.5)
 
-### Stage 2 — Company Lifecycle
+- 🔶 **Consumption & Population:** Food demand is basic; missing complex demand curves and population growth
+- 🔶 **Event System:** Basic blockade/price spike events; missing most event types
+- 🔶 **Company AI:** Re-evaluation intervals working; needs more sophisticated trading logic
 
-**Goal:** Companies grow, hire, invest, go bankrupt.
+#### ⏳ Planned (Stage 3+)
 
-- [ ] Add finance phase: wages, loan interest, cash balance tracking
-- [ ] Implement freelancer → company promotion logic
-- [ ] Implement facility construction (company spends cash, facility appears after N ticks)
-- [ ] Implement bankruptcy detection and asset liquidation
-- [ ] Implement acquisition logic (simple version: cash offer accepted if > book value)
-- [ ] **Verify:** observe a company growing from freelancer to corp over a long run
+**Stage 3 — Geography & Logistics:**
+- ⏳ Transit time modeling (currently instant in some paths)
+- ⏳ Realistic shipping costs and route optimization (Dijkstra partially done)
+- ⏳ System lane disruptions based on blockade events
+- ⏳ Advanced trading AI exploiting arbitrage
 
-### Stage 3 — Geography & Logistics
+**Stage 4 — Politics & Events:**
+- ⏳ Full event definition system with JSON/TOML configs
+- ⏳ Diplomatic tension and faction relations
+- ⏳ Blockade effects on trade (partially done; routes respect blockades)
+- ⏳ War mechanics and territory control
+- ⏳ Random seed reproducibility
 
-**Goal:** Transport costs and times matter; arbitrage opportunities exist.
+**Stage 5 — Web UI:**
+- ⏳ REST API with `axum` HTTP server
+- ⏳ Live market charts and company dashboards
+- ⏳ Real-time event feed
+- ⏳ SvelteKit frontend + D3.js galactic map
 
-- [ ] Add transit time to trade routes (ETA based on distance and mode)
-- [ ] Implement jump lane graph; use Dijkstra for cheapest path routing
-- [ ] Add transport cost to market order pricing (prices differ between cities)
-- [ ] Implement arbitrage AI for trading companies
-- [ ] **Verify:** prices in isolated systems diverge from connected ones; traders equalize them
+**Stage 6 — God Mode:**
+- ⏳ Manual event triggering
+- ⏳ Company editor (create/modify via API)
+- ⏳ Diplomacy controls
+- ⏳ WebSocket live simulation stream
 
-### Stage 4 — Politics & Events
+### Immediate Priorities
 
-**Goal:** Wars and events disrupt the economy in visible ways.
+1. **Stabilize consumption model** — Population growth curves, demand elasticity, food crisis mechanics
+   - *Tracked in GitHub issue #10 (Dynamic Population, Migration, Empire Relief System) and #9 (Balanced Economic Cycle)*
 
-- [ ] Implement `diplomatic_relations` table and tension mechanic
-- [ ] Implement blockade event (lane blocked; prices diverge)
-- [ ] Implement war phase (territory rolls; infrastructure damage)
-- [ ] Implement event engine and first 10 event definitions
-- [ ] Implement random seed configuration for reproducible runs
-- [ ] Implement lore seed pipeline: a script that parses markdown/JSON exports from a world-building tool (e.g., Obsidian) and generates Postgres `COPY`-compatible seed files for planets, factions, and resources — write lore naturally, not as hand-typed `INSERT` statements
-- [ ] **Verify:** declare war between two empires; observe trade collapse and price spikes
+2. **Complete event system** — Load event definitions from JSON; implement all event types
+   - *Related to issue #11 (Dynamic Resource Loading via JSON)*
 
-### Stage 5 — Web UI
+3. **Improve trading AI** — Multi-hop routing, arbitrage detection, margin calculations
 
-**Goal:** A browser-based dashboard to watch the simulation in real time.
+4. **Performance benchmarking** — Profile hot paths; optimize market matching and decision AI
 
-- [ ] Add `axum` HTTP server to the Rust binary (separate thread from tick loop)
-- [ ] Expose REST endpoints: `GET /systems`, `GET /markets/{id}/history`, `GET /companies`, etc.
-- [ ] Build SvelteKit frontend; use D3.js or deck.gl for galactic map
-- [ ] Add charts for price history (recharts or Chart.js)
-- [ ] Add company explorer: net worth, production, trade routes
-- [ ] **Verify:** run simulation for 1000 ticks; explore results in browser
+5. **Roadmap refinement** — Determine UI priorities (god mode vs. analytics vs. playback)
 
-### Stage 6 — God Mode
+> **Note:** See GitHub repository for active issues: https://github.com/dealien/Galactic-Market/issues
+> Key blockers: Issues #9 (Economic Cycle) and #10 (Population) are prerequisites for meaningful war mechanics and should be prioritized before Stage 4 political simulation.
 
-**Goal:** Player can observe and intervene.
+### GitHub Issues Cross-Reference
 
-- [ ] `POST /events/trigger` — manually fire any event definition
-- [ ] `POST /companies` — create a player-controlled company
-- [ ] `PATCH /companies/{id}` — edit company cash, strategy, facilities
-- [ ] `POST /diplomacy/declare-war` — force a conflict
-- [ ] WebSocket feed: live event stream to the UI
+This table maps open GitHub issues to relevant DESIGN.md sections and roadmap stages:
+
+| Issue # | Title | Design Section | Stage | Priority | Blocker | Status |
+|---------|-------|---|-------|----------|---------|--------|
+| **#9** | [Balanced Economic Cycle](https://github.com/dealien/Galactic-Market/issues/9) | §3.2, §5.4 | 2→3 | 🔴 Critical | — | Foundation for other issues |
+| **#10** | [Dynamic Population & Migration](https://github.com/dealien/Galactic-Market/issues/10) | §3.3, §6.2 | 2.5→3 | 🔴 Critical | #9 | Prerequisite for war mechanics |
+| **#5** | [Banks & Banking](https://github.com/dealien/Galactic-Market/issues/5) | §5.3 (AI), §7 (Finance) | 3 | 🟡 High | #9 | Parallel work; depends on #9 |
+| **#11** | [Dynamic Resource Loading (JSON)](https://github.com/dealien/Galactic-Market/issues/11) | §4.1 (Seeding) | 3 | 🟡 High | — | Infrastructure; can be done in parallel |
+| **#12** | [Terrain-based Fertility System](https://github.com/dealien/Galactic-Market/issues/12) | §3.1a (Production) | 3 | 🟢 Medium | #11 | Geographic specialization |
+| **#2** | [Procedural Name Generator](https://github.com/dealien/Galactic-Market/issues/2) | §5.2 (modules), §8.1 | 1 | 🟢 Low | — | Quality-of-life enhancement |
+
+**Recommendation:** Address issues in this priority order:
+1. **#9** — Unblocks all others; critical foundation
+2. **#10** — Depends on #9; unlocks war mechanics
+3. **#5** — Parallel work; depends on #9
+4. **#11, #12** — Infrastructure/polish; can overlap
+5. **#2** — Polish; no dependencies
 
 ---
 
