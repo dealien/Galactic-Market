@@ -1,4 +1,5 @@
 use rand::seq::SliceRandom;
+use rand::Rng;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
