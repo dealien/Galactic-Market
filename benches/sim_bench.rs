@@ -351,17 +351,14 @@ fn make_finance_state(num_companies: usize) -> SimState {
                 last_trade_tick: 0,
             },
         );
-        state.loans.insert(
-            i,
-            Loan {
-                id: i,
-                company_id: i,
-                lender_company_id: None,
-                principal: 1000.0,
-                interest_rate: 0.05,
-                balance: 1000.0,
-            },
-        );
+        state.add_loan(Loan {
+            id: i,
+            company_id: i,
+            lender_company_id: None,
+            principal: 1000.0,
+            interest_rate: 0.05,
+            balance: 1000.0,
+        });
     }
     state
 }

@@ -224,17 +224,14 @@ mod tests {
                 last_trade_tick: 0,
             },
         );
-        state.loans.insert(
-            1,
-            Loan {
-                id: 1,
-                company_id: 1,
-                lender_company_id: None,
-                principal: 1000.0,
-                interest_rate: 0.52, // 52% annual = 1% per week/tick
-                balance: 1000.0,
-            },
-        );
+        state.add_loan(Loan {
+            id: 1,
+            company_id: 1,
+            lender_company_id: None,
+            principal: 1000.0,
+            interest_rate: 0.52, // 52% annual = 1% per week/tick
+            balance: 1000.0,
+        });
 
         run_finance(&mut state);
 
@@ -260,17 +257,14 @@ mod tests {
                 last_trade_tick: 0,
             },
         );
-        state.loans.insert(
-            1,
-            Loan {
-                id: 1,
-                company_id: 1,
-                lender_company_id: None,
-                principal: 1000.0,
-                interest_rate: 0.52,
-                balance: 1000.0,
-            },
-        );
+        state.add_loan(Loan {
+            id: 1,
+            company_id: 1,
+            lender_company_id: None,
+            principal: 1000.0,
+            interest_rate: 0.52,
+            balance: 1000.0,
+        });
 
         run_finance(&mut state);
 
