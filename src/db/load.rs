@@ -412,13 +412,13 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.resource_types.len(), "Loaded resource types.");
 
     // ── Recipes ───────────────────────────────────────────────────────────────
-    let recipe_rows = sqlx::query_as::<_, (i32, String, i32, i32, String)>(
-        "SELECT id, name, output_resource_id, output_qty, facility_type FROM recipes",
+    let recipe_rows = sqlx::query_as::<_, (i32, String, i32, i32, String, f64)>(
+        "SELECT id, name, output_resource_id, output_qty, facility_type, COALESCE(labor_cost_per_run::FLOAT8, 0.0) FROM recipes",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, name, output_resource_id, output_qty, facility_type) in recipe_rows {
+    for (id, name, output_resource_id, output_qty, facility_type, labor_cost_per_run) in recipe_rows {
         let input_rows = sqlx::query_as::<_, (i32, i32)>(
             "SELECT resource_type_id, quantity FROM recipe_inputs WHERE recipe_id = $1",
         )
@@ -443,6 +443,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 output_qty,
                 facility_type,
                 inputs,
+                labor_cost_per_run,
             },
         );
     }

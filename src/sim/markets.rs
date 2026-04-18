@@ -132,14 +132,23 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             if qty > 0 {
                 let cash_transferred = qty as f64 * clearing_price;
 
-                // Transfer cash
+                // Issue #9: Calculate port fee on settlement
+                let city = state.cities.get(&city_id);
+                let port_fee = city.map(|c| c.port_fee_per_unit * qty as f64).unwrap_or(0.0);
+
+                // Transfer cash (seller receives cash, minus port fee)
+                if let Some(seller) = state.companies.get_mut(&sell_company_id) {
+                    seller.cash += cash_transferred - port_fee;
+                    seller.last_trade_tick = current_tick;
+                }
                 if let Some(buyer) = state.companies.get_mut(&buy_company_id) {
                     buyer.cash -= cash_transferred;
                     buyer.last_trade_tick = current_tick;
                 }
-                if let Some(seller) = state.companies.get_mut(&sell_company_id) {
-                    seller.cash += cash_transferred;
-                    seller.last_trade_tick = current_tick;
+
+                // Issue #9: Transfer port fee to city tax pool
+                if port_fee > 0.0 {
+                    state.add_city_tax(city_id, port_fee);
                 }
 
                 // Transfer inventory
@@ -181,9 +190,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     res_id = resource_type_id,
                     qty,
                     price = clearing_price,
-                    "Match: {} bought from {}",
+                    port_fee = port_fee,
+                    "Match: {} bought from {} (port fee: {})",
                     buy_company_id,
-                    sell_company_id
+                    sell_company_id,
+                    port_fee
                 );
             } else {
                 // Determine fault and void order. Each arm `continue`s so the
@@ -385,8 +396,10 @@ mod tests {
 
         clear_orders(&mut state, 1);
 
-        assert_eq!(state.companies[&1].cash, 1050.0); // 1000 + (10 * 5.0)
-        assert_eq!(state.companies[&2].cash, 950.0);
+        // Port fee: 10 * 0.1 = 1.0, so seller gets 50 - 1 = 49
+        // Buyer pays: 10 * 5.0 = 50
+        assert_eq!(state.companies[&1].cash, 1049.0); // 1000 + 50 - 1 (port fee)
+        assert_eq!(state.companies[&2].cash, 950.0);  // 1000 - 50
     }
 
     #[test]
@@ -428,8 +441,9 @@ mod tests {
         clear_orders(&mut state, 1);
 
         // Price should be 5.0 (midpoint)
-        assert_eq!(state.companies[&1].cash, 1050.0);
-        assert_eq!(state.companies[&2].cash, 950.0);
+        // Port fee: 10 * 0.1 = 1.0, so seller gets 50 - 1 = 49
+        assert_eq!(state.companies[&1].cash, 1049.0); // 1000 + 50 - 1 (port fee)
+        assert_eq!(state.companies[&2].cash, 950.0);  // 1000 - 50
     }
 
     #[test]
@@ -472,7 +486,8 @@ mod tests {
         clear_orders(&mut state, 1);
 
         // Uses EMA price of 25.0
-        assert_eq!(state.companies[&1].cash, 1250.0);
-        assert_eq!(state.companies[&2].cash, 750.0);
+        // Port fee: 10 * 0.1 = 1.0, so seller gets 250 - 1 = 249
+        assert_eq!(state.companies[&1].cash, 1249.0); // 1000 + 250 - 1 (port fee)
+        assert_eq!(state.companies[&2].cash, 750.0);  // 1000 - 250
     }
 }

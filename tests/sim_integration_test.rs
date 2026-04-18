@@ -87,6 +87,7 @@ fn full_economy_state() -> SimState {
                 resource_type_id: 1,
                 quantity: 3,
             }],
+            labor_cost_per_run: 1.5,
         },
     );
 

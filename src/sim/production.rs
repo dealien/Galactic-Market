@@ -94,6 +94,25 @@ pub fn run_production(state: &mut SimState) {
                 continue;
             }
 
+            // Issue #9: Calculate and deduct labor costs
+            let total_labor_cost = recipe.labor_cost_per_run * runs as f64;
+            {
+                let company = match state.companies.get_mut(&company_id) {
+                    Some(c) => c,
+                    None => continue,
+                };
+
+                // Only proceed if company has enough cash for labor
+                if company.cash < total_labor_cost {
+                    continue;
+                }
+
+                company.cash -= total_labor_cost;
+            }
+
+            // Credit wages to city wage pool (Issue #9)
+            state.add_to_wage_pool(city_id, total_labor_cost);
+
             // Consume inputs
             for input in &recipe.inputs {
                 let key = Inventory::key(company_id, city_id, input.resource_type_id);
@@ -116,7 +135,8 @@ pub fn run_production(state: &mut SimState) {
                 company_id = company_id,
                 recipe = %recipe.name,
                 runs,
-                "Production run complete"
+                labor_cost = total_labor_cost,
+                "Production run complete with labor costs"
             );
         }
     }
@@ -138,9 +158,12 @@ pub fn run_production(state: &mut SimState) {
             None => continue,
         };
 
-        let body = match state.celestial_bodies.get(&city.body_id) {
-            Some(b) => b,
-            None => continue,
+        let fertility = {
+            let body = match state.celestial_bodies.get(&city.body_id) {
+                Some(b) => b,
+                None => continue,
+            };
+            body.fertility
         };
 
         // Find the plantation recipe
@@ -152,8 +175,27 @@ pub fn run_production(state: &mut SimState) {
         if let Some(recipe) = plantation_recipe {
             // Production is: capacity * (1.0 + fertility_bonus)
             // fertility_bonus ranges from 0.0 (0.0x) to 3.0 (3.0x)
-            let fertility_multiplier = body.fertility;
+            let fertility_multiplier = fertility;
             let adjusted_capacity = (capacity as f64 * (1.0 + fertility_multiplier)).round() as i64;
+
+            // Issue #9: Calculate labor costs for plantation runs
+            let total_labor_cost = recipe.labor_cost_per_run * adjusted_capacity as f64;
+            {
+                let company = match state.companies.get_mut(&company_id) {
+                    Some(c) => c,
+                    None => continue,
+                };
+
+                // Only proceed if company has enough cash for labor
+                if company.cash < total_labor_cost {
+                    continue;
+                }
+
+                company.cash -= total_labor_cost;
+            }
+
+            // Credit wages to city wage pool (Issue #9)
+            state.add_to_wage_pool(city_id, total_labor_cost);
 
             // Produce outputs
             let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
@@ -168,10 +210,11 @@ pub fn run_production(state: &mut SimState) {
             debug!(
                 company_id = company_id,
                 city_id = city_id,
-                fertility = body.fertility,
+                fertility = fertility,
                 adjusted_capacity = adjusted_capacity,
                 output_qty = recipe.output_qty as i64 * adjusted_capacity,
-                "Plantation production complete"
+                labor_cost = total_labor_cost,
+                "Plantation production complete with labor costs"
             );
         }
     }
@@ -267,6 +310,7 @@ mod tests {
                     resource_type_id: 1,
                     quantity: 3,
                 }],
+                labor_cost_per_run: 1.5,
             },
         );
 
@@ -372,6 +416,7 @@ mod tests {
                 output_qty: 1,
                 facility_type: "plantation".into(),
                 inputs: vec![],
+                labor_cost_per_run: 2.0,
             },
         );
 
@@ -460,6 +505,7 @@ mod tests {
                 output_qty: 1,
                 facility_type: "plantation".into(),
                 inputs: vec![],
+                labor_cost_per_run: 2.0,
             },
         );
 

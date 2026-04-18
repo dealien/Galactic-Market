@@ -253,11 +253,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     }
     info!("Seeded structured jump lane network (Ring).");
 
-    // 7. Recipes
+    // 7. Recipes (Issue #9: labor_cost_per_run for closed-loop economy)
     let iron_recipe_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks, labor_cost_per_run) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
     )
-    .bind("Iron Ingot Smelting").bind(iron_ingot_id).bind(1).bind("refinery").bind(1)
+    .bind("Iron Ingot Smelting").bind(iron_ingot_id).bind(1).bind("refinery").bind(1).bind(1.5)
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
@@ -270,9 +270,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     .await?;
 
     let copper_recipe_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks, labor_cost_per_run) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
     )
-    .bind("Copper Ingot Smelting").bind(copper_ingot_id).bind(1).bind("refinery").bind(1)
+    .bind("Copper Ingot Smelting").bind(copper_ingot_id).bind(1).bind("refinery").bind(1).bind(1.3)
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
@@ -285,9 +285,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     .await?;
 
     let tin_recipe_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks, labor_cost_per_run) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
     )
-    .bind("Tin Ingot Smelting").bind(tin_ingot_id).bind(1).bind("refinery").bind(1)
+    .bind("Tin Ingot Smelting").bind(tin_ingot_id).bind(1).bind("refinery").bind(1).bind(1.7)
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
@@ -299,11 +299,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     .execute(&mut *tx)
     .await?;
 
-    // Plantation recipe for food production
+    // Plantation recipe for food production (high labor cost due to land management)
     let _plantation_recipe_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks, labor_cost_per_run) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
     )
-    .bind("Food Ration Growth").bind(food_rations_id).bind(1).bind("plantation").bind(1)
+    .bind("Food Ration Growth").bind(food_rations_id).bind(1).bind("plantation").bind(1).bind(2.0)
     .fetch_one(&mut *tx).await?.0;
     // Note: Plantation recipe has no inputs; production is powered by planet fertility
 

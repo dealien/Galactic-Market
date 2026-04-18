@@ -84,6 +84,10 @@ pub fn run_finance(state: &mut SimState) {
         }
     }
 
+    // 3. Issue #9: Process Corporate Taxation (5% of company cash -> Empire Treasury)
+    // Companies pay income tax based on their cash holdings each tick
+    process_corporate_taxes(state);
+
     // --- Bankruptcy Detection & Debt Repayment ---
     let bankrupt_ids: Vec<i32> = state
         .companies
@@ -203,6 +207,46 @@ pub fn run_finance(state: &mut SimState) {
             );
             company.debt = total_debt;
         }
+    }
+}
+
+/// Issue #9: Collect corporate income tax and transfer to empire treasuries.
+/// Tax rate is 5% per tick of company cash (roughly 260% annually).
+/// Only applies to active companies.
+fn process_corporate_taxes(state: &mut SimState) {
+    let tax_rate = 0.05_f64;
+    let mut taxes_to_pay = Vec::new();
+
+    for (company_id, company) in state.companies.iter() {
+        if company.status != "active" || company.cash < 1.0 {
+            continue;
+        }
+
+        let tax_amount = company.cash * tax_rate;
+        if tax_amount > 0.01 {
+            // Look up the company's empire
+            if let Some(&empire_id) = state.company_to_empire.get(company_id) {
+                taxes_to_pay.push((*company_id, empire_id, tax_amount));
+            }
+        }
+    }
+
+    // Apply taxes
+    for (company_id, empire_id, tax_amount) in taxes_to_pay {
+        // Deduct from company cash
+        if let Some(company) = state.companies.get_mut(&company_id) {
+            company.cash -= tax_amount;
+        }
+
+        // Add to empire treasury
+        state.add_to_empire_treasury(empire_id, tax_amount);
+
+        debug!(
+            company_id,
+            empire_id,
+            tax_amount,
+            "Corporate tax collected"
+        );
     }
 }
 

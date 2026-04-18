@@ -195,6 +195,8 @@ pub struct Recipe {
     pub output_qty: i32,
     pub facility_type: String,
     pub inputs: Vec<RecipeInput>,
+    /// Issue #9: Labor cost per production run (deducted from company cash).
+    pub labor_cost_per_run: f64,
 }
 
 /// One input requirement for a recipe.
@@ -508,6 +510,16 @@ impl SimState {
         for pool in self.city_wage_pools.values_mut() {
             *pool = 0.0;
         }
+    }
+
+    /// Issue #9: Accumulate port fees and local taxes for a city (flows to empire treasury later).
+    /// For now, we track this separate from wage pools to maintain accounting clarity.
+    /// Cities have a separate tax_collected_this_tick field in the database.
+    pub fn add_city_tax(&mut self, city_id: i32, amount: f64) {
+        // In Phase 7 (Finance), these accumulated taxes are transferred to empire treasury.
+        // For now, we'll add to wage pools as a temporary holding area.
+        // TODO: In a future iteration, maintain separate city_tax_pools HashMap
+        *self.city_wage_pools.entry(city_id).or_insert(0.0) += amount;
     }
 
     /// Get the current treasury balance for an empire.
