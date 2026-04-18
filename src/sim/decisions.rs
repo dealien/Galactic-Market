@@ -176,11 +176,19 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
                 debug!(company_id, deposit, "Company deposited excess cash to bank");
             } else if company_cash < buffer * 0.5 && bank_balance > 0.0 {
-                let bank_available = state
-                    .companies
-                    .get(&bank_company_id)
-                    .map(|b| b.cash)
-                    .unwrap_or(0.0);
+                let bank_available = match state.companies.get(&bank_company_id) {
+                    Some(b) => b.cash,
+                    None => {
+                        // Bank company missing despite a valid account — log the anomaly
+                        // and skip withdrawal to avoid corrupting other state.
+                        tracing::warn!(
+                            company_id,
+                            bank_company_id,
+                            "Bank company not found during withdrawal; skipping"
+                        );
+                        0.0
+                    }
+                };
                 // Limit withdrawal to what both the account and the bank actually hold
                 let withdraw = (buffer - company_cash)
                     .min(bank_balance)
