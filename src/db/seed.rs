@@ -1,5 +1,5 @@
-use anyhow::{Context, Result};
 use crate::sim::namegen::{self, LocationType};
+use anyhow::{Context, Result};
 use rand::thread_rng;
 use sqlx::PgPool;
 use tracing::info;

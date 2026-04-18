@@ -100,6 +100,7 @@ fn setup_empire_state() -> SimState {
             id: 1,
             name: "Iron Ore".into(),
             category: "Raw Material".into(),
+            is_vital: false,
         },
     );
     state.resource_types.insert(
@@ -108,6 +109,7 @@ fn setup_empire_state() -> SimState {
             id: 5,
             name: "Food Rations".into(),
             category: "Consumer Good".into(),
+            is_vital: true,
         },
     );
     state.resource_types.insert(
@@ -116,6 +118,7 @@ fn setup_empire_state() -> SimState {
             id: 6,
             name: "Water".into(),
             category: "Consumer Good".into(),
+            is_vital: true,
         },
     );
 

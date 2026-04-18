@@ -152,14 +152,12 @@ impl SimState {
 
         // ── Bank Accounts ─────────────────────────────────────────────────────
         for account in self.bank_accounts.values() {
-            sqlx::query(
-                "UPDATE bank_accounts SET balance = $1, interest_rate = $2 WHERE id = $3",
-            )
-            .bind(account.balance)
-            .bind(account.interest_rate)
-            .bind(account.id)
-            .execute(&mut *tx)
-            .await?;
+            sqlx::query("UPDATE bank_accounts SET balance = $1, interest_rate = $2 WHERE id = $3")
+                .bind(account.balance)
+                .bind(account.interest_rate)
+                .bind(account.id)
+                .execute(&mut *tx)
+                .await?;
         }
 
         // ── Facilities ────────────────────────────────────────────────────────

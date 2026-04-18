@@ -129,6 +129,7 @@ mod tests {
                 id: 1,
                 name: "Test Ingot".into(),
                 category: "Refined Material".into(),
+                is_vital: false,
             },
         );
 

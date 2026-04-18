@@ -90,15 +90,14 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                     } else {
                         (emp_b, emp_a)
                     };
-                    let rel = state
-                        .diplomatic_relations
-                        .entry(key)
-                        .or_insert_with(|| crate::sim::state::DiplomaticRelation {
+                    let rel = state.diplomatic_relations.entry(key).or_insert_with(|| {
+                        crate::sim::state::DiplomaticRelation {
                             empire_a_id: key.0,
                             empire_b_id: key.1,
                             tension: 0.0,
                             status: "neutral".to_string(),
-                        });
+                        }
+                    });
                     rel.tension += 10.0 * severity;
                     info!(
                         "Tension increased between {} and {}: {:.1}",
@@ -184,7 +183,6 @@ fn pick_random_empire_pair(state: &SimState, rng: &mut impl Rng) -> Option<(i32,
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::sim::state::{SimState, StarSystem};
 
     #[test]

@@ -174,7 +174,9 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    for (id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text) in rows {
+    for (id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text) in
+        rows
+    {
         // Reconstruct the target tuple from the two stored components.
         // For blockade_lane events: (sys_a, sys_b). For others: (city_id, 0).
         let decoded_target_id = target_id.map(|a| (a, target_id_b.unwrap_or(0)));
@@ -378,15 +380,22 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.inventories.len(), "Loaded inventories.");
 
     // ── Resource Types ────────────────────────────────────────────────────────
-    let rows =
-        sqlx::query_as::<_, (i32, String, String, bool)>("SELECT id, name, category, is_vital FROM resource_types")
-            .fetch_all(pool)
-            .await?;
+    let rows = sqlx::query_as::<_, (i32, String, String, bool)>(
+        "SELECT id, name, category, is_vital FROM resource_types",
+    )
+    .fetch_all(pool)
+    .await?;
 
     for (id, name, category, is_vital) in rows {
-        state
-            .resource_types
-            .insert(id, crate::sim::state::ResourceType { id, name, category, is_vital });
+        state.resource_types.insert(
+            id,
+            crate::sim::state::ResourceType {
+                id,
+                name,
+                category,
+                is_vital,
+            },
+        );
     }
 
     info!(count = state.resource_types.len(), "Loaded resource types.");
