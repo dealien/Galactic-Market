@@ -43,6 +43,7 @@ fn setup_benchmark_hierarchy(state: &mut SimState, num_cities: usize) {
                 id: i as i32,
                 system_id: sys_id,
                 name: format!("Body {i}"),
+                fertility: 1.5,
             },
         );
     }
@@ -406,6 +407,7 @@ fn make_spatial_state() -> SimState {
             id: 1,
             system_id: 1,
             name: "B1".into(),
+            fertility: 1.5,
         },
     );
     state.cities.insert(
