@@ -34,39 +34,39 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
 
     // 1. Resource Types
     let iron_ore_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Iron Ore").bind("Raw Material").bind(100.0).bind(true)
+    .bind("Iron Ore").bind("Raw Material").bind(100.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     let copper_ore_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Copper Ore").bind("Raw Material").bind(120.0).bind(true)
+    .bind("Copper Ore").bind("Raw Material").bind(120.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     let tin_ore_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Tin Ore").bind("Raw Material").bind(150.0).bind(true)
+    .bind("Tin Ore").bind("Raw Material").bind(150.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     let iron_ingot_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Iron Ingot").bind("Refined Material").bind(150.0).bind(true)
+    .bind("Iron Ingot").bind("Refined Material").bind(150.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     let copper_ingot_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Copper Ingot").bind("Refined Material").bind(180.0).bind(true)
+    .bind("Copper Ingot").bind("Refined Material").bind(180.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     let tin_ingot_id = sqlx::query_as::<_, (i32,)>(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable) VALUES ($1, $2, $3, $4) RETURNING id"
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
-    .bind("Tin Ingot").bind("Refined Material").bind(220.0).bind(true)
+    .bind("Tin Ingot").bind("Refined Material").bind(220.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
     sqlx::query(
