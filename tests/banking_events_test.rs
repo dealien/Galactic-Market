@@ -44,6 +44,7 @@ fn setup_empire_state() -> SimState {
             id: 1,
             system_id: 1,
             name: "Test Planet".into(),
+            fertility: 1.5,
         },
     );
 
@@ -108,15 +109,6 @@ fn setup_empire_state() -> SimState {
         ResourceType {
             id: 5,
             name: "Food Rations".into(),
-            category: "Consumer Good".into(),
-            is_vital: true,
-        },
-    );
-    state.resource_types.insert(
-        6,
-        ResourceType {
-            id: 6,
-            name: "Water".into(),
             category: "Consumer Good".into(),
             is_vital: true,
         },

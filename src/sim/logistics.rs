@@ -243,6 +243,7 @@ mod tests {
                 id: 1,
                 system_id: 1,
                 name: "Body 1".into(),
+                fertility: 1.5,
             },
         );
         state.celestial_bodies.insert(
@@ -251,6 +252,7 @@ mod tests {
                 id: 2,
                 system_id: 1,
                 name: "Body 2".into(),
+                fertility: 1.2,
             },
         );
 
@@ -318,6 +320,7 @@ mod tests {
                 id: 3,
                 system_id: 3,
                 name: "Body 3".into(),
+                fertility: 1.0,
             },
         );
         state.cities.insert(
@@ -339,6 +342,7 @@ mod tests {
                 id: 4,
                 system_id: 2,
                 name: "Body 4".into(),
+                fertility: 1.8,
             },
         );
         state.cities.insert(

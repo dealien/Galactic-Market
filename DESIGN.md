@@ -110,6 +110,24 @@ The economy runs on multi-stage production chains. A simplified example:
 
 Production chains are defined in a `recipes` table. Any actor can execute any recipe if they own the inputs, have the facility, and it is profitable to do so. This makes the production chain data-driven, not hard-coded.
 
+#### 3.1a Food Production & Plantations
+
+Unlike mining (which depletes finite deposits), food production is renewable and driven by **planet fertility**. Each planet has a fertility rating (0.0–3.0x multiplier) that determines base productivity. Plantations are facilities that produce Food Rations at a rate proportional to fertility:
+
+- **Plantation capacity** = Base capacity × (1.0 + fertility multiplier)
+- **Example:** A planet with 1.5x fertility has plantations that produce 50% more than a 1.0x baseline planet
+- **No inputs required:** Plantations convert environmental fertility directly into Food Rations each tick
+- **Seeding:** All cities start with at least one plantation; capacity is set during world generation based on planet fertility
+- **Expansion:** Companies can build additional plantations if cash and profitability justify the cost
+
+This system ensures:
+1. All planets naturally produce food (no planet is barren of sustenance)
+2. High-fertility planets become agricultural hubs, attracting population and trade
+3. Famine events (which consume food stocks) drive up prices, making plantations profitable
+4. Geographic diversity: Core worlds typically have higher fertility; Rim worlds are more variable
+
+**Future enhancement:** Continents will have individual terrain types (grassland, desert, tundra, etc.) that override planet-level fertility, allowing fine-grained geographic specialization.
+
 ### 3.2 Price Discovery
 
 There are no global price tables. Prices exist per market (city or station) and are determined by local supply and demand:
@@ -180,7 +198,7 @@ The engine flushes state back to the database periodically (e.g., every 100 tick
 | `sectors` | `id, empire_id, name, strategic_value` | FK → empires |
 | `star_systems` | `id, sector_id, name, star_type, resource_modifier` | FK → sectors |
 | `system_lanes` | `system_a_id, system_b_id, distance_ly, gate_status` | Adjacency graph for routing |
-| `celestial_bodies` | `id, system_id, body_type, mass, habitable, population_cap` | Planets, moons, stations |
+| `celestial_bodies` | `id, system_id, body_type, mass, habitable, population_cap, fertility` | Planets, moons, stations; fertility (0.0–3.0x) affects plantation production |
 | `continents` | `id, body_id, name, terrain_type, area_km2` | Sub-divisions of planets |
 | `cities` | `id, continent_id, name, population, infrastructure_lvl, port_tier` | Atomic economic unit |
 

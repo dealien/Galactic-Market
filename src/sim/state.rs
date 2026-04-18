@@ -19,6 +19,7 @@ pub struct CelestialBody {
     pub id: i32,
     pub system_id: i32,
     pub name: String,
+    pub fertility: f64,
 }
 
 /// A star system containing celestial bodies.

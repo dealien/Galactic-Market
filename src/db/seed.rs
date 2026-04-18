@@ -1,6 +1,6 @@
 use crate::sim::namegen::{self, LocationType};
 use anyhow::{Context, Result};
-use rand::thread_rng;
+use rand::{Rng, thread_rng};
 use sqlx::PgPool;
 use tracing::info;
 
@@ -69,17 +69,11 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     .bind("Tin Ingot").bind("Refined Material").bind(220.0).bind(true).bind(false)
     .fetch_one(&mut *tx).await?.0;
 
-    sqlx::query(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5)"
+    let food_rations_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5) RETURNING id"
     )
     .bind("Food Rations").bind("Consumer Good").bind(1.0).bind(true).bind(true)
-    .execute(&mut *tx).await?;
-
-    sqlx::query(
-        "INSERT INTO resource_types (name, category, base_mass_kg, stackable, is_vital) VALUES ($1, $2, $3, $4, $5)"
-    )
-    .bind("Water").bind("Consumer Good").bind(1.0).bind(true).bind(true)
-    .execute(&mut *tx).await?;
+    .fetch_one(&mut *tx).await?.0;
 
     info!("Seeded resource types.");
 
@@ -144,10 +138,16 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
         };
         for _ in 1..=2 {
             let name = namegen::generate_planet_name(loc_type, &mut rng);
+            // Generate fertility between 0.5 and 2.5 (multiplier of 0.5x to 2.5x base production)
+            // Core planets slightly more fertile on average
+            let fertility_base = if i < 2 { 1.5 } else { 1.2 };
+            let fertility_variance = (rng.gen_range(0.0f64..1.0f64) - 0.5) * 1.0; // ±0.5 variance
+            let fertility = (fertility_base + fertility_variance).clamp(0.5, 2.5);
+
             let id = sqlx::query_as::<_, (i32,)>(
-                "INSERT INTO celestial_bodies (system_id, name, body_type, mass, habitable, population_cap) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
+                "INSERT INTO celestial_bodies (system_id, name, body_type, mass, habitable, population_cap, fertility) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id"
             )
-            .bind(system_id).bind(&name).bind("Terrestrial").bind(5.97e24).bind(true).bind(10_000_000_000_i64)
+            .bind(system_id).bind(&name).bind("Terrestrial").bind(5.97e24).bind(true).bind(10_000_000_000_i64).bind(fertility)
             .fetch_one(&mut *tx).await?.0;
             body_ids.push(id);
         }
@@ -299,6 +299,14 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     .execute(&mut *tx)
     .await?;
 
+    // Plantation recipe for food production
+    let _plantation_recipe_id = sqlx::query_as::<_, (i32,)>(
+        "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks) VALUES ($1, $2, $3, $4, $5) RETURNING id"
+    )
+    .bind("Food Ration Growth").bind(food_rations_id).bind(1).bind("plantation").bind(1)
+    .fetch_one(&mut *tx).await?.0;
+    // Note: Plantation recipe has no inputs; production is powered by planet fertility
+
     // 8. Seed one freelancer mining company per city + startup loan + mine + deposit
     //    Sector capital cities (first city of first planet per system) also get a refinery.
     let startup_loan_amount = 50_000.0_f64;
@@ -411,6 +419,23 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
             .bind(city_id).bind(company_id).bind("refinery").bind(15).bind(initial_ratios)
             .execute(&mut *tx).await?;
         }
+
+        // Create a plantation facility for this company in its home city.
+        // Capacity scales with planet fertility: 5 + (fertility * 5)
+        // This gives a range of ~5-20 units/tick production
+        let fertility_row: (f64,) =
+            sqlx::query_as("SELECT fertility FROM celestial_bodies WHERE id = $1")
+                .bind(body_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        let fertility = fertility_row.0;
+        let plantation_capacity = (5.0 + (fertility * 5.0)).round() as i32;
+
+        sqlx::query(
+            "INSERT INTO facilities (city_id, company_id, facility_type, capacity) VALUES ($1, $2, $3, $4)"
+        )
+        .bind(city_id).bind(company_id).bind("plantation").bind(plantation_capacity)
+        .execute(&mut *tx).await?;
     }
 
     info!(
