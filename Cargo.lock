@@ -607,6 +607,7 @@ dependencies = [
 name = "galactic-market"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "clap",
  "codspeed-divan-compat",
  "comfy-table",

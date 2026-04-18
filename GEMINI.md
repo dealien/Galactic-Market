@@ -59,6 +59,23 @@ The simulation follows a **Research -> Strategy -> Execution** pattern with a fo
 - **Lint:** `cargo clippy -- -D warnings`
 - **Format:** `cargo fmt`
 
+### Debugging & Performance
+
+Running the simulation with the `--debug` flag generates high-volume tracing logs. When running for more than 100 ticks, console I/O becomes a significant bottleneck. 
+
+To maintain performance during debugging:
+1. **Pipe to File:** Redirect output to a log file instead of the terminal.
+2. **Post-Analysis:** Use `grep` (Linux/WSL) or `Select-String` (PowerShell) to analyze the resulting log.
+
+**PowerShell Example:**
+```powershell
+# Run 1000 ticks with full debug logs saved to a file
+cargo run -- --seed --ticks 1000 --debug > sim_debug.log 2>&1
+
+# Search for specific market activity in the log
+Select-String -Path sim_debug.log -Pattern "Match:" | Select-Object -First 20
+```
+
 ## Development Conventions
 
 ### Rust Standards

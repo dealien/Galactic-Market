@@ -1,8 +1,10 @@
 pub mod consumption;
 pub mod decisions;
+pub mod events;
 pub mod finance;
 pub mod logistics;
 pub mod markets;
+pub mod namegen;
 pub mod production;
 pub mod resources;
 pub mod state;
@@ -20,7 +22,11 @@ const FLUSH_INTERVAL: u64 = 100;
 
 impl SimState {
     /// Advance the simulation by one tick, running all active phases in order.
-    pub async fn run_tick(&mut self, pool: &PgPool) -> Result<(), sqlx::Error> {
+    pub async fn run_tick(
+        &mut self,
+        pool: &PgPool,
+        rng: &mut impl rand::Rng,
+    ) -> Result<(), sqlx::Error> {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log
@@ -49,35 +55,105 @@ impl SimState {
         // ── Phase 5: Finance ───────────────────────────────────────────────
         finance::run_finance(self);
 
+        // ── Phase 9: Random Events ───────────────────────────────────────────
+        events::run_events(self, rng);
+
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
             let summary = self.generate_summary();
 
-            let mut table = Table::new();
-            table.load_preset(UTF8_FULL_CONDENSED);
-            table.set_header(vec!["Metric", "Value"]);
-            table.add_row(vec!["Tick", &summary.tick.to_string()]);
-            table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
-            table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
-            table.add_row(vec![
+            // ═══════════════════════════════════════════════════════════════════
+            // Build a comprehensive multi-column Economic Pulse display
+            // ═══════════════════════════════════════════════════════════════════
+
+            // --- Table 1: Financial Summary ---
+            let mut financial_table = Table::new();
+            financial_table.load_preset(UTF8_FULL_CONDENSED);
+            financial_table.set_header(vec!["Financial Metric", "Value"]);
+            financial_table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
+            financial_table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
+            financial_table.add_row(vec![
+                "Debt-to-Cash Ratio",
+                &format!("{:.2}", summary.avg_debt_to_cash),
+            ]);
+            financial_table.add_row(vec![
                 "Total Inventory",
                 &summary.total_inventory.to_string(),
             ]);
-            table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
-            table.add_row(vec!["Trade Volume", &summary.trade_volume.to_string()]);
-            table.add_row(vec![
+            financial_table.add_row(vec![
+                "Trade Volume (This Flush)",
+                &summary.trade_volume.to_string(),
+            ]);
+
+            // --- Table 2: Market Activity ---
+            let mut market_table = Table::new();
+            market_table.load_preset(UTF8_FULL_CONDENSED);
+            market_table.set_header(vec!["Market Metric", "Value"]);
+            market_table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
+            market_table.add_row(vec!["  ├─ Buy Orders", &summary.buy_orders.to_string()]);
+            market_table.add_row(vec!["  └─ Sell Orders", &summary.sell_orders.to_string()]);
+            market_table.add_row(vec![
                 "Avg Ore Price",
                 &format!("{:.2}", summary.avg_ore_price),
             ]);
 
+            // Add refined material prices
             let mut ingot_prices: Vec<_> = summary.ingot_prices.iter().collect();
             ingot_prices.sort_by_key(|(name, _)| *name);
-
             for (name, price) in ingot_prices {
-                table.add_row(vec![&format!("Price: {}", name), &format!("{:.2}", price)]);
+                market_table.add_row(vec![
+                    &format!("  Price: {}", name),
+                    &format!("{:.2}", price),
+                ]);
             }
 
-            info!("\n=== Economic Pulse ===\n{table}");
+            // --- Table 3: Economy & Population ---
+            let mut economy_table = Table::new();
+            economy_table.load_preset(UTF8_FULL_CONDENSED);
+            economy_table.set_header(vec!["Economy Metric", "Value"]);
+            economy_table.add_row(vec![
+                "Total Population",
+                &summary.total_population.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Food in Circulation",
+                &summary.total_food_inventory.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Active Plantations",
+                &summary.active_plantations.to_string(),
+            ]);
+            economy_table.add_row(vec![
+                "Active Events",
+                &summary.total_active_events.to_string(),
+            ]);
+
+            // --- Table 4: Companies ---
+            let mut company_table = Table::new();
+            company_table.load_preset(UTF8_FULL_CONDENSED);
+            company_table.set_header(vec!["Company Type", "Count"]);
+            company_table.add_row(vec![
+                "Total Companies",
+                &summary.total_companies.to_string(),
+            ]);
+
+            let mut company_types: Vec<_> = summary.company_breakdown.iter().collect();
+            company_types.sort_by_key(|(name, _)| *name);
+            for (company_type, count) in company_types {
+                company_table.add_row(vec![&format!("  ├─ {}", company_type), &count.to_string()]);
+            }
+
+            info!("\n╔════════════════════════════════════════════════════════════════════════╗");
+            info!(
+                "║                        ECONOMIC PULSE - TICK {}                         ║",
+                summary.tick
+            );
+            info!("╚════════════════════════════════════════════════════════════════════════╝");
+            info!("\n📊 FINANCIAL SUMMARY\n{financial_table}");
+            info!("\n💱 MARKET ACTIVITY\n{market_table}");
+            info!("\n🌍 ECONOMY & POPULATION\n{economy_table}");
+            info!("\n🏢 COMPANY BREAKDOWN\n{company_table}");
+
             self.flush(pool).await?;
         }
 
@@ -133,10 +209,32 @@ impl SimState {
         }
 
         // ── Loans ─────────────────────────────────────────────────────────────
+        // Use UPSERT so that loans created in-memory during the tick are also persisted
+        // and mutable columns (balance, interest_rate) are kept up to date.
         for loan in self.loans.values() {
-            sqlx::query("UPDATE loans SET balance = $1 WHERE id = $2")
-                .bind(loan.balance)
-                .bind(loan.id)
+            sqlx::query(
+                "INSERT INTO loans (id, company_id, lender_company_id, principal, interest_rate, balance)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 ON CONFLICT (id) DO UPDATE SET
+                     interest_rate = EXCLUDED.interest_rate,
+                     balance = EXCLUDED.balance",
+            )
+            .bind(loan.id)
+            .bind(loan.company_id)
+            .bind(loan.lender_company_id)
+            .bind(loan.principal)
+            .bind(loan.interest_rate)
+            .bind(loan.balance)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Bank Accounts ─────────────────────────────────────────────────────
+        for account in self.bank_accounts.values() {
+            sqlx::query("UPDATE bank_accounts SET balance = $1, interest_rate = $2 WHERE id = $3")
+                .bind(account.balance)
+                .bind(account.interest_rate)
+                .bind(account.id)
                 .execute(&mut *tx)
                 .await?;
         }
@@ -205,6 +303,49 @@ impl SimState {
             .bind(h.low)
             .bind(h.close)
             .bind(h.volume)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Diplomatic Relations ──────────────────────────────────────────────
+        for rel in self.diplomatic_relations.values() {
+            sqlx::query(
+                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status)
+                 VALUES ($1, $2, $3, $4)
+                 ON CONFLICT (empire_a_id, empire_b_id)
+                 DO UPDATE SET tension = EXCLUDED.tension, status = EXCLUDED.status",
+            )
+            .bind(rel.empire_a_id)
+            .bind(rel.empire_b_id)
+            .bind(rel.tension)
+            .bind(&rel.status)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Active Events ─────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM active_events")
+            .execute(&mut *tx)
+            .await?;
+
+        for event in self.active_events.values() {
+            // Persist both target_id components so paired targets (e.g. blockade lanes
+            // identified by two system IDs) can be reconstructed after reload.
+            let encoded_target_id = event.target_id.map(|(a, _)| a);
+            let encoded_target_id_b = event.target_id.map(|(_, b)| b);
+
+            sqlx::query(
+                "INSERT INTO active_events (id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+            )
+            .bind(event.id)
+            .bind(&event.event_type)
+            .bind(encoded_target_id)
+            .bind(encoded_target_id_b)
+            .bind(event.severity)
+            .bind(event.start_tick as i64)
+            .bind(event.end_tick as i64)
+            .bind(&event.flavor_text)
             .execute(&mut *tx)
             .await?;
         }

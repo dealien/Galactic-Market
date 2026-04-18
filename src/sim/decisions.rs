@@ -4,6 +4,64 @@ use tracing::debug;
 use crate::sim::logistics::get_transport_info;
 use crate::sim::state::{Facility, Inventory, MarketOrder, SimState, TradeRoute};
 
+/// Evaluate and issue a loan from a commercial bank to a company.
+fn request_loan(state: &mut SimState, company_id: i32, amount: f64) -> bool {
+    let (bank_id, _home_city_id) = {
+        let c = &state.companies[&company_id];
+        let city = &state.cities[&c.home_city_id];
+        let body = &state.celestial_bodies[&city.body_id];
+        let system = &state.star_systems[&body.system_id];
+        let sector_id = system.sector_id;
+
+        // Find commercial bank in this sector
+        let bank = state.companies.values().find(|b| {
+            b.company_type == "commercial_bank" && {
+                let b_city = &state.cities[&b.home_city_id];
+                let b_body = &state.celestial_bodies[&b_city.body_id];
+                let b_sys = &state.star_systems[&b_body.system_id];
+                b_sys.sector_id == sector_id
+            }
+        });
+
+        match bank {
+            Some(b) => (b.id, c.home_city_id),
+            None => return false,
+        }
+    };
+
+    // Bank evaluates the loan (conservative Debt-to-Asset ratio < 0.8)
+    let current_debt = state.companies[&company_id].debt;
+    let total_assets = state.companies[&company_id].cash + 10000.0; // Minimal asset floor
+    let debt_to_asset = (current_debt + amount) / total_assets;
+
+    if debt_to_asset < 0.8 {
+        let bank_cash = state.companies[&bank_id].cash;
+        if bank_cash >= amount {
+            if let Some(bank) = state.companies.get_mut(&bank_id) {
+                bank.cash -= amount;
+            }
+            if let Some(company) = state.companies.get_mut(&company_id) {
+                company.cash += amount;
+                company.debt += amount;
+            }
+
+            let loan_id = state.next_loan_id();
+            state.add_loan(crate::sim::state::Loan {
+                id: loan_id,
+                company_id,
+                lender_company_id: Some(bank_id),
+                principal: amount,
+                interest_rate: 0.05,
+                balance: amount,
+            });
+            debug!(company_id, amount, "Loan approved by bank");
+            return true;
+        }
+    }
+
+    false
+}
+
 /// Re-evaluation interval ranges by company type (min, max ticks).
 fn eval_interval_range(company_type: &str) -> (u64, u64) {
     match company_type {
@@ -12,6 +70,8 @@ fn eval_interval_range(company_type: &str) -> (u64, u64) {
         "corporation" => (20, 60),
         "megacorp" => (60, 200),
         "merchant" => (1, 2),
+        "central_bank" => (50, 100),
+        "commercial_bank" => (5, 20),
         _ => (5, 20),
     }
 }
@@ -87,6 +147,71 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             .market_orders
             .retain(|_, order| order.company_id != company_id);
 
+        // --- Corporate Treasury AI (Deposit/Withdraw) ───────────────────────
+        let account_id = state
+            .bank_accounts
+            .values()
+            .find(|a| a.company_id == company_id)
+            .map(|a| a.id);
+
+        if let Some(acc_id) = account_id {
+            let (bank_company_id, bank_balance) = {
+                let a = &state.bank_accounts[&acc_id];
+                (a.bank_company_id, a.balance)
+            };
+            let company_cash = state.companies[&company_id].cash;
+
+            let buffer = 5000.0;
+            if company_cash > buffer * 1.5 {
+                let deposit = company_cash - buffer;
+                if let Some(c) = state.companies.get_mut(&company_id) {
+                    c.cash -= deposit;
+                }
+                if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
+                    a.balance += deposit;
+                }
+                // Credit bank's cash so it has liquidity for lending
+                if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+                    bank.cash += deposit;
+                }
+                debug!(company_id, deposit, "Company deposited excess cash to bank");
+            } else if company_cash < buffer * 0.5 && bank_balance > 0.0 {
+                let bank_available = match state.companies.get(&bank_company_id) {
+                    Some(b) => b.cash,
+                    None => {
+                        // Bank company missing despite a valid account — log the anomaly
+                        // and skip withdrawal to avoid corrupting other state.
+                        tracing::warn!(
+                            company_id,
+                            bank_company_id,
+                            "Bank company not found during withdrawal; skipping"
+                        );
+                        0.0
+                    }
+                };
+                // Limit withdrawal to what both the account and the bank actually hold
+                let withdraw = (buffer - company_cash)
+                    .min(bank_balance)
+                    .min(bank_available)
+                    .max(0.0);
+                if withdraw > 0.0 {
+                    if let Some(c) = state.companies.get_mut(&company_id) {
+                        c.cash += withdraw;
+                    }
+                    if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
+                        a.balance -= withdraw;
+                    }
+                    if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+                        bank.cash -= withdraw;
+                    }
+                    debug!(
+                        company_id,
+                        withdraw, "Company withdrew cash from bank for operations"
+                    );
+                }
+            }
+        }
+
         let company_type = {
             let company = state.companies.get_mut(&company_id).unwrap();
 
@@ -107,10 +232,165 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         let mut orders_to_post = Vec::new();
 
+        // --- Central Bank AI (Monetary Policy) ──────────────────────────────
+        if company_type == "central_bank" {
+            if let Some(city) = state.cities.get(&home_city_id)
+                && let Some(body) = state.celestial_bodies.get(&city.body_id)
+                && let Some(system) = state.star_systems.get(&body.system_id)
+                && let Some(sector) = state.sectors.get(&system.sector_id)
+            {
+                let empire_id = sector.empire_id;
+
+                let mut total_empire_cash = 0.0;
+                let mut total_empire_debt = 0.0;
+
+                for c in state.companies.values() {
+                    if let Some(c_city) = state.cities.get(&c.home_city_id)
+                        && let Some(c_body) = state.celestial_bodies.get(&c_city.body_id)
+                        && let Some(c_sys) = state.star_systems.get(&c_body.system_id)
+                        && let Some(c_sec) = state.sectors.get(&c_sys.sector_id)
+                        && c_sec.empire_id == empire_id
+                    {
+                        total_empire_cash += c.cash;
+                        total_empire_debt += c.debt;
+                    }
+                }
+
+                let current_prime = state.prime_rates.get(&empire_id).copied().unwrap_or(0.05);
+                let mut next_prime = current_prime;
+
+                if total_empire_debt > total_empire_cash * 0.4 {
+                    next_prime += 0.005;
+                } else if total_empire_debt < total_empire_cash * 0.1 {
+                    next_prime -= 0.005;
+                }
+
+                next_prime = next_prime.clamp(0.01, 0.15);
+                state.prime_rates.insert(empire_id, next_prime);
+                debug!(empire_id, next_prime, "Central Bank adjusted Prime Rate");
+
+                // --- Empire Relief AI (Market Buyout during Famines) ---
+                // If a city has a famine, the Empire treasury (Central Bank) buys food at a premium to attract merchants.
+                let central_bank = state.companies.get_mut(&company_id).unwrap();
+                if central_bank.cash > 100_000.0 {
+                    let mut famine_cities = Vec::new();
+                    for event in state.active_events.values() {
+                        if event.event_type == "famine"
+                            && let Some((c_id, 0)) = event.target_id
+                            && let Some(city) = state.cities.get(&c_id)
+                            && let Some(body) = state.celestial_bodies.get(&city.body_id)
+                            && let Some(system) = state.star_systems.get(&body.system_id)
+                            && let Some(sector) = state.sectors.get(&system.sector_id)
+                            && sector.empire_id == empire_id
+                        {
+                            famine_cities.push(c_id);
+                        }
+                    }
+
+                    for city_id in famine_cities {
+                        // Post buy orders for "Food" resources
+                        let relief_resources: Vec<i32> = state
+                            .resource_types
+                            .values()
+                            .filter(|r| r.name.contains("Food"))
+                            .map(|r| r.id)
+                            .collect();
+
+                        for res_id in relief_resources {
+                            let ema_price = state
+                                .ema_prices
+                                .get(&(city_id, res_id))
+                                .copied()
+                                .unwrap_or(50.0);
+                            let relief_price = ema_price * 1.5; // 50% premium
+
+                            orders_to_post.push(crate::sim::state::MarketOrder {
+                                id: state.next_order_id(),
+                                city_id,
+                                company_id,
+                                resource_type_id: res_id,
+                                order_type: "buy".into(),
+                                order_kind: "market".into(),
+                                price: relief_price,
+                                quantity: 100,
+                                created_tick: state.tick,
+                            });
+                            debug!(
+                                city_id,
+                                res_id, relief_price, "Central Bank posted RELIEF BUY ORDER"
+                            );
+                        }
+                    }
+                }
+            }
+            // Commit any relief orders before continuing
+            for order in orders_to_post {
+                state.market_orders.insert(order.id, order);
+            }
+            continue;
+        }
+
+        // --- Commercial Bank AI (Lending & Liquidity) ───────────────────────
+        if company_type == "commercial_bank" {
+            let empire_id = {
+                let city = &state.cities[&home_city_id];
+                let body = &state.celestial_bodies[&city.body_id];
+                let system = &state.star_systems[&body.system_id];
+                state.sectors[&system.sector_id].empire_id
+            };
+
+            let prime_rate = state.prime_rates.get(&empire_id).copied().unwrap_or(0.05);
+
+            let total_deposits: f64 = state
+                .bank_accounts
+                .values()
+                .filter(|a| a.bank_company_id == company_id)
+                .map(|a| a.balance)
+                .sum();
+
+            let total_loans: f64 = state
+                .loans
+                .values()
+                .filter(|l| l.lender_company_id == Some(company_id))
+                .map(|l| l.balance)
+                .sum();
+
+            let reserve_multiplier = 5.0;
+            let capacity = total_deposits * reserve_multiplier;
+            let utilization = if capacity > 0.0 {
+                total_loans / capacity
+            } else {
+                1.0
+            };
+
+            let local_lending_rate = prime_rate + (utilization * 0.10);
+            for loan in state.loans.values_mut() {
+                if loan.lender_company_id == Some(company_id) {
+                    loan.interest_rate = local_lending_rate;
+                }
+            }
+
+            let deposit_rate = (prime_rate * 0.5) + (utilization * 0.05);
+            for account in state.bank_accounts.values_mut() {
+                if account.bank_company_id == company_id {
+                    account.interest_rate = deposit_rate;
+                }
+            }
+
+            debug!(
+                company_id,
+                utilization, local_lending_rate, deposit_rate, "Commercial Bank updated rates"
+            );
+            continue;
+        }
+
         // --- Merchant AI (Arbitrageur) ──────────────────────────────────────────
         if company_type == "merchant" {
-            let company_cash = state.companies.get(&company_id).unwrap().cash;
-            if company_cash > 1000.0 {
+            let mut company_cash = state.companies.get(&company_id).unwrap().cash;
+            if company_cash > 1000.0
+                || (company_cash < 1000.0
+                    && state.companies.get(&company_id).unwrap().debt < 50000.0)
+            {
                 let mut best_arbitrage = None;
                 let mut best_profit_margin = 0.0;
 
@@ -144,6 +424,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
 
                 if let Some((res_id, origin, _dest, buy_price)) = best_arbitrage {
+                    // If high profit but low cash, take a loan to capitalize on the opportunity
+                    if company_cash < buy_price * 10.0
+                        && best_profit_margin > (buy_price * 0.2)
+                        && request_loan(state, company_id, buy_price * 100.0)
+                    {
+                        company_cash = state.companies.get(&company_id).unwrap().cash;
+                        debug!(company_id, "Merchant took a loan to fund arbitrage");
+                    }
+
                     let max_affordable = (company_cash * 0.5 / buy_price) as i64;
                     let qty = 50.min(max_affordable);
                     if qty > 0 {
@@ -392,7 +681,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 
         // ─── Consumer AI ──────────────────────────────────────────────────────
         if company_type == "consumer" {
-            let cash = state.companies.get(&company_id).unwrap().cash;
+            let mut cash = state.companies.get(&company_id).unwrap().cash;
+            // If consumer is out of cash (potentially due to famine prices), try to take a loan to continue buying food
+            if cash < 100.0 && request_loan(state, company_id, 5000.0) {
+                cash = state.companies.get(&company_id).unwrap().cash;
+                debug!(company_id, "Consumer took a liquidity loan");
+            }
+
             let target_ids: Vec<i32> = state
                 .resource_types
                 .values()
@@ -407,7 +702,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         .get(&(home_city_id, r_id))
                         .copied()
                         .unwrap_or(20.0);
-                    let bid_price = (target_price * 1.02).min(250.0);
+                    let bid_price = (target_price * 1.02).min(1000.0);
                     let qty = (budget_per_product / bid_price) as i64;
                     if qty > 0 {
                         orders_to_post.push(MarketOrder {
@@ -597,11 +892,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         let ask_price = if inv.quantity > (facility_capacity * 10) as i64
                             || ticks_since_trade > 100
                         {
-                            cost * 1.01
+                            cost * 0.95 // Liquidation!
                         } else if inv.quantity > (facility_capacity * 5) as i64
                             || ticks_since_trade > 50
                         {
-                            cost * 1.05
+                            cost * 1.01
                         } else if inv.quantity > (facility_capacity * 2) as i64
                             || ticks_since_trade > 20
                         {
@@ -631,10 +926,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             let expected_additional_profit_per_tick = best_overall_margin * 5.0;
             let roi_ticks = expansion_cost / expected_additional_profit_per_tick.max(0.01);
 
-            if company_cash > expansion_cost * 2.5
-                && best_overall_margin > (selected_ore_cost * 0.10)
-                && roi_ticks < 50.0
-            {
+            let mut can_afford = company_cash > expansion_cost * 2.5;
+            if !can_afford && roi_ticks < 30.0 && company_cash < expansion_cost {
+                // If extremely high ROI, try to leverage
+                can_afford = request_loan(state, company_id, expansion_cost);
+            }
+
+            if can_afford && best_overall_margin > (selected_ore_cost * 0.10) && roi_ticks < 50.0 {
                 let facility = state.facilities.get_mut(&facility_id).unwrap();
                 facility.capacity += 5;
                 facility.setup_ticks_remaining = 5;
@@ -643,7 +941,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     company_id,
                     new_capacity = facility.capacity,
                     cost = expansion_cost,
-                    "Miner expanded facility (Smarter Decision)"
+                    "Miner expanded facility (Smarter Decision with Leverage)"
                 );
             }
         }
@@ -852,11 +1150,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                             }
 
                             let target_bid = if raw_inv_qty == 0 || ticks_since_trade > 100 {
-                                in_price * 1.50
+                                in_price * 2.50
                             } else if ticks_since_trade > 50 {
-                                in_price * 1.25
+                                in_price * 1.50
                             } else if ticks_since_trade > 20 {
-                                in_price * 1.10
+                                in_price * 1.20
                             } else {
                                 in_price * 0.98
                             };
@@ -886,10 +1184,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     (total_positive_margin / facility.capacity as f64) * 5.0;
                 let roi_ticks = expansion_cost / expected_additional_profit.max(0.01);
 
-                if company_cash > expansion_cost * 3.0
-                    && expected_additional_profit > 50.0
-                    && roi_ticks < 60.0
-                {
+                let mut can_afford = company_cash > expansion_cost * 3.0;
+                if !can_afford && roi_ticks < 30.0 && company_cash < expansion_cost {
+                    // If extremely high ROI, try to leverage
+                    can_afford = request_loan(state, company_id, expansion_cost);
+                }
+
+                if can_afford && expected_additional_profit > 50.0 && roi_ticks < 60.0 {
                     let facility = state.facilities.get_mut(&facility_id).unwrap();
                     facility.capacity += 5;
                     facility.setup_ticks_remaining = 8;
@@ -898,7 +1199,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                         company_id,
                         new_capacity = facility.capacity,
                         cost = expansion_cost,
-                        "Refinery expanded facility (Smarter Decision)"
+                        "Refinery expanded facility (Smarter Decision with Leverage)"
                     );
                 }
             }

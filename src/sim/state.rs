@@ -19,6 +19,7 @@ pub struct CelestialBody {
     pub id: i32,
     pub system_id: i32,
     pub name: String,
+    pub fertility: f64,
 }
 
 /// A star system containing celestial bodies.
@@ -46,12 +47,66 @@ pub struct SystemLane {
     pub lane_type: String,
 }
 
+/// An interstellar empire or faction.
+#[derive(Debug, Clone)]
+pub struct Empire {
+    pub id: i32,
+    pub name: String,
+    pub government_type: String,
+    pub tax_rate_base: f64,
+}
+
+/// Diplomatic standing between two empires.
+#[derive(Debug, Clone)]
+pub struct DiplomaticRelation {
+    pub empire_a_id: i32,
+    pub empire_b_id: i32,
+    pub tension: f64,
+    pub status: String, // neutral, war, alliance
+}
+
+/// An active event affecting the simulation.
+///
+/// For blockade_lane events, target_id contains a tuple (sys_a, sys_b) representing
+/// the blocked jump lane. For other event types, target_id is a city_id (stored as tuple (id, 0)).
+#[derive(Debug, Clone)]
+pub struct ActiveEvent {
+    pub id: i32,
+    pub event_type: String,
+    /// For blockade_lane: (sys_a, sys_b). For others: (city_id, 0) or None.
+    pub target_id: Option<(i32, i32)>,
+    pub severity: f64,
+    pub start_tick: u64,
+    pub end_tick: u64,
+    pub flavor_text: Option<String>,
+}
+
+/// A definition of a possible random event from JSON.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EventDefinition {
+    pub id: String,
+    pub weight: u32,
+    pub severity_range: [f64; 2],
+    pub effects: Vec<EventEffectDefinition>,
+    pub flavor_text: String,
+}
+
+/// A mechanical effect defined in JSON.
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct EventEffectDefinition {
+    #[serde(rename = "type")]
+    pub effect_type: String,
+    pub duration_range: [u64; 2],
+}
+
 /// A resource type in the simulation.
 #[derive(Debug, Clone)]
 pub struct ResourceType {
     pub id: i32,
     pub name: String,
     pub category: String,
+    /// True for resources (food, water) whose absence triggers population crises.
+    pub is_vital: bool,
 }
 
 /// An economic actor (freelancer, company, corp, megacorp).
@@ -81,11 +136,22 @@ pub struct Deposit {
     pub extraction_cost_per_unit: f64,
 }
 
+/// A deposit account held by a company at a bank.
+#[derive(Debug, Clone)]
+pub struct BankAccount {
+    pub id: i32,
+    pub company_id: i32,
+    pub bank_company_id: i32,
+    pub balance: f64,
+    pub interest_rate: f64,
+}
+
 /// An outstanding loan for a company.
 #[derive(Debug, Clone)]
 pub struct Loan {
     pub id: i32,
     pub company_id: i32,
+    pub lender_company_id: Option<i32>,
     pub principal: f64,
     pub interest_rate: f64,
     pub balance: f64,
@@ -209,6 +275,13 @@ pub struct SimState {
     /// Outstanding loans keyed by loan ID.
     pub loans: HashMap<i32, Loan>,
 
+    /// Reverse index: company_id → [loan_ids] for O(1) lookup of all loans for a company.
+    /// Maintained to avoid O(loans) filtering in reconciliation.
+    pub company_to_loans: HashMap<i32, Vec<i32>>,
+
+    /// All bank accounts keyed by account ID.
+    pub bank_accounts: HashMap<i32, BankAccount>,
+
     /// All resource deposits keyed by deposit ID.
     pub deposits: HashMap<i32, Deposit>,
 
@@ -227,6 +300,9 @@ pub struct SimState {
     /// Active market orders keyed by order ID. Cleared each tick after matching.
     pub market_orders: HashMap<i32, MarketOrder>,
 
+    /// Count of connected components in the jump lane network during last pathfinding.
+    pub last_connected_components: usize,
+
     /// In-memory buffer of market history deltas — flushed every N ticks.
     pub market_history_buffer: Vec<MarketHistory>,
 
@@ -242,6 +318,9 @@ pub struct SimState {
     /// Metadata for all resource types.
     pub resource_types: HashMap<i32, ResourceType>,
 
+    /// Prime rates set by Central Banks, keyed by Empire ID.
+    pub prime_rates: HashMap<i32, f64>,
+
     /// Monotonic counter for generating order IDs during a tick.
     next_order_id: i32,
 
@@ -250,6 +329,33 @@ pub struct SimState {
 
     /// Monotonic counter for generating facility IDs.
     pub next_facility_id: i32,
+
+    /// Monotonic counter for generating loan IDs.
+    pub next_loan_id: i32,
+
+    /// All empires keyed by empire ID.
+    pub empires: HashMap<i32, Empire>,
+
+    /// Diplomatic relations keyed by (emp_a, emp_b) tuple.
+    pub diplomatic_relations: HashMap<(i32, i32), DiplomaticRelation>,
+
+    /// Active events keyed by event ID.
+    pub active_events: HashMap<i32, ActiveEvent>,
+
+    /// Generic event definitions from JSON.
+    pub event_definitions: Vec<EventDefinition>,
+
+    /// Monotonic counter for generating event IDs.
+    pub next_event_id: i32,
+
+    /// Version counter incremented whenever the set of active blockade_lane events
+    /// changes. `build_system_distances` uses this to avoid recomputing all-pairs
+    /// shortest paths every tick when no blockades have changed.
+    pub blockade_version: u64,
+
+    /// The blockade_version that was current the last time `system_distances` was
+    /// computed.
+    pub distances_blockade_version: u64,
 }
 
 impl Default for SimState {
@@ -271,20 +377,32 @@ impl SimState {
             sectors: HashMap::new(),
             companies: HashMap::new(),
             loans: HashMap::new(),
+            company_to_loans: HashMap::new(),
+            bank_accounts: HashMap::new(),
             deposits: HashMap::new(),
             inventories: HashMap::new(),
             facilities: HashMap::new(),
             recipes: HashMap::new(),
             trade_routes: HashMap::new(),
             market_orders: HashMap::new(),
+            last_connected_components: 1,
             market_history_buffer: Vec::new(),
             city_consumer_ids: HashMap::new(),
             price_cache: HashMap::new(),
             ema_prices: HashMap::new(),
             resource_types: HashMap::new(),
+            prime_rates: HashMap::new(),
             next_order_id: 1,
             next_trade_route_id: 1,
             next_facility_id: 1,
+            next_loan_id: 1,
+            empires: HashMap::new(),
+            diplomatic_relations: HashMap::new(),
+            active_events: HashMap::new(),
+            event_definitions: Vec::new(),
+            next_event_id: 1,
+            blockade_version: 0,
+            distances_blockade_version: u64::MAX, // Force initial computation
         }
     }
 
@@ -308,40 +426,115 @@ impl SimState {
         self.next_facility_id += 1;
         id
     }
-}
 
-/// A high-level snapshot of the simulation state for debugging and logging.
-#[derive(Debug, Default)]
-pub struct TickSummary {
-    pub tick: u64,
-    pub total_cash: f64,
-    pub total_debt: f64,
-    pub total_inventory: i64,
-    pub active_orders: usize,
-    pub trade_volume: i64,
-    pub avg_ore_price: f64,
-    pub ingot_prices: HashMap<String, f64>,
-}
+    /// Generate a unique loan ID.
+    pub fn next_loan_id(&mut self) -> i32 {
+        let id = self.next_loan_id;
+        self.next_loan_id += 1;
+        id
+    }
 
-impl SimState {
+    /// Add a loan and update the company_to_loans reverse index.
+    pub fn add_loan(&mut self, loan: crate::sim::state::Loan) {
+        let company_id = loan.company_id;
+        let loan_id = loan.id;
+        self.loans.insert(loan_id, loan);
+        self.company_to_loans
+            .entry(company_id)
+            .or_default()
+            .push(loan_id);
+    }
+
+    /// Remove a loan and update the company_to_loans reverse index.
+    pub fn remove_loan(&mut self, loan_id: i32) -> Option<crate::sim::state::Loan> {
+        if let Some(loan) = self.loans.remove(&loan_id) {
+            if let Some(loans) = self.company_to_loans.get_mut(&loan.company_id) {
+                loans.retain(|id| *id != loan_id);
+            }
+            return Some(loan);
+        }
+        None
+    }
+
+    /// Get all loan IDs for a company efficiently (O(1) lookup) without cloning.
+    pub fn get_company_loans(&self, company_id: i32) -> &[i32] {
+        self.company_to_loans
+            .get(&company_id)
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
+    }
+
     /// Calculate a summary of the current simulation state.
     pub fn generate_summary(&self) -> TickSummary {
         let mut summary = TickSummary {
             tick: self.tick,
             active_orders: self.market_orders.len(),
+            total_companies: self.companies.len(),
             ..Default::default()
         };
 
+        // --- Companies & Finance ---
+        let mut total_company_debt = 0.0;
+        let mut company_count_for_ratio = 0;
         for c in self.companies.values() {
             summary.total_cash += c.cash;
             summary.total_debt += c.debt;
+
+            // Track company type breakdown
+            summary
+                .company_breakdown
+                .entry(c.company_type.clone())
+                .and_modify(|count| *count += 1)
+                .or_insert(1);
+
+            // Accumulate for debt-to-cash ratio
+            if c.cash + c.debt > 0.0 {
+                total_company_debt += c.debt;
+                company_count_for_ratio += 1;
+            }
         }
 
+        if company_count_for_ratio > 0 {
+            summary.avg_debt_to_cash = total_company_debt / (company_count_for_ratio as f64);
+        }
+
+        // --- Population ---
+        for city in self.cities.values() {
+            summary.total_population += city.population;
+        }
+
+        // --- Inventory & Food ---
         for inv in self.inventories.values() {
             summary.total_inventory += inv.quantity;
+
+            // Check if this is food
+            if let Some(res) = self.resource_types.get(&inv.resource_type_id)
+                && res.is_vital
+            {
+                summary.total_food_inventory += inv.quantity;
+            }
         }
 
-        // Use the persistent price cache for averages across all cities
+        // --- Plantations ---
+        for facility in self.facilities.values() {
+            if facility.facility_type == "plantation" {
+                summary.active_plantations += 1;
+            }
+        }
+
+        // --- Active Events ---
+        summary.total_active_events = self.active_events.len();
+
+        // --- Market Orders Breakdown ---
+        for order in self.market_orders.values() {
+            match order.order_type.as_str() {
+                "buy" => summary.buy_orders += 1,
+                "sell" => summary.sell_orders += 1,
+                _ => {}
+            }
+        }
+
+        // --- Prices ---
         let mut ore_total = 0.0;
         let mut ore_count = 0;
 
@@ -360,9 +553,32 @@ impl SimState {
             summary.avg_ore_price = ore_total / ore_count as f64;
         }
 
-        // Volume from the latest buffer entries
+        // Total volume accumulated since the last flush
         summary.trade_volume = self.market_history_buffer.iter().map(|h| h.volume).sum();
 
         summary
     }
+}
+
+/// A high-level snapshot of the simulation state for debugging and logging.
+#[derive(Debug, Default)]
+pub struct TickSummary {
+    pub tick: u64,
+    pub total_cash: f64,
+    pub total_debt: f64,
+    pub total_inventory: i64,
+    pub active_orders: usize,
+    pub trade_volume: i64,
+    pub avg_ore_price: f64,
+    pub ingot_prices: HashMap<String, f64>,
+    // New metrics for enhanced display
+    pub total_companies: usize,
+    pub company_breakdown: HashMap<String, usize>, // company_type -> count
+    pub total_population: i64,
+    pub total_food_inventory: i64,
+    pub active_plantations: usize,
+    pub avg_debt_to_cash: f64,
+    pub total_active_events: usize,
+    pub buy_orders: usize,
+    pub sell_orders: usize,
 }

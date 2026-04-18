@@ -4,9 +4,13 @@ use crate::sim::state::{Inventory, Recipe, SimState};
 
 /// Phase 2: Production / refining.
 ///
-/// For each refinery facility, look up all applicable recipes and attempt to
-/// run them. Inputs are consumed from the company's local inventory; outputs
-/// are added. One recipe execution per facility per tick (limited by capacity).
+/// Handles two types of production:
+/// 1. Refineries: Transform inputs into outputs (limited by input availability)
+/// 2. Plantations: Produce Food Rations based on planet fertility (renewable)
+///
+/// For each facility, look up applicable recipes and attempt to run them.
+/// Inputs are consumed from the company's local inventory; outputs are added.
+/// One recipe execution per facility per tick (limited by capacity).
 ///
 /// # Examples
 /// ```
@@ -20,31 +24,43 @@ pub fn run_production(state: &mut SimState) {
     let recipes: Vec<Recipe> = state.recipes.values().cloned().collect();
 
     let mut active_refineries = Vec::new();
+    let mut active_plantations = Vec::new();
 
     for facility in state.facilities.values_mut() {
-        if facility.facility_type != "refinery" {
-            continue;
+        if facility.facility_type == "refinery" {
+            if facility.setup_ticks_remaining > 0 {
+                facility.setup_ticks_remaining -= 1;
+                continue;
+            }
+
+            let ratios = match &facility.production_ratios {
+                Some(r) => r.clone(),
+                None => continue,
+            };
+
+            active_refineries.push((
+                facility.id,
+                facility.city_id,
+                facility.company_id,
+                facility.capacity,
+                ratios,
+            ));
+        } else if facility.facility_type == "plantation" {
+            if facility.setup_ticks_remaining > 0 {
+                facility.setup_ticks_remaining -= 1;
+                continue;
+            }
+
+            active_plantations.push((
+                facility.id,
+                facility.city_id,
+                facility.company_id,
+                facility.capacity,
+            ));
         }
-
-        if facility.setup_ticks_remaining > 0 {
-            facility.setup_ticks_remaining -= 1;
-            continue;
-        }
-
-        let ratios = match &facility.production_ratios {
-            Some(r) => r.clone(),
-            None => continue,
-        };
-
-        active_refineries.push((
-            facility.id,
-            facility.city_id,
-            facility.company_id,
-            facility.capacity,
-            ratios,
-        ));
     }
 
+    // Process refineries (original logic)
     for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
@@ -101,6 +117,61 @@ pub fn run_production(state: &mut SimState) {
                 recipe = %recipe.name,
                 runs,
                 "Production run complete"
+            );
+        }
+    }
+
+    // Process plantations (fertility-driven food production)
+    for (_facility_id, city_id, company_id, capacity) in active_plantations {
+        let company = match state.companies.get(&company_id) {
+            Some(c) => c,
+            None => continue,
+        };
+
+        if company.status != "active" {
+            continue;
+        }
+
+        // Get the city and its body (planet) to access fertility
+        let city = match state.cities.get(&city_id) {
+            Some(c) => c,
+            None => continue,
+        };
+
+        let body = match state.celestial_bodies.get(&city.body_id) {
+            Some(b) => b,
+            None => continue,
+        };
+
+        // Find the plantation recipe
+        let plantation_recipe = recipes
+            .iter()
+            .find(|r| r.facility_type == "plantation")
+            .cloned();
+
+        if let Some(recipe) = plantation_recipe {
+            // Production is: capacity * (1.0 + fertility_bonus)
+            // fertility_bonus ranges from 0.0 (0.0x) to 3.0 (3.0x)
+            let fertility_multiplier = body.fertility;
+            let adjusted_capacity = (capacity as f64 * (1.0 + fertility_multiplier)).round() as i64;
+
+            // Produce outputs
+            let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
+            let entry = state.inventories.entry(out_key).or_insert(Inventory {
+                company_id,
+                city_id,
+                resource_type_id: recipe.output_resource_id,
+                quantity: 0,
+            });
+            entry.quantity += recipe.output_qty as i64 * adjusted_capacity;
+
+            debug!(
+                company_id = company_id,
+                city_id = city_id,
+                fertility = body.fertility,
+                adjusted_capacity = adjusted_capacity,
+                output_qty = recipe.output_qty as i64 * adjusted_capacity,
+                "Plantation production complete"
             );
         }
     }
@@ -229,5 +300,181 @@ mod tests {
 
         let ingot_key = Inventory::key(1, 1, 2);
         assert_eq!(state.inventories[&ingot_key].quantity, 2);
+    }
+
+    #[test]
+    fn plantation_produces_food_at_base_fertility() {
+        use crate::sim::state::CelestialBody;
+
+        let mut state = SimState::new();
+
+        // Set up city and planet with 1.0x fertility
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Fertile Planet".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Farmer".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Plantation with base capacity 10
+        state.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "plantation".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        // Plantation recipe: produces Food Rations (resource_id 3)
+        state.recipes.insert(
+            1,
+            Recipe {
+                id: 1,
+                name: "Food Ration Growth".into(),
+                output_resource_id: 3,
+                output_qty: 1,
+                facility_type: "plantation".into(),
+                inputs: vec![],
+            },
+        );
+
+        run_production(&mut state);
+
+        // At 1.0x fertility, adjusted_capacity = 10 * (1.0 + 1.0) = 20
+        // output = 1 * 20 = 20 Food Rations
+        let food_key = Inventory::key(1, 1, 3);
+        assert_eq!(
+            state
+                .inventories
+                .get(&food_key)
+                .map(|i| i.quantity)
+                .unwrap_or(0),
+            20
+        );
+    }
+
+    #[test]
+    fn plantation_produces_more_on_high_fertility() {
+        use crate::sim::state::CelestialBody;
+
+        let mut state = SimState::new();
+
+        // Set up city and planet with 2.0x fertility (double production)
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Very Fertile Planet".into(),
+                fertility: 2.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 0,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Farmer".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Plantation with base capacity 10
+        state.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "plantation".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        // Plantation recipe
+        state.recipes.insert(
+            1,
+            Recipe {
+                id: 1,
+                name: "Food Ration Growth".into(),
+                output_resource_id: 3,
+                output_qty: 1,
+                facility_type: "plantation".into(),
+                inputs: vec![],
+            },
+        );
+
+        run_production(&mut state);
+
+        // At 2.0x fertility, adjusted_capacity = 10 * (1.0 + 2.0) = 30
+        // output = 1 * 30 = 30 Food Rations
+        let food_key = Inventory::key(1, 1, 3);
+        assert_eq!(
+            state
+                .inventories
+                .get(&food_key)
+                .map(|i| i.quantity)
+                .unwrap_or(0),
+            30
+        );
     }
 }

@@ -43,6 +43,7 @@ fn setup_benchmark_hierarchy(state: &mut SimState, num_cities: usize) {
                 id: i as i32,
                 system_id: sys_id,
                 name: format!("Body {i}"),
+                fertility: 1.5,
             },
         );
     }
@@ -351,16 +352,14 @@ fn make_finance_state(num_companies: usize) -> SimState {
                 last_trade_tick: 0,
             },
         );
-        state.loans.insert(
-            i,
-            Loan {
-                id: i,
-                company_id: i,
-                principal: 1000.0,
-                interest_rate: 0.05,
-                balance: 1000.0,
-            },
-        );
+        state.add_loan(Loan {
+            id: i,
+            company_id: i,
+            lender_company_id: None,
+            principal: 1000.0,
+            interest_rate: 0.05,
+            balance: 1000.0,
+        });
     }
     state
 }
@@ -408,6 +407,7 @@ fn make_spatial_state() -> SimState {
             id: 1,
             system_id: 1,
             name: "B1".into(),
+            fertility: 1.5,
         },
     );
     state.cities.insert(
@@ -465,6 +465,7 @@ fn make_merchant_state(num_merchants: usize) -> SimState {
                 id: i,
                 name: format!("Res {i}"),
                 category: "Refined Material".into(),
+                is_vital: false,
             },
         );
     }
