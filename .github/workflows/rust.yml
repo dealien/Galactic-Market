@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: ["main"]
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
   DATABASE_URL: postgres://postgres:password@localhost:5432/galactic_market
