@@ -65,11 +65,15 @@ pub struct DiplomaticRelation {
 }
 
 /// An active event affecting the simulation.
+///
+/// For blockade_lane events, target_id contains a tuple (sys_a, sys_b) representing
+/// the blocked jump lane. For other event types, target_id is a city_id (stored as tuple (id, 0)).
 #[derive(Debug, Clone)]
 pub struct ActiveEvent {
     pub id: i32,
     pub event_type: String,
-    pub target_id: Option<i32>,
+    /// For blockade_lane: (sys_a, sys_b). For others: (city_id, 0) or None.
+    pub target_id: Option<(i32, i32)>,
     pub severity: f64,
     pub start_tick: u64,
     pub end_tick: u64,

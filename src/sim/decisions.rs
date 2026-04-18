@@ -1,3 +1,5 @@
+#![allow(clippy::expect_fun_call)]
+
 use rand::Rng;
 use tracing::debug;
 
@@ -250,7 +252,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     let mut famine_cities = Vec::new();
                     for event in state.active_events.values() {
                         if event.event_type == "famine"
-                            && let Some(c_id) = event.target_id
+                            && let Some((c_id, 0)) = event.target_id
                             && let Some(city) = state.cities.get(&c_id)
                             && let Some(body) = state.celestial_bodies.get(&city.body_id)
                             && let Some(system) = state.star_systems.get(&body.system_id)

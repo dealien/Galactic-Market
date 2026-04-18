@@ -40,6 +40,13 @@ impl LocationType {
 
 static DICTIONARY: OnceLock<NameDictionary> = OnceLock::new();
 
+/// Initialize the name dictionary from a JSON file.
+///
+/// This function MUST be called before any name generation functions are used.
+/// If initialization fails, all subsequent name generation calls will panic with a clear error message.
+///
+/// # Errors
+/// Returns an error if the file cannot be read or if the JSON is invalid.
 pub fn init_dictionary(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
     let dict: NameDictionary = serde_json::from_str(&content)?;

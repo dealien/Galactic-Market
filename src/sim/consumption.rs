@@ -43,7 +43,7 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
         let famine_severity = state
             .active_events
             .values()
-            .filter(|e| e.event_type == "famine" && e.target_id == Some(city_id))
+            .filter(|e| e.event_type == "famine" && e.target_id == Some((city_id, 0)))
             .map(|e| e.severity)
             .sum::<f64>();
 

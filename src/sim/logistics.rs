@@ -50,12 +50,11 @@ pub fn build_system_distances(state: &mut SimState) {
     state.system_distances.clear();
     let mut graph = UnGraphMap::<i32, f64>::new();
 
-    // Identify blockaded lanes
+    // Identify blockaded lanes (now stored as tuples in events)
     let mut blockaded_lanes = std::collections::HashSet::new();
     for event in state.active_events.values() {
-        if let Some(target) = event
-            .target_id
-            .filter(|_| event.event_type == "blockade_lane")
+        if event.event_type == "blockade_lane"
+            && let Some(target) = event.target_id
         {
             blockaded_lanes.insert(target);
         }
@@ -63,9 +62,7 @@ pub fn build_system_distances(state: &mut SimState) {
 
     // Add edges for all lanes that aren't blockaded
     for (tuple, lane) in &state.system_lanes {
-        // Deterministic ID for the lane tuple to match events::find_lane_id
-        let lane_id = tuple.0 ^ tuple.1;
-        if blockaded_lanes.contains(&lane_id) {
+        if blockaded_lanes.contains(tuple) {
             continue;
         }
         graph.add_edge(lane.system_a_id, lane.system_b_id, lane.distance_ly);

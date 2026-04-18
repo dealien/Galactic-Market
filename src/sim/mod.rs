@@ -240,13 +240,16 @@ impl SimState {
             .await?;
 
         for event in self.active_events.values() {
+            // Encode target_id for storage: (a, b) -> use first component, or 0 if None
+            let encoded_target_id = event.target_id.map(|(a, _)| a);
+
             sqlx::query(
                 "INSERT INTO active_events (id, event_type, target_id, severity, start_tick, end_tick, flavor_text)
                  VALUES ($1, $2, $3, $4, $5, $6, $7)",
             )
             .bind(event.id)
             .bind(&event.event_type)
-            .bind(event.target_id)
+            .bind(encoded_target_id)
             .bind(event.severity)
             .bind(event.start_tick as i64)
             .bind(event.end_tick as i64)

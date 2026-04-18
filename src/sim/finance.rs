@@ -33,7 +33,6 @@ pub fn run_finance(state: &mut SimState) {
                 borrower.cash = 0.0;
                 if let Some(loan) = state.loans.get_mut(&loan_id) {
                     loan.balance += shortfall;
-                    borrower.debt += shortfall;
                     debug!(
                         borrower_id,
                         shortfall, "Interest shortfall added to loan balance"
@@ -175,6 +174,30 @@ pub fn run_finance(state: &mut SimState) {
                 company_id = company.id,
                 "Company has gone BANKRUPT due to excessive debt!"
             );
+        }
+    }
+
+    // ─── Reconciliation: Ensure company.debt matches total loan balance ───
+    // This prevents double-counting bugs where debt is tracked in multiple places.
+    let company_ids: Vec<i32> = state.companies.keys().cloned().collect();
+    for company_id in company_ids {
+        let total_debt: f64 = state
+            .loans
+            .values()
+            .filter(|loan| loan.company_id == company_id)
+            .map(|loan| loan.balance)
+            .sum();
+
+        if let Some(company) = state.companies.get_mut(&company_id)
+            && (company.debt - total_debt).abs() > 0.01
+        {
+            debug!(
+                company_id,
+                old_debt = company.debt,
+                actual_debt = total_debt,
+                "Reconciled company debt from loans"
+            );
+            company.debt = total_debt;
         }
     }
 }

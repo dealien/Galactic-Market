@@ -49,7 +49,7 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
         match effect_def.effect_type.as_str() {
             "blockade_lane" => {
                 if let Some(&(sys_a, sys_b)) = pick_random_lane(state, rng) {
-                    event.target_id = Some(find_lane_id(state, sys_a, sys_b));
+                    event.target_id = Some((sys_a, sys_b));
                     let name_a = &state.star_systems[&sys_a].name;
                     let name_b = &state.star_systems[&sys_b].name;
                     event.flavor_text = Some(
@@ -61,7 +61,7 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
             }
             "infrastructure_damage" | "famine" => {
                 if let Some(&city_id) = pick_random_city(state, rng) {
-                    event.target_id = Some(city_id);
+                    event.target_id = Some((city_id, 0));
                     let city_name = &state.cities[&city_id].name;
                     event.flavor_text = Some(def.flavor_text.replace("{city_name}", city_name));
                 }
@@ -141,11 +141,6 @@ fn pick_random_lane<'a>(state: &'a SimState, rng: &mut impl Rng) -> Option<&'a (
     Some(keys[rng.gen_range(0..keys.len())])
 }
 
-fn find_lane_id(_state: &SimState, sys_a: i32, sys_b: i32) -> i32 {
-    // Matches the logic in logistics.rs:build_system_distances
-    sys_a ^ sys_b
-}
-
 fn pick_random_city<'a>(state: &'a SimState, rng: &mut impl Rng) -> Option<&'a i32> {
     let keys: Vec<_> = state.cities.keys().collect();
     if keys.is_empty() {
@@ -165,4 +160,91 @@ fn pick_random_empire_pair(state: &SimState, rng: &mut impl Rng) -> Option<(i32,
         b = keys[rng.gen_range(0..keys.len())];
     }
     Some((a, b))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::sim::state::{SimState, StarSystem};
+
+    #[test]
+    fn test_lane_blockade_no_collision() {
+        let mut state = SimState::new();
+
+        // Create 4 star systems
+        for i in 1..=4 {
+            state.star_systems.insert(
+                i,
+                StarSystem {
+                    id: i,
+                    sector_id: 1,
+                    name: format!("System-{}", i),
+                },
+            );
+        }
+
+        // Create two lanes: (1,2) and (3,4)
+        state.system_lanes.insert(
+            (1, 2),
+            crate::sim::state::SystemLane {
+                system_a_id: 1,
+                system_b_id: 2,
+                distance_ly: 10.0,
+                lane_type: "standard".to_string(),
+            },
+        );
+
+        state.system_lanes.insert(
+            (3, 4),
+            crate::sim::state::SystemLane {
+                system_a_id: 3,
+                system_b_id: 4,
+                distance_ly: 10.0,
+                lane_type: "standard".to_string(),
+            },
+        );
+
+        // Create blockade events for both lanes
+        let event1 = crate::sim::state::ActiveEvent {
+            id: 1,
+            event_type: "blockade_lane".to_string(),
+            target_id: Some((1, 2)),
+            severity: 1.0,
+            start_tick: 0,
+            end_tick: 100,
+            flavor_text: None,
+        };
+
+        let event2 = crate::sim::state::ActiveEvent {
+            id: 2,
+            event_type: "blockade_lane".to_string(),
+            target_id: Some((3, 4)),
+            severity: 1.0,
+            start_tick: 0,
+            end_tick: 100,
+            flavor_text: None,
+        };
+
+        state.active_events.insert(1, event1);
+        state.active_events.insert(2, event2);
+
+        // Build distances; this should recognize both blockades as separate lanes
+        crate::sim::logistics::build_system_distances(&mut state);
+
+        // Verify blockades are correctly identified as separate events
+        assert_eq!(
+            state.active_events.len(),
+            2,
+            "Both blockade events should exist"
+        );
+        let blockade_targets: Vec<_> = state
+            .active_events
+            .values()
+            .filter(|e| e.event_type == "blockade_lane")
+            .map(|e| e.target_id)
+            .collect();
+        assert_eq!(blockade_targets.len(), 2);
+        assert!(blockade_targets.contains(&Some((1, 2))));
+        assert!(blockade_targets.contains(&Some((3, 4))));
+    }
 }

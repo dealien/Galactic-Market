@@ -136,7 +136,7 @@ fn test_famine_relief_buy_orders() {
         ActiveEvent {
             id: 1,
             event_type: "famine".into(),
-            target_id: Some(1),
+            target_id: Some((1, 0)),
             severity: 1.0,
             start_tick: 1,
             end_tick: 10,
@@ -288,5 +288,57 @@ fn test_consumer_borrows_during_liquidity_crisis() {
     assert!(
         consumer.cash >= 5000.0,
         "Consumer should have received liquidity injection"
+    );
+}
+
+#[test]
+fn test_debt_reconciliation_after_interest_shortfall() {
+    // Test that company.debt is reconciled from actual loan balances
+    // to prevent double-counting bugs
+    let mut state = setup_empire_state();
+
+    // Create a company with a loan
+    let company_id = 500;
+    state.companies.insert(
+        company_id,
+        Company {
+            id: company_id,
+            name: "Test Borrower".into(),
+            company_type: "freelancer".into(),
+            home_city_id: 1,
+            cash: 50.0,   // Only $50 cash
+            debt: 1000.0, // Initial debt from loan principal
+            next_eval_tick: 100,
+            status: "active".into(),
+            last_trade_tick: 0,
+        },
+    );
+
+    // Create a loan for $1000
+    state.loans.insert(
+        1,
+        galactic_market::sim::state::Loan {
+            id: 1,
+            company_id,
+            lender_company_id: Some(100), // Central Bank
+            principal: 1000.0,
+            interest_rate: 0.05, // 5% annual = 0.05/52 per tick ≈ 0.00096
+            balance: 1000.0,
+        },
+    );
+
+    // Manually run finance phase
+    galactic_market::sim::finance::run_finance(&mut state);
+
+    // After finance, company.debt should be reconciled from actual loans
+    let company = &state.companies[&company_id];
+    let loan_balance = state.loans[&1].balance;
+
+    // Debt should match the loan balance (within floating point tolerance)
+    assert!(
+        (company.debt - loan_balance).abs() < 0.01,
+        "company.debt ({}) should match loan balance ({}) after reconciliation",
+        company.debt,
+        loan_balance
     );
 }
