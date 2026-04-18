@@ -356,6 +356,17 @@ pub struct SimState {
     /// The blockade_version that was current the last time `system_distances` was
     /// computed.
     pub distances_blockade_version: u64,
+
+    /// Issue #9: Wage pools per city (accumulated during tick, drawn down by consumption).
+    /// Keyed by city_id; represents total wages earned this tick.
+    pub city_wage_pools: HashMap<i32, f64>,
+
+    /// Issue #9: Empire treasury balances (tax revenue accumulator).
+    /// Keyed by empire_id; represents accumulated taxes minus spending.
+    pub empire_treasuries: HashMap<i32, f64>,
+
+    /// Issue #10: Reverse index: company_id → empire_id for fast tax routing.
+    pub company_to_empire: HashMap<i32, i32>,
 }
 
 impl Default for SimState {
@@ -403,6 +414,9 @@ impl SimState {
             next_event_id: 1,
             blockade_version: 0,
             distances_blockade_version: u64::MAX, // Force initial computation
+            city_wage_pools: HashMap::new(),
+            empire_treasuries: HashMap::new(),
+            company_to_empire: HashMap::new(),
         }
     }
 
@@ -464,7 +478,67 @@ impl SimState {
             .unwrap_or(&[])
     }
 
-    /// Calculate a summary of the current simulation state.
+    // === Issue #9: Wage Pool & Taxation Helpers ===
+
+    /// Get the current wage pool for a city.
+    pub fn get_wage_pool(&self, city_id: i32) -> f64 {
+        self.city_wage_pools.get(&city_id).copied().unwrap_or(0.0)
+    }
+
+    /// Add wages to a city's wage pool.
+    pub fn add_to_wage_pool(&mut self, city_id: i32, amount: f64) {
+        *self.city_wage_pools.entry(city_id).or_insert(0.0) += amount;
+    }
+
+    /// Withdraw wages from a city's wage pool (e.g., for consumption).
+    pub fn withdraw_from_wage_pool(&mut self, city_id: i32, amount: f64) -> f64 {
+        let pool = self.city_wage_pools.entry(city_id).or_insert(0.0);
+        let available = *pool;
+        if available >= amount {
+            *pool -= amount;
+            amount
+        } else {
+            *pool = 0.0;
+            available
+        }
+    }
+
+    /// Reset all wage pools to zero (called at start of each tick after loading state).
+    pub fn reset_wage_pools(&mut self) {
+        for pool in self.city_wage_pools.values_mut() {
+            *pool = 0.0;
+        }
+    }
+
+    /// Get the current treasury balance for an empire.
+    pub fn get_empire_treasury(&self, empire_id: i32) -> f64 {
+        self.empire_treasuries.get(&empire_id).copied().unwrap_or(0.0)
+    }
+
+    /// Add tax revenue to an empire's treasury.
+    pub fn add_to_empire_treasury(&mut self, empire_id: i32, amount: f64) {
+        *self.empire_treasuries.entry(empire_id).or_insert(0.0) += amount;
+    }
+
+    /// Withdraw treasury funds (e.g., for empire relief spending).
+    pub fn withdraw_from_empire_treasury(&mut self, empire_id: i32, amount: f64) -> f64 {
+        let treasury = self.empire_treasuries.entry(empire_id).or_insert(0.0);
+        let available = *treasury;
+        if available >= amount {
+            *treasury -= amount;
+            amount
+        } else {
+            *treasury = 0.0;
+            available
+        }
+    }
+
+    /// Calculate the empire_id for a company (via sector → empire mapping).
+    pub fn get_company_empire(&self, company_id: i32) -> Option<i32> {
+        self.company_to_empire.get(&company_id).copied()
+    }
+
+    /// Calculate and calculate summary of the current simulation state.
     pub fn generate_summary(&self) -> TickSummary {
         let mut summary = TickSummary {
             tick: self.tick,

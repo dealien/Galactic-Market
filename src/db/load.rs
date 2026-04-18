@@ -508,5 +508,47 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         "Primed market price cache."
     );
 
+    // === Issue #9 & #10: Initialize closed-loop economy structures ===
+
+    // Initialize wage pools for all cities (start at 0 each tick)
+    for &city_id in state.cities.keys() {
+        state.city_wage_pools.insert(city_id, 0.0);
+    }
+
+    // Initialize empire treasuries from database
+    let treasury_rows = sqlx::query_as::<_, (i32, f64)>(
+        "SELECT id, COALESCE(treasury_balance::FLOAT8, 0.0) FROM empires",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (empire_id, treasury) in treasury_rows {
+        state.empire_treasuries.insert(empire_id, treasury);
+    }
+
+    info!(
+        count = state.empire_treasuries.len(),
+        "Loaded empire treasuries."
+    );
+
+    // Build company_id → empire_id reverse index for fast tax routing
+    for (sector_id, sector) in &state.sectors {
+        let empire_id = sector.empire_id;
+        for (_system_id, system) in state.star_systems.iter().filter(|(_, s)| s.sector_id == *sector_id) {
+            for (_body_id, body) in state.celestial_bodies.iter().filter(|(_, b)| b.system_id == system.id) {
+                for (_city_id, city) in state.cities.iter().filter(|(_, c)| c.body_id == body.id) {
+                    for (&company_id, _company) in state.companies.iter().filter(|(_, c)| c.home_city_id == city.id) {
+                        state.company_to_empire.insert(company_id, empire_id);
+                    }
+                }
+            }
+        }
+    }
+
+    info!(
+        count = state.company_to_empire.len(),
+        "Built company→empire reverse index."
+    );
+
     Ok(state)
 }
