@@ -346,6 +346,15 @@ pub struct SimState {
 
     /// Monotonic counter for generating event IDs.
     pub next_event_id: i32,
+
+    /// Version counter incremented whenever the set of active blockade_lane events
+    /// changes. `build_system_distances` uses this to avoid recomputing all-pairs
+    /// shortest paths every tick when no blockades have changed.
+    pub blockade_version: u64,
+
+    /// The blockade_version that was current the last time `system_distances` was
+    /// computed.
+    pub distances_blockade_version: u64,
 }
 
 impl Default for SimState {
@@ -391,6 +400,8 @@ impl SimState {
             active_events: HashMap::new(),
             event_definitions: Vec::new(),
             next_event_id: 1,
+            blockade_version: 0,
+            distances_blockade_version: u64::MAX, // Force initial computation
         }
     }
 
@@ -444,12 +455,12 @@ impl SimState {
         None
     }
 
-    /// Get all loan IDs for a company efficiently (O(1) lookup).
-    pub fn get_company_loans(&self, company_id: i32) -> Vec<i32> {
+    /// Get all loan IDs for a company efficiently (O(1) lookup) without cloning.
+    pub fn get_company_loans(&self, company_id: i32) -> &[i32] {
         self.company_to_loans
             .get(&company_id)
-            .cloned()
-            .unwrap_or_default()
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     /// Calculate a summary of the current simulation state.

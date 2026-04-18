@@ -4,15 +4,22 @@ use rand::distributions::{Distribution, WeightedIndex};
 use tracing::info;
 
 pub fn run_events(state: &mut SimState, rng: &mut impl Rng) {
-    // 1. Expire old events
+    // 1. Expire old events — increment blockade_version if any blockade expires.
+    let mut blockade_expired = false;
     state.active_events.retain(|_, event| {
         if state.tick > event.end_tick {
             info!("Event expired: {:?}", event.event_type);
+            if event.event_type == "blockade_lane" {
+                blockade_expired = true;
+            }
             false
         } else {
             true
         }
     });
+    if blockade_expired {
+        state.blockade_version += 1;
+    }
 
     // 2. Chance to trigger a new random event
     // Base 5% chance per tick to trigger an event if we have definitions
@@ -104,6 +111,12 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
 
         if let Some(text) = &event.flavor_text {
             info!("EVENT: {}", text);
+        }
+
+        // Increment blockade_version when a new blockade is added so logistics
+        // knows to recompute system distances.
+        if event.event_type == "blockade_lane" {
+            state.blockade_version += 1;
         }
 
         state.active_events.insert(event.id, event);

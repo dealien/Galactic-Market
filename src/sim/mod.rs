@@ -252,16 +252,19 @@ impl SimState {
             .await?;
 
         for event in self.active_events.values() {
-            // Encode target_id for storage: (a, b) -> use first component, or 0 if None
+            // Persist both target_id components so paired targets (e.g. blockade lanes
+            // identified by two system IDs) can be reconstructed after reload.
             let encoded_target_id = event.target_id.map(|(a, _)| a);
+            let encoded_target_id_b = event.target_id.map(|(_, b)| b);
 
             sqlx::query(
-                "INSERT INTO active_events (id, event_type, target_id, severity, start_tick, end_tick, flavor_text)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO active_events (id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
             )
             .bind(event.id)
             .bind(&event.event_type)
             .bind(encoded_target_id)
+            .bind(encoded_target_id_b)
             .bind(event.severity)
             .bind(event.start_tick as i64)
             .bind(event.end_tick as i64)

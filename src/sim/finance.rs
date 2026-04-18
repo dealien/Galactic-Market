@@ -106,14 +106,14 @@ pub fn run_finance(state: &mut SimState) {
                 c.debt -= payment;
             }
 
-            // Also reduce the linked Loan objects if they exist
+            // Also reduce the linked Loan objects if they exist.
+            // Use company_to_loans reverse index for O(1) lookup.
             let mut remaining_payment = payment;
             let loan_ids: Vec<i32> = state
-                .loans
-                .values()
-                .filter(|l| l.company_id == company_id)
-                .map(|l| l.id)
-                .collect();
+                .company_to_loans
+                .get(&company_id)
+                .map(|ids| ids.to_vec())
+                .unwrap_or_default();
 
             for l_id in loan_ids {
                 if remaining_payment <= 0.0 {
@@ -182,11 +182,15 @@ pub fn run_finance(state: &mut SimState) {
     // Uses company_to_loans reverse index for O(1) lookup instead of O(loans) filtering.
     let company_ids: Vec<i32> = state.companies.keys().cloned().collect();
     for company_id in company_ids {
-        let loan_ids = state.get_company_loans(company_id);
-        let total_debt: f64 = loan_ids
-            .iter()
-            .filter_map(|loan_id| state.loans.get(loan_id).map(|l| l.balance))
-            .sum();
+        // Scope the borrow of `state` via `get_company_loans` so the subsequent
+        // mutable borrow of `state.companies` compiles cleanly.
+        let total_debt: f64 = {
+            let loan_ids = state.get_company_loans(company_id);
+            loan_ids
+                .iter()
+                .filter_map(|loan_id| state.loans.get(loan_id).map(|l| l.balance))
+                .sum()
+        };
 
         if let Some(company) = state.companies.get_mut(&company_id)
             && (company.debt - total_debt).abs() > 0.01

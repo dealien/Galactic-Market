@@ -168,27 +168,16 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     );
 
     // ── Active Events ────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, String, Option<i32>, f64, i64, i64, Option<String>)>(
-        "SELECT id, event_type, target_id, severity, start_tick, end_tick, flavor_text FROM active_events",
+    let rows = sqlx::query_as::<_, (i32, String, Option<i32>, Option<i32>, f64, i64, i64, Option<String>)>(
+        "SELECT id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text FROM active_events",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, event_type, target_id, severity, start_tick, end_tick, flavor_text) in rows {
-        // Convert target_id based on event type
-        let decoded_target_id = match event_type.as_str() {
-            "blockade_lane" => {
-                // For blockades, target_id was XOR-encoded; we don't have the original tuple
-                // so we can't perfectly reconstruct it. However, active events shouldn't persist
-                // across restarts in the initial implementation, so this is acceptable.
-                // For now, store as (id, 0) as a placeholder
-                target_id.map(|id| (id, 0))
-            }
-            _ => {
-                // For other events (famine, infrastructure_damage), target_id is a city_id
-                target_id.map(|id| (id, 0))
-            }
-        };
+    for (id, event_type, target_id, target_id_b, severity, start_tick, end_tick, flavor_text) in rows {
+        // Reconstruct the target tuple from the two stored components.
+        // For blockade_lane events: (sys_a, sys_b). For others: (city_id, 0).
+        let decoded_target_id = target_id.map(|a| (a, target_id_b.unwrap_or(0)));
 
         state.active_events.insert(
             id,
@@ -268,6 +257,12 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     }
 
     info!(count = state.loans.len(), "Loaded loans.");
+
+    // Set next_loan_id based on current max (prevents ID reuse after restart)
+    let max_loan_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM loans")
+        .fetch_one(pool)
+        .await?;
+    state.next_loan_id = max_loan_id.0.unwrap_or(0) + 1;
 
     // ── Bank Accounts ────────────────────────────────────────────────────────
     let rows = sqlx::query_as::<_, (i32, i32, i32, f64, f64)>(

@@ -46,7 +46,16 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
 
 /// Builds the all-pairs shortest path cache for the system jump network.
 /// Account for active blockades by skipping blocked lanes.
+///
+/// This is a potentially expensive operation (Dijkstra from every node), so it
+/// is skipped when the set of active `blockade_lane` events has not changed
+/// since the last rebuild (tracked via `state.blockade_version`).
 pub fn build_system_distances(state: &mut SimState) {
+    // Only recompute when the blockade set has changed.
+    if state.distances_blockade_version == state.blockade_version {
+        return;
+    }
+
     state.system_distances.clear();
     let mut graph = UnGraphMap::<i32, f64>::new();
 
@@ -89,6 +98,9 @@ pub fn build_system_distances(state: &mut SimState) {
         }
         state.last_connected_components = components;
     }
+
+    // Mark distances as up-to-date for the current blockade version.
+    state.distances_blockade_version = state.blockade_version;
 }
 
 /// Metadata about a potential transport route.

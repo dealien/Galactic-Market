@@ -1,15 +1,17 @@
+use anyhow::{Context, Result};
 use crate::sim::namegen::{self, LocationType};
 use rand::thread_rng;
 use sqlx::PgPool;
 use tracing::info;
 
-pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
+pub async fn run_seed(pool: &PgPool) -> Result<()> {
     info!("Seeding universe...");
 
     // Check if empires exist; skip if already seeded
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
         .fetch_one(pool)
-        .await?;
+        .await
+        .context("Failed to query empire count")?;
 
     if count.0 > 0 {
         info!("Database already seeded, skipping.");
@@ -20,11 +22,10 @@ pub async fn run_seed(pool: &PgPool) -> Result<(), sqlx::Error> {
     // Placed after the early-return check so that repeated calls to run_seed()
     // (e.g., across test runs) never hit the OnceLock before the skip path.
     namegen::init_dictionary("data/names.json").map_err(|e| {
-        tracing::error!(
-            "Name dictionary failed to initialize: {}. This is a required resource.",
+        anyhow::anyhow!(
+            "Failed to initialize name dictionary from data/names.json: {}",
             e
-        );
-        sqlx::Error::RowNotFound
+        )
     })?;
 
     let mut rng = thread_rng();
