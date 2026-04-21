@@ -1275,28 +1275,15 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
             let relief_cost = relief_units as f64 * RELIEF_PRICE_PER_UNIT;
 
             // Find the empire for this city
-            let empire_id = if let Some(city_body) = state.celestial_bodies.get(&city.body_id) {
-                if let Some(city_system) = state.star_systems.get(&city_body.system_id) {
-                    if let Some(city_sector) = state.sectors.get(&city_system.sector_id) {
-                        Some(city_sector.empire_id)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            let empire_id = state
+                .celestial_bodies
+                .get(&city.body_id)
+                .and_then(|city_body| state.star_systems.get(&city_body.system_id))
+                .and_then(|city_system| state.sectors.get(&city_system.sector_id))
+                .map(|city_sector| city_sector.empire_id);
 
             if let Some(empire_id) = empire_id {
-                relief_orders.push((
-                    *city_id,
-                    empire_id,
-                    relief_units,
-                    relief_cost,
-                    fulfillment,
-                ));
+                relief_orders.push((*city_id, empire_id, relief_units, relief_cost, fulfillment));
             }
         }
     }
@@ -1306,15 +1293,21 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
         return;
     }
 
+    // Type for storing relief orders: (city_id, relief_units, relief_cost) per empire
+    type EmpireReliefData = (Vec<(i32, i64, f64)>, f64);
+
     // Check if empire can afford relief (up to max % of treasury)
-    let mut empire_relief_map: HashMap<i32, (Vec<(i32, i64, f64)>, f64)> = HashMap::new();
+    let mut empire_relief_map: HashMap<i32, EmpireReliefData> = HashMap::new();
     for (city_id, empire_id, relief_units, relief_cost, _fulfillment) in relief_orders {
         empire_relief_map
             .entry(empire_id)
             .or_insert((Vec::new(), 0.0))
             .0
             .push((city_id, relief_units, relief_cost));
-        empire_relief_map.entry(empire_id).or_insert((Vec::new(), 0.0)).1 += relief_cost;
+        empire_relief_map
+            .entry(empire_id)
+            .or_insert((Vec::new(), 0.0))
+            .1 += relief_cost;
     }
 
     // Execute relief orders constrained by budget

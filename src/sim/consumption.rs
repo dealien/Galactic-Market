@@ -14,10 +14,10 @@ const FOOD_FULFILLMENT_GROWTH_THRESHOLD: f64 = 0.95;
 const FOOD_FULFILLMENT_STABLE_MIN: f64 = 0.70;
 const FOOD_FULFILLMENT_DECLINE_MIN: f64 = 0.40;
 
-const POPULATION_GROWTH_RATE: f64 = 0.0005;      // +0.05% per tick
-const POPULATION_STABLE_RATE: f64 = 0.0;         // No change
-const POPULATION_DECLINE_RATE: f64 = -0.001;     // -0.1% per tick
-const POPULATION_STARVATION_RATE: f64 = -0.005;  // -0.5% per tick
+const POPULATION_GROWTH_RATE: f64 = 0.0005; // +0.05% per tick
+const POPULATION_STABLE_RATE: f64 = 0.0; // No change
+const POPULATION_DECLINE_RATE: f64 = -0.001; // -0.1% per tick
+const POPULATION_STARVATION_RATE: f64 = -0.005; // -0.5% per tick
 
 /// Phase 6: Population consumption.
 ///
@@ -182,10 +182,10 @@ fn update_population_dynamics(state: &mut SimState) {
         if let Some(food_id) = food_resource_id {
             // Count food in consumer company inventory for this city
             // Inventories are keyed by (company_id, city_id, resource_type_id)
-            if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id) {
-                if let Some(inv) = state.inventories.get(&(*consumer_co_id, *city_id, food_id)) {
-                    food_consumed = inv.quantity as f64;
-                }
+            if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id)
+                && let Some(inv) = state.inventories.get(&(*consumer_co_id, *city_id, food_id))
+            {
+                food_consumed = inv.quantity as f64;
             }
         }
 
@@ -287,25 +287,28 @@ mod tests {
     #[test]
     fn consumer_draws_from_wage_pool() {
         let mut state = make_consumer_state(1_000_000, 0.0);
-        
+
         // Set up a wage pool for the city
         let wage_amount = 1_000.0;
         state.add_to_wage_pool(1, wage_amount);
-        
+
         run_consumption(&mut state, 1);
-        
+
         // Should have drawn 80% of the wage pool
         let remaining_wage = state.get_wage_pool(1);
-        assert!((remaining_wage - (wage_amount * 0.2)).abs() < 0.001, "Wage pool should have 20% remaining");
+        assert!(
+            (remaining_wage - (wage_amount * 0.2)).abs() < 0.001,
+            "Wage pool should have 20% remaining"
+        );
     }
 
     #[test]
     fn consumer_posts_buy_orders() {
         let mut state = make_consumer_state(1_000_000, 10_000.0);
-        
+
         // Set up a wage pool for the city
         state.add_to_wage_pool(1, 10_000.0);
-        
+
         run_consumption(&mut state, 1);
         let orders: Vec<_> = state.market_orders.values().collect();
         assert!(!orders.is_empty(), "Should have posted buy orders");
