@@ -219,6 +219,7 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 resource_type_id: 1,
                 quantity: 3,
             }],
+            labor_cost_per_run: 4.5,
         },
     );
 
