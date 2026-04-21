@@ -142,7 +142,42 @@ There are no global price tables. Prices exist per market (city or station) and 
 
 > **Design note — avoiding oscillation:** With fully reactive AI, all miners will simultaneously pivot to the highest-priced resource in the same tick, flood the market, crash the price to zero, then all pivot away — producing pendulum swings rather than equilibrium. Mitigate this by giving company AI **imperfect information and decision stickiness**: not every company re-evaluates strategy every tick; companies should have a configurable re-evaluation interval (e.g., every 5–20 ticks, jittered), and switching production should carry a **retooling cost** (time + capital) that makes short-cycle pivots unprofitable. This is implemented in the Decisions phase (Phase 6) of the tick loop.
 
-### 3.3 Supply & Demand Model
+### 3.3 Population Dynamics & Food Economy
+
+**Population Growth & Decline:**
+
+City populations are dynamic, growing or declining based on food availability. The system implements **food fulfillment thresholds**:
+
+- **Food Fulfillment Calculation:** `fulfillment = food_consumed_per_tick / food_required_per_tick` (1 unit food per person per tick)
+- **Fulfillment > 95%** → Population grows at +0.05% per tick (excess food security)
+- **Fulfillment 70–95%** → Population stable (0% growth/decline)
+- **Fulfillment 40–70%** → Population declines at -0.1% per tick (food scarcity)
+- **Fulfillment < 40%** → Population crashes at -0.5% per tick (starvation)
+
+Population updates occur at the end of the **Consumption phase (Phase 5)**, after demand is calculated but before market clearing. This ensures starvation feedback is observable in the same tick.
+
+**Wage Pools & Consumption Redirection:**
+
+Income is no longer a manifested per-capita credit. Instead:
+- **Phase 2 (Production):** Labor costs are deducted from company cash and credited to **city wage pools** (one pool per city)
+- **Phase 5 (Consumption):** Population budget is drawn from the city wage pool (not manifested)
+  - Budget = wage_pool × 0.8 (keeps 20% buffer for next tick)
+  - If wage_pool is zero or insufficient, populations **cannot consume**, triggering starvation
+- **Outcome:** Wage pools create a tight feedback loop: no production → no wages → no consumption → starvation
+
+**Empire Relief System (Phase 5b):**
+
+When a city's food fulfillment drops below 40%, the empire treasury can intervene to prevent total collapse:
+- **Relief Trigger:** Empire scans for starving cities (fulfillment < 40%)
+- **Relief Quantity:** 10% of city population's monthly food needs per relief order
+- **Relief Price:** 15 cr/unit (creates economic signal without undercutting local producers)
+- **Budget Constraint:** Max 20% of empire treasury per tick (prevents empire bankruptcy)
+- **Proportional Distribution:** If total relief cost exceeds budget cap, all eligible cities receive scaled-down relief
+- **Implementation:** Relief orders are posted as BUY orders on behalf of the empire (using negative company_id = -empire_id)
+
+Relief is a temporary stabilization mechanism. Long-term population health depends on merchant networks distributing food from surplus cities (Phase 2 refactor).
+
+### 3.4 Supply & Demand Model
 
 | Factor | Effect on Demand | Effect on Supply |
 | --- | --- | --- |
@@ -153,7 +188,7 @@ There are no global price tables. Prices exist per market (city or station) and 
 | Tech advancement | May create new demand categories | Lowers production cost (supply shift) |
 | Natural disaster | Can spike demand for relief goods | Destroys local supply capacity |
 
-### 3.4 Company Lifecycle
+### 3.5 Company Lifecycle
 
 Economic actors evolve along a maturity axis:
 
@@ -249,18 +284,30 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 | Phase | Operations | Module | State Modified |
 | --- | --- | --- | --- |
 | 1. Resource Extraction | Advance extraction jobs; deplete deposits | `resources::run_extraction()` | deposits, companies, inventory |
-| 2. Production | Advance production jobs; consume inputs; create output | `production::run_production()` | production jobs, inventory |
+| 2. Production | Advance production jobs; consume inputs; create output; credit labor costs to wage pools | `production::run_production()` | production jobs, inventory, wage pools |
 | 3. Logistics | Advance in-transit shipments; deliver cargo at destination | `logistics::run_logistics()` | trade routes, inventory |
 | 4. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
-| 5. Population Consumption | Populations consume goods; update demand and food shortages | `consumption::run_consumption()` | companies, inventory, populations |
-| 6. Market Clearing | Match buy/sell orders; compute clearing prices | `markets::clear_orders()` | market orders, inventory |
-| 7. Finance | Pay wages, loan interest; update company cash/debt | `finance::run_finance()` | companies, bank accounts |
+| 5. Population Consumption | Populations consume goods from wage pools; update demand; calculate food fulfillment; update population growth/decline | `consumption::run_consumption()` + `update_population_dynamics()` | companies, inventory, populations, wage pools |
+| 5b. Empire Relief | Scan for starving cities; post relief orders from empire treasury | `decisions::run_empire_relief()` | market orders, empire treasuries |
+| 6. Market Clearing | Match buy/sell orders; compute clearing prices; collect port fees to city tax pools | `markets::clear_orders()` | market orders, inventory, tax pools |
+| 7. Finance | Pay corporate taxes to empires; update company cash/debt; handle depreciation | `finance::run_finance()` | companies, bank accounts, empire treasuries |
 | 8. Random Events | Roll random events; trigger blockades, disasters, tech breakthroughs | `events::run_events()` | active events, various (event-dependent) |
 
 **Periodic Flush (every 100 ticks):**
 - All dirty state written to database in a single transaction
 - `events_log` and `market_history` appended; `simulation_meta.current_tick` updated
 - Crash recovery: can restart from last clean checkpoint (see §5.4)
+
+**Closed-Loop Economy (Stage 4):**
+The Phase 2 and Phase 5 modifications enable a closed-loop economic system:
+1. Companies pay labor costs during production (Phase 2), crediting city wage pools
+2. Populations draw consumption budget from wage pools (Phase 5), not manifested credits
+3. Port fees collected during market clearing are added to city tax pools (Phase 6)
+4. Corporate taxes (5% of cash) are routed to empire treasuries (Phase 7)
+5. Empire treasuries fund relief orders when cities face starvation (Phase 5b)
+6. Outcome: wages → consumption → demand → production → repeat; this creates realistic economic feedback
+
+> **Design note:** Relief is a temporary safety valve for food crises. Permanent population stability requires merchant networks (Phase 2 refactor) to distribute food from surplus to deficit cities naturally. Without Phase 2 refactor, relief merely delays starvation; it does not eliminate food scarcity.
 
 > **Note:** Each phase is a separate Rust module. The tick loop runs entirely in memory for performance. Politics phase (diplomacy, faction relations, taxation) is currently integrated into the Events phase but is planned as a separate phase in future development.
 
@@ -550,6 +597,7 @@ This table maps open GitHub issues to relevant DESIGN.md sections and roadmap st
 | **#5** | [Banks & Banking](https://github.com/dealien/Galactic-Market/issues/5) | §5.3 (AI), §7 (Finance) | 3 | 🟡 High | #9 | Parallel work; depends on #9 |
 | **#11** | [Dynamic Resource Loading (JSON)](https://github.com/dealien/Galactic-Market/issues/11) | §4.1 (Seeding) | 3 | 🟡 High | — | Infrastructure; can be done in parallel |
 | **#12** | [Terrain-based Fertility System](https://github.com/dealien/Galactic-Market/issues/12) | §3.1a (Production) | 3 | 🟢 Medium | #11 | Geographic specialization |
+| **#13** | [Ship Transport Capacity & Fleet System](https://github.com/dealien/Galactic-Market/issues/13) | §3.2 (Logistics) | 5 | 🟢 Medium | #9, #10 | Future infrastructure; replaces unlimited capacity assumption |
 | **#2** | [Procedural Name Generator](https://github.com/dealien/Galactic-Market/issues/2) | §5.2 (modules), §8.1 | 1 | 🟢 Low | — | Quality-of-life enhancement |
 
 **Recommendation:** Address issues in this priority order:
