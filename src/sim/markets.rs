@@ -134,7 +134,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
                 // Issue #9: Calculate port fee on settlement
                 let city = state.cities.get(&city_id);
-                let port_fee = city.map(|c| c.port_fee_per_unit * qty as f64).unwrap_or(0.0);
+                let port_fee = city
+                    .map(|c| c.port_fee_per_unit * qty as f64)
+                    .unwrap_or(0.0);
 
                 // Transfer cash (seller receives cash, minus port fee)
                 if let Some(seller) = state.companies.get_mut(&sell_company_id) {
@@ -399,7 +401,7 @@ mod tests {
         // Port fee: 10 * 0.1 = 1.0, so seller gets 50 - 1 = 49
         // Buyer pays: 10 * 5.0 = 50
         assert_eq!(state.companies[&1].cash, 1049.0); // 1000 + 50 - 1 (port fee)
-        assert_eq!(state.companies[&2].cash, 950.0);  // 1000 - 50
+        assert_eq!(state.companies[&2].cash, 950.0); // 1000 - 50
     }
 
     #[test]
@@ -443,7 +445,7 @@ mod tests {
         // Price should be 5.0 (midpoint)
         // Port fee: 10 * 0.1 = 1.0, so seller gets 50 - 1 = 49
         assert_eq!(state.companies[&1].cash, 1049.0); // 1000 + 50 - 1 (port fee)
-        assert_eq!(state.companies[&2].cash, 950.0);  // 1000 - 50
+        assert_eq!(state.companies[&2].cash, 950.0); // 1000 - 50
     }
 
     #[test]
@@ -488,6 +490,6 @@ mod tests {
         // Uses EMA price of 25.0
         // Port fee: 10 * 0.1 = 1.0, so seller gets 250 - 1 = 249
         assert_eq!(state.companies[&1].cash, 1249.0); // 1000 + 250 - 1 (port fee)
-        assert_eq!(state.companies[&2].cash, 750.0);  // 1000 - 250
+        assert_eq!(state.companies[&2].cash, 750.0); // 1000 - 250
     }
 }

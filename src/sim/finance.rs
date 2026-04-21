@@ -241,12 +241,7 @@ fn process_corporate_taxes(state: &mut SimState) {
         // Add to empire treasury
         state.add_to_empire_treasury(empire_id, tax_amount);
 
-        debug!(
-            company_id,
-            empire_id,
-            tax_amount,
-            "Corporate tax collected"
-        );
+        debug!(company_id, empire_id, tax_amount, "Corporate tax collected");
     }
 }
 

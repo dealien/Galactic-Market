@@ -43,6 +43,9 @@ impl SimState {
         // ── Phase 3: Logistics ───────────────────────────────────────────────
         logistics::run_logistics(self, self.tick);
 
+        // ── Phase 2: Food balance analysis (precompute for merchant routing) ──────
+        decisions::analyze_city_food_balance(self);
+
         // ── Phase 6: Company AI decisions ─────────────────────────────────────
         decisions::run_decisions(self, self.tick);
 

@@ -13,6 +13,17 @@ pub struct City {
     pub port_max_throughput: i64,
 }
 
+/// Food balance analysis for a city (updated each tick).
+/// Used by merchants to prioritize food routing to starving cities.
+#[derive(Debug, Clone)]
+pub struct CityFoodBalance {
+    pub city_id: i32,
+    pub food_surplus: i64,        // Production - consumption (inventory - needs)
+    pub fulfillment_ratio: f64,   // (food_inventory / population).min(2.0)
+    pub needs_relief: bool,       // fulfillment_ratio < 0.4
+    pub has_surplus: bool,        // food_surplus > 0
+}
+
 /// A celestial body (planet, moon, station).
 #[derive(Debug, Clone)]
 pub struct CelestialBody {
@@ -369,6 +380,10 @@ pub struct SimState {
 
     /// Issue #10: Reverse index: company_id → empire_id for fast tax routing.
     pub company_to_empire: HashMap<i32, i32>,
+
+    /// Phase 2: Food balance analysis per city (updated each tick).
+    /// Used by merchants to prioritize routing to starving cities.
+    pub city_food_balance: HashMap<i32, CityFoodBalance>,
 }
 
 impl Default for SimState {
@@ -419,6 +434,7 @@ impl SimState {
             city_wage_pools: HashMap::new(),
             empire_treasuries: HashMap::new(),
             company_to_empire: HashMap::new(),
+            city_food_balance: HashMap::new(),
         }
     }
 
@@ -524,7 +540,10 @@ impl SimState {
 
     /// Get the current treasury balance for an empire.
     pub fn get_empire_treasury(&self, empire_id: i32) -> f64 {
-        self.empire_treasuries.get(&empire_id).copied().unwrap_or(0.0)
+        self.empire_treasuries
+            .get(&empire_id)
+            .copied()
+            .unwrap_or(0.0)
     }
 
     /// Add tax revenue to an empire's treasury.

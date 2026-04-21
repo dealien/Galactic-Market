@@ -418,7 +418,8 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    for (id, name, output_resource_id, output_qty, facility_type, labor_cost_per_run) in recipe_rows {
+    for (id, name, output_resource_id, output_qty, facility_type, labor_cost_per_run) in recipe_rows
+    {
         let input_rows = sqlx::query_as::<_, (i32, i32)>(
             "SELECT resource_type_id, quantity FROM recipe_inputs WHERE recipe_id = $1",
         )
@@ -535,10 +536,22 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     // Build company_id → empire_id reverse index for fast tax routing
     for (sector_id, sector) in &state.sectors {
         let empire_id = sector.empire_id;
-        for (_system_id, system) in state.star_systems.iter().filter(|(_, s)| s.sector_id == *sector_id) {
-            for (_body_id, body) in state.celestial_bodies.iter().filter(|(_, b)| b.system_id == system.id) {
+        for (_system_id, system) in state
+            .star_systems
+            .iter()
+            .filter(|(_, s)| s.sector_id == *sector_id)
+        {
+            for (_body_id, body) in state
+                .celestial_bodies
+                .iter()
+                .filter(|(_, b)| b.system_id == system.id)
+            {
                 for (_city_id, city) in state.cities.iter().filter(|(_, c)| c.body_id == body.id) {
-                    for (&company_id, _company) in state.companies.iter().filter(|(_, c)| c.home_city_id == city.id) {
+                    for (&company_id, _company) in state
+                        .companies
+                        .iter()
+                        .filter(|(_, c)| c.home_city_id == city.id)
+                    {
                         state.company_to_empire.insert(company_id, empire_id);
                     }
                 }
