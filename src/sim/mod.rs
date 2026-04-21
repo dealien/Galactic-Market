@@ -49,6 +49,9 @@ impl SimState {
         // ── Phase 3: Population consumption ───────────────────────────────
         consumption::run_consumption(self, self.tick);
 
+        // ── Phase 5 (NEW): Empire Relief (use treasury to stabilize populations) ──
+        decisions::run_empire_relief(self, self.tick);
+
         // ── Phase 4: Market clearing ────────────────────────────────────
         markets::clear_orders(self, self.tick);
 

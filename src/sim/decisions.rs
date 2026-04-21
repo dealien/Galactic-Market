@@ -1,4 +1,5 @@
 use rand::Rng;
+use std::collections::HashMap;
 use tracing::debug;
 
 use crate::sim::logistics::get_transport_info;
@@ -1211,6 +1212,190 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             order.id = id;
             state.market_orders.insert(id, order);
         }
+    }
+}
+
+/// Phase 5: Empire relief system — stabilize populations during famine via treasury relief.
+///
+/// Issue #10: Empire scans for starving cities (fulfillment < 40%) and posts relief food
+/// buy orders funded by the empire treasury. This prevents population collapse until
+/// Phase 2 refactor (merchant routing) can establish natural food trade networks.
+pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
+    // Constants
+    const STARVATION_THRESHOLD: f64 = 0.40;
+    const RELIEF_PRICE_PER_UNIT: f64 = 15.0;
+    const MAX_RELIEF_PERCENT_OF_TREASURY: f64 = 0.20; // Max 20% of treasury per tick
+
+    // Find food resource ID
+    let food_resource_id = state
+        .resource_types
+        .values()
+        .find(|r| r.name.contains("Food") || r.name.contains("Ration"))
+        .map(|r| r.id);
+
+    if food_resource_id.is_none() {
+        debug!("Food resource not found in resource_types; relief skipped");
+        return;
+    }
+
+    let food_id = food_resource_id.unwrap();
+
+    // Collect starving cities and their deficits
+    let mut relief_orders = Vec::new();
+
+    for (city_id, city) in state.cities.iter() {
+        if city.population <= 0 {
+            continue;
+        }
+
+        // Find consumer company for this city
+        let consumer_company_id = match state.city_consumer_ids.get(city_id) {
+            Some(&cid) => cid,
+            None => continue,
+        };
+
+        // Calculate food fulfillment: actual food / required
+        let food_required = city.population as f64;
+        let food_consumed = state
+            .inventories
+            .get(&(consumer_company_id, *city_id, food_id))
+            .map(|inv| inv.quantity as f64)
+            .unwrap_or(0.0);
+
+        let fulfillment = if food_required > 0.0 {
+            (food_consumed / food_required).min(2.0)
+        } else {
+            1.0
+        };
+
+        // Check if city is starving
+        if fulfillment < STARVATION_THRESHOLD {
+            // Calculate relief needed: 10% of population's monthly food needs
+            let relief_units = (city.population as f64 * 0.1).max(1.0) as i64;
+            let relief_cost = relief_units as f64 * RELIEF_PRICE_PER_UNIT;
+
+            // Find the empire for this city
+            let empire_id = if let Some(city_body) = state.celestial_bodies.get(&city.body_id) {
+                if let Some(city_system) = state.star_systems.get(&city_body.system_id) {
+                    if let Some(city_sector) = state.sectors.get(&city_system.sector_id) {
+                        Some(city_sector.empire_id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            if let Some(empire_id) = empire_id {
+                relief_orders.push((
+                    *city_id,
+                    empire_id,
+                    relief_units,
+                    relief_cost,
+                    fulfillment,
+                ));
+            }
+        }
+    }
+
+    if relief_orders.is_empty() {
+        debug!("No starving cities detected; empire relief inactive");
+        return;
+    }
+
+    // Check if empire can afford relief (up to max % of treasury)
+    let mut empire_relief_map: HashMap<i32, (Vec<(i32, i64, f64)>, f64)> = HashMap::new();
+    for (city_id, empire_id, relief_units, relief_cost, _fulfillment) in relief_orders {
+        empire_relief_map
+            .entry(empire_id)
+            .or_insert((Vec::new(), 0.0))
+            .0
+            .push((city_id, relief_units, relief_cost));
+        empire_relief_map.entry(empire_id).or_insert((Vec::new(), 0.0)).1 += relief_cost;
+    }
+
+    // Execute relief orders constrained by budget
+    for (empire_id, (cities_to_relieve, total_cost)) in empire_relief_map.iter() {
+        let empire_treasury = state.get_empire_treasury(*empire_id);
+        let max_relief = empire_treasury * MAX_RELIEF_PERCENT_OF_TREASURY;
+
+        let effective_cost = total_cost.min(max_relief);
+
+        if effective_cost < 0.01 {
+            debug!(
+                empire_id,
+                treasury = empire_treasury,
+                "Empire treasury insufficient for relief"
+            );
+            continue;
+        }
+
+        // Proportionally distribute available budget among cities
+        let budget_scale_factor = if *total_cost > 0.0 {
+            effective_cost / total_cost
+        } else {
+            1.0
+        };
+
+        let mut relief_posted_count = 0;
+        let mut relief_posted_units = 0i64;
+
+        for (city_id, relief_units, relief_cost) in cities_to_relieve {
+            let scaled_cost = relief_cost * budget_scale_factor;
+            let scaled_units = (*relief_units as f64 * budget_scale_factor).max(1.0) as i64;
+
+            if scaled_cost < 0.01 {
+                continue;
+            }
+
+            // Post a buy order on behalf of the empire
+            // The empire acts as a special "company" (we'll use a virtual ID or the empire entity itself)
+            // For now, we'll create an order attributed to a special "empire_relief" company if it exists,
+            // or use city_id as a placeholder company_id (negative to avoid collision with real companies)
+            let relief_company_id = -(*empire_id); // Negative ID to mark as empire relief
+
+            let order_id = state.next_order_id();
+            state.market_orders.insert(
+                order_id,
+                MarketOrder {
+                    id: order_id,
+                    city_id: *city_id,
+                    company_id: relief_company_id,
+                    resource_type_id: food_id,
+                    order_type: "buy".into(),
+                    order_kind: "limit".into(),
+                    price: RELIEF_PRICE_PER_UNIT,
+                    quantity: scaled_units,
+                    created_tick: state.tick,
+                },
+            );
+
+            relief_posted_count += 1;
+            relief_posted_units += scaled_units;
+
+            debug!(
+                empire_id,
+                city_id,
+                relief_units = scaled_units,
+                cost = scaled_cost,
+                "Empire relief order posted"
+            );
+        }
+
+        // Deduct from empire treasury
+        state.withdraw_from_empire_treasury(*empire_id, effective_cost);
+
+        debug!(
+            empire_id,
+            cities_relieved = relief_posted_count,
+            units_ordered = relief_posted_units,
+            cost = effective_cost,
+            remaining_treasury = state.get_empire_treasury(*empire_id),
+            "Empire relief executed"
+        );
     }
 }
 
