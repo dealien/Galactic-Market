@@ -651,3 +651,15 @@ fn bench_advanced_market_clearing(bencher: divan::Bencher, num_orders: usize) {
             galactic_market::sim::markets::clear_orders(state, 1);
         });
 }
+
+#[divan::bench(args = [1, 4, 16])]
+fn bench_compute_merchant_opportunities(bencher: divan::Bencher, num_merchants: usize) {
+    bencher
+        .with_inputs(|| make_merchant_state(num_merchants))
+        .bench_local_refs(|state| {
+            // Benchmark the expensive opportunity computation function
+            for i in 1..=(num_merchants as i32) {
+                let _ = galactic_market::sim::decisions::compute_merchant_opportunities(state, i);
+            }
+        });
+}

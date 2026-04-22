@@ -18,10 +18,10 @@ pub struct City {
 #[derive(Debug, Clone)]
 pub struct CityFoodBalance {
     pub city_id: i32,
-    pub food_surplus: i64,        // Production - consumption (inventory - needs)
-    pub fulfillment_ratio: f64,   // (food_inventory / population).min(2.0)
-    pub needs_relief: bool,       // fulfillment_ratio < 0.4
-    pub has_surplus: bool,        // food_surplus > 0
+    pub food_surplus: i64,      // Production - consumption (inventory - needs)
+    pub fulfillment_ratio: f64, // (food_inventory / population).min(2.0)
+    pub needs_relief: bool,     // fulfillment_ratio < 0.4
+    pub has_surplus: bool,      // food_surplus > 0
 }
 
 /// A celestial body (planet, moon, station).
@@ -31,6 +31,19 @@ pub struct CelestialBody {
     pub system_id: i32,
     pub name: String,
     pub fertility: f64,
+}
+
+/// A trade opportunity for a merchant (cached for performance).
+/// Updated once every 5 ticks per merchant.
+#[derive(Debug, Clone)]
+pub struct MerchantOpportunity {
+    pub resource_type_id: i32,
+    pub origin_city_id: i32,
+    pub dest_city_id: i32,
+    pub buy_price: f64,
+    pub sell_price: f64,
+    pub profit_margin: f64,
+    pub transport_cost: f64,
 }
 
 /// A star system containing celestial bodies.
@@ -384,6 +397,14 @@ pub struct SimState {
     /// Phase 2: Food balance analysis per city (updated each tick).
     /// Used by merchants to prioritize routing to starving cities.
     pub city_food_balance: HashMap<i32, CityFoodBalance>,
+
+    /// Phase 2d: Merchant opportunity cache for performance (updated every 5 ticks).
+    /// Keyed by merchant_id; cached opportunities sorted by profit_margin descending.
+    pub merchant_opportunities: HashMap<i32, Vec<MerchantOpportunity>>,
+
+    /// Phase 2d: Last tick when opportunities were computed for each merchant.
+    /// Used to control cache invalidation (recompute every 5 ticks).
+    pub merchant_last_scan: HashMap<i32, u64>,
 }
 
 impl Default for SimState {
@@ -435,6 +456,8 @@ impl SimState {
             empire_treasuries: HashMap::new(),
             company_to_empire: HashMap::new(),
             city_food_balance: HashMap::new(),
+            merchant_opportunities: HashMap::new(),
+            merchant_last_scan: HashMap::new(),
         }
     }
 

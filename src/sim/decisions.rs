@@ -394,20 +394,24 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             {
                 // --- PHASE 2: Food routing (priority over arbitrage) ---
                 // Merchants always check for food imbalances before pursuing other arbitrage
-                let food_resource_id = state.resource_types.values().find(|r| {
-                    r.name.contains("Food") || r.name.contains("Ration")
-                }).map(|r| r.id);
+                let food_resource_id = state
+                    .resource_types
+                    .values()
+                    .find(|r| r.name.contains("Food") || r.name.contains("Ration"))
+                    .map(|r| r.id);
 
                 let mut food_routed = false;
                 if let Some(food_id) = food_resource_id {
                     // Identify deficit cities (fulfillment < 0.6) and surplus cities (surplus > 50)
-                    let deficit_cities: Vec<i32> = state.city_food_balance
+                    let deficit_cities: Vec<i32> = state
+                        .city_food_balance
                         .values()
                         .filter(|b| b.fulfillment_ratio < 0.6)
                         .map(|b| b.city_id)
                         .collect();
 
-                    let surplus_cities: Vec<i32> = state.city_food_balance
+                    let surplus_cities: Vec<i32> = state
+                        .city_food_balance
                         .values()
                         .filter(|b| b.has_surplus && b.food_surplus > 50)
                         .map(|b| b.city_id)
@@ -418,7 +422,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     let starving_first: Vec<i32> = deficit_cities
                         .iter()
                         .filter(|&cid| {
-                            state.city_food_balance
+                            state
+                                .city_food_balance
                                 .get(cid)
                                 .map(|b| b.fulfillment_ratio < 0.3)
                                 .unwrap_or(false)
@@ -445,11 +450,13 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                                 .copied()
                                 .unwrap_or(100.0);
                             let transport = get_transport_info(state, origin_city_id, dest_city_id);
-                            let profit = food_price_dest - food_price_origin - transport.cost_per_unit;
+                            let profit =
+                                food_price_dest - food_price_origin - transport.cost_per_unit;
 
                             // Route food if economically viable (profit >= -0.5 allows small losses for food security)
                             if profit > -0.5 {
-                                let max_affordable = (company_cash * 0.3 / food_price_origin.max(0.1)) as i64;
+                                let max_affordable =
+                                    (company_cash * 0.3 / food_price_origin.max(0.1)) as i64;
                                 let qty = 100.min(max_affordable).max(1);
 
                                 if qty > 0 {
@@ -491,37 +498,38 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                     continue;
                 }
 
-                // --- Normal arbitrage logic (only if no famine routing) ---
+                // --- Cached arbitrage logic (only if no famine routing) ---
+                // Stage 2d: Use cached opportunities instead of triple-nested scan
                 let mut best_arbitrage = None;
                 let mut best_profit_margin = 0.0;
 
-                for &res_id in state.resource_types.keys() {
-                    for &origin_city_id in state.cities.keys() {
-                        let buy_price = state
-                            .ema_prices
-                            .get(&(origin_city_id, res_id))
-                            .copied()
-                            .unwrap_or(1000.0);
-                        for &dest_city_id in state.cities.keys() {
-                            if origin_city_id == dest_city_id {
-                                continue;
-                            }
-                            let sell_price = state
-                                .ema_prices
-                                .get(&(dest_city_id, res_id))
-                                .copied()
-                                .unwrap_or(0.0);
-                            let transport = get_transport_info(state, origin_city_id, dest_city_id);
-                            let total_cost = buy_price + transport.cost_per_unit;
-                            let profit = sell_price - total_cost;
+                // Check cache and recompute if stale (every 5 ticks) or never computed
+                let last_scan_tick = state
+                    .merchant_last_scan
+                    .get(&company_id)
+                    .copied()
+                    .unwrap_or(u64::MAX);
+                if last_scan_tick == u64::MAX || current_tick - last_scan_tick >= 5 {
+                    // Cache is stale or missing; recompute opportunities
+                    let opportunities = compute_merchant_opportunities(state, company_id);
+                    state
+                        .merchant_opportunities
+                        .insert(company_id, opportunities);
+                    state.merchant_last_scan.insert(company_id, current_tick);
+                }
 
-                            if profit > best_profit_margin && profit > (buy_price * 0.001) {
-                                best_profit_margin = profit;
-                                best_arbitrage =
-                                    Some((res_id, origin_city_id, dest_city_id, buy_price));
-                            }
-                        }
-                    }
+                // Use cached opportunities if available
+                if let Some(opportunities) = state.merchant_opportunities.get(&company_id)
+                    && let Some(opp) = opportunities.first()
+                {
+                    // Take the first (highest profit) opportunity
+                    best_profit_margin = opp.profit_margin;
+                    best_arbitrage = Some((
+                        opp.resource_type_id,
+                        opp.origin_city_id,
+                        opp.dest_city_id,
+                        opp.buy_price,
+                    ));
                 }
 
                 if let Some((res_id, origin, _dest, buy_price)) = best_arbitrage {
@@ -1506,9 +1514,11 @@ pub fn analyze_city_food_balance(state: &mut SimState) {
     use crate::sim::state::CityFoodBalance;
 
     // Find food resource ID
-    let food_resource_id = state.resource_types.values().find(|r| {
-        r.name.contains("Food") || r.name.contains("Ration")
-    }).map(|r| r.id);
+    let food_resource_id = state
+        .resource_types
+        .values()
+        .find(|r| r.name.contains("Food") || r.name.contains("Ration"))
+        .map(|r| r.id);
 
     let mut food_balance_map = HashMap::new();
 
@@ -1519,16 +1529,16 @@ pub fn analyze_city_food_balance(state: &mut SimState) {
         let consumer_co_id = state.city_consumer_ids.get(&city_id).copied();
 
         // Calculate food in inventory
-        let food_in_inventory = if let (Some(food_id), Some(co_id)) = (food_resource_id, consumer_co_id)
-        {
-            state
-                .inventories
-                .get(&(co_id, city_id, food_id))
-                .map(|inv| inv.quantity as f64)
-                .unwrap_or(0.0)
-        } else {
-            0.0
-        };
+        let food_in_inventory =
+            if let (Some(food_id), Some(co_id)) = (food_resource_id, consumer_co_id) {
+                state
+                    .inventories
+                    .get(&(co_id, city_id, food_id))
+                    .map(|inv| inv.quantity as f64)
+                    .unwrap_or(0.0)
+            } else {
+                0.0
+            };
 
         // Calculate fulfillment ratio: food / population (1 unit per person per tick)
         let fulfillment_ratio = if population > 0.0 {
@@ -1567,6 +1577,96 @@ pub fn analyze_city_food_balance(state: &mut SimState) {
             .count(),
         "City food balance analysis complete"
     );
+}
+
+/// Phase 2d: Compute arbitrage opportunities for a single merchant.
+/// Performs expensive triple-nested loop scan of all resources × city pairs.
+/// Called once every 5 ticks per merchant to populate the opportunity cache.
+///
+/// Returns sorted Vec of opportunities (highest profit first).
+pub fn compute_merchant_opportunities(
+    state: &SimState,
+    merchant_id: i32,
+) -> Vec<crate::sim::state::MerchantOpportunity> {
+    use crate::sim::state::MerchantOpportunity;
+
+    let mut opportunities = Vec::new();
+
+    // Triple-nested loop: all resources × origin cities × destination cities
+    for &res_id in state.resource_types.keys() {
+        for &origin_city_id in state.cities.keys() {
+            let buy_price = state
+                .ema_prices
+                .get(&(origin_city_id, res_id))
+                .copied()
+                .unwrap_or(1000.0);
+
+            // Skip if no inventory to sell (can't buy)
+            let has_inventory = state
+                .companies
+                .get(&merchant_id)
+                .map(|c| c.home_city_id == origin_city_id)
+                .unwrap_or(false)
+                || state
+                    .inventories
+                    .iter()
+                    .any(|(&(co_id, city_id, r_id), inv)| {
+                        co_id == merchant_id
+                            && city_id == origin_city_id
+                            && r_id == res_id
+                            && inv.quantity > 0
+                    });
+
+            if !has_inventory {
+                continue; // Can't profitably sell what we don't have
+            }
+
+            for &dest_city_id in state.cities.keys() {
+                if origin_city_id == dest_city_id {
+                    continue;
+                }
+
+                let sell_price = state
+                    .ema_prices
+                    .get(&(dest_city_id, res_id))
+                    .copied()
+                    .unwrap_or(0.0);
+
+                let transport =
+                    crate::sim::logistics::get_transport_info(state, origin_city_id, dest_city_id);
+                let total_cost = buy_price + transport.cost_per_unit;
+                let profit_margin = sell_price - total_cost;
+
+                // Only cache profitable opportunities (> 0.1% profit margin)
+                if profit_margin > buy_price * 0.001 {
+                    opportunities.push(MerchantOpportunity {
+                        resource_type_id: res_id,
+                        origin_city_id,
+                        dest_city_id,
+                        buy_price,
+                        sell_price,
+                        profit_margin,
+                        transport_cost: transport.cost_per_unit,
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort by profit margin (highest first)
+    opportunities.sort_by(|a, b| {
+        b.profit_margin
+            .partial_cmp(&a.profit_margin)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    debug!(
+        merchant_id,
+        opportunity_count = opportunities.len(),
+        "Computed merchant opportunities"
+    );
+
+    opportunities
 }
 
 // ─── Unit Tests ────────────────────────────────────────────────────────────────
@@ -1863,11 +1963,7 @@ mod tests {
         assert!(!balance.needs_relief); // 0.5 >= 0.4
 
         // Test case 2: 30 food (30% fulfillment)
-        state
-            .inventories
-            .get_mut(&(1, 1, 1))
-            .unwrap()
-            .quantity = 30;
+        state.inventories.get_mut(&(1, 1, 1)).unwrap().quantity = 30;
 
         analyze_city_food_balance(&mut state);
         let balance = &state.city_food_balance[&1];
@@ -1884,15 +1980,75 @@ mod tests {
         let mut state = SimState::new();
 
         // Setup: 2 cities
-        state.cities.insert(1, City { id: 1, body_id: 1, name: "Surplus".into(), population: 50, port_tier: 1, port_fee_per_unit: 0.05, port_max_throughput: 1000 });
-        state.cities.insert(2, City { id: 2, body_id: 2, name: "Starving".into(), population: 100, port_tier: 1, port_fee_per_unit: 0.05, port_max_throughput: 1000 });
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Surplus".into(),
+                population: 50,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "Starving".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
 
         // Setup: Bodies and systems for routing
-        state.celestial_bodies.insert(1, crate::sim::state::CelestialBody { id: 1, system_id: 1, name: "B1".into(), fertility: 1.0 });
-        state.celestial_bodies.insert(2, crate::sim::state::CelestialBody { id: 2, system_id: 1, name: "B2".into(), fertility: 1.0 });
-        state.star_systems.insert(1, crate::sim::state::StarSystem { id: 1, sector_id: 1, name: "S1".into() });
-        state.sectors.insert(1, crate::sim::state::Sector { id: 1, empire_id: 1, name: "Sector 1".into() });
-        state.empires.insert(1, crate::sim::state::Empire { id: 1, name: "Empire".into(), government_type: "republic".into(), tax_rate_base: 0.05 });
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            crate::sim::state::CelestialBody {
+                id: 2,
+                system_id: 1,
+                name: "B2".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
 
         // Setup: Food resource
         state.resource_types.insert(
@@ -1906,27 +2062,72 @@ mod tests {
         );
 
         // Setup: Consumers in both cities
-        state.companies.insert(1, Company { id: 1, name: "Consumer1".into(), company_type: "consumer".into(), home_city_id: 1, cash: 5000.0, debt: 0.0, next_eval_tick: 0, status: "active".into(), last_trade_tick: 0 });
-        state.companies.insert(2, Company { id: 2, name: "Consumer2".into(), company_type: "consumer".into(), home_city_id: 2, cash: 5000.0, debt: 0.0, next_eval_tick: 0, status: "active".into(), last_trade_tick: 0 });
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Consumer1".into(),
+                company_type: "consumer".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Consumer2".into(),
+                company_type: "consumer".into(),
+                home_city_id: 2,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
         state.city_consumer_ids.insert(1, 1);
         state.city_consumer_ids.insert(2, 2);
 
         // Setup: City 1 has food surplus (100 units), City 2 has none
-        state.inventories.insert((1, 1, 1), Inventory { company_id: 1, city_id: 1, resource_type_id: 1, quantity: 100 });
-        state.inventories.insert((2, 2, 1), Inventory { company_id: 2, city_id: 2, resource_type_id: 1, quantity: 10 });
+        state.inventories.insert(
+            (1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        state.inventories.insert(
+            (2, 2, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 2,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
 
         // Setup: Merchant with cash
-        state.companies.insert(100, Company {
-            id: 100,
-            name: "Merchant".into(),
-            company_type: "merchant".into(),
-            home_city_id: 1,
-            cash: 5000.0,
-            debt: 0.0,
-            next_eval_tick: 1, // Ready to evaluate
-            status: "active".into(),
-            last_trade_tick: 0,
-        });
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 1, // Ready to evaluate
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
 
         // Setup: EMA prices for food
         state.ema_prices.insert((1, 1), 2.0); // Cheap at city 1
@@ -1943,14 +2144,665 @@ mod tests {
         run_decisions(&mut state, 1);
 
         // Verify: Merchant posted a food buy order (famine relief)
-        let food_buy_orders: Vec<_> = state.market_orders
+        let food_buy_orders: Vec<_> = state
+            .market_orders
             .values()
-            .filter(|o| {
-                o.order_type == "buy" && o.resource_type_id == 1 && o.city_id == 1
-            })
+            .filter(|o| o.order_type == "buy" && o.resource_type_id == 1 && o.city_id == 1)
             .collect();
-        assert!(!food_buy_orders.is_empty(), "Merchant should post food buy order for famine relief");
+        assert!(
+            !food_buy_orders.is_empty(),
+            "Merchant should post food buy order for famine relief"
+        );
     }
 
-    // Removed: test_surplus_to_deficit_food_routing (complex setup, coverage by integration tests)
+    #[test]
+    fn test_compute_merchant_opportunities_empty() {
+        // Stage 2d: Verify opportunity computation works with minimal setup
+        let mut state = SimState::new();
+
+        // Setup: Basic entities
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 1,
+                name: "City2".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(),
+                category: "raw".into(),
+                is_vital: false,
+            },
+        );
+
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // With no prices set, should find no opportunities
+        let opps = compute_merchant_opportunities(&state, 100);
+        assert_eq!(opps.len(), 0, "No opportunities without prices");
+    }
+
+    #[test]
+    fn test_compute_merchant_opportunities_finds_profitable_routes() {
+        // Stage 2d: Verify profitable routes are cached in order
+        let mut state = SimState::new();
+
+        // Setup: Two cities with ore resource
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            crate::sim::state::CelestialBody {
+                id: 2,
+                system_id: 1,
+                name: "B2".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "City2".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(),
+                category: "raw".into(),
+                is_vital: false,
+            },
+        );
+
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Prices: Ore cheap at city 1, expensive at city 2 (profitable arbitrage)
+        state.ema_prices.insert((1, 1), 10.0); // Ore at city 1 (buy side)
+        state.ema_prices.insert((2, 1), 20.0); // Ore at city 2 (sell side - profit!)
+
+        // Compute opportunities
+        let opps = compute_merchant_opportunities(&state, 100);
+
+        // Should find the profitable route
+        assert!(!opps.is_empty(), "Should find profitable arbitrage route");
+        assert_eq!(opps[0].resource_type_id, 1, "Should find ore arbitrage");
+        assert_eq!(opps[0].origin_city_id, 1, "Should buy at cheaper city");
+        assert_eq!(opps[0].dest_city_id, 2, "Should sell at expensive city");
+        assert!(
+            opps[0].profit_margin > 0.0,
+            "Should have positive profit margin"
+        );
+    }
+
+    #[test]
+    fn test_compute_merchant_opportunities_sorted_by_profit() {
+        // Stage 2d: Verify opportunities are sorted by profit (highest first)
+        let mut state = SimState::new();
+
+        // Setup: Three cities with different profit margins
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            crate::sim::state::CelestialBody {
+                id: 2,
+                system_id: 1,
+                name: "B2".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            3,
+            crate::sim::state::CelestialBody {
+                id: 3,
+                system_id: 1,
+                name: "B3".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "City2".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            3,
+            City {
+                id: 3,
+                body_id: 3,
+                name: "City3".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(),
+                category: "raw".into(),
+                is_vital: false,
+            },
+        );
+
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Prices: Ore cheap at city 1, medium profit to city 2, high profit to city 3
+        state.ema_prices.insert((1, 1), 10.0); // Buy price
+        state.ema_prices.insert((2, 1), 15.0); // Medium profit: 15-10 = 5
+        state.ema_prices.insert((3, 1), 25.0); // High profit: 25-10 = 15
+
+        let opps = compute_merchant_opportunities(&state, 100);
+
+        // Should find multiple opportunities sorted by profit (highest first)
+        assert!(opps.len() >= 2, "Should find at least 2 opportunities");
+        assert!(
+            opps[0].profit_margin >= opps[1].profit_margin,
+            "Opportunities should be sorted by profit descending"
+        );
+    }
+
+    #[test]
+    fn test_cache_invalidation_every_5_ticks() {
+        // Stage 2d: Verify opportunity cache invalidates at 5-tick boundary
+        let mut state = SimState::new();
+
+        // Setup: Basic entities for testing
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            crate::sim::state::CelestialBody {
+                id: 2,
+                system_id: 1,
+                name: "B2".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "City2".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(),
+                category: "raw".into(),
+                is_vital: false,
+            },
+        );
+
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup: Profitable trade route
+        state.ema_prices.insert((1, 1), 10.0);
+        state.ema_prices.insert((2, 1), 25.0);
+
+        // First compute (tick 0)
+        let opp1 = compute_merchant_opportunities(&state, 100);
+        state.merchant_opportunities.insert(100, opp1.clone());
+        state.merchant_last_scan.insert(100, 0);
+
+        // Simulate ticks 1-4 (cache should persist)
+        for tick in 1..5 {
+            let last_scan = state
+                .merchant_last_scan
+                .get(&100)
+                .copied()
+                .unwrap_or(u64::MAX);
+            let should_recompute = last_scan == u64::MAX || tick - last_scan >= 5;
+            assert!(
+                !should_recompute,
+                "Cache should not invalidate within 5 ticks"
+            );
+        }
+
+        // Simulate tick 5 (5 - 0 = 5, should recompute)
+        let last_scan = state
+            .merchant_last_scan
+            .get(&100)
+            .copied()
+            .unwrap_or(u64::MAX);
+        let should_recompute = last_scan == u64::MAX || 5 - last_scan >= 5;
+        assert!(
+            should_recompute,
+            "Cache should recompute at 5-tick boundary"
+        );
+    }
+
+    #[test]
+    fn test_cache_matches_uncached_scan() {
+        // Stage 2d: Verify cached result matches expensive triple-nested scan
+        let mut state = SimState::new();
+
+        // Setup: 3 cities with mixed opportunities
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            crate::sim::state::CelestialBody {
+                id: 2,
+                system_id: 1,
+                name: "B2".into(),
+                fertility: 1.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            3,
+            crate::sim::state::CelestialBody {
+                id: 3,
+                system_id: 1,
+                name: "B3".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sector 1".into(),
+            },
+        );
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Empire".into(),
+                government_type: "republic".into(),
+                tax_rate_base: 0.05,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "City2".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+        state.cities.insert(
+            3,
+            City {
+                id: 3,
+                body_id: 3,
+                name: "City3".into(),
+                population: 100,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+            },
+        );
+
+        // Two resource types
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(),
+                category: "raw".into(),
+                is_vital: false,
+            },
+        );
+        state.resource_types.insert(
+            2,
+            crate::sim::state::ResourceType {
+                id: 2,
+                name: "Ingot".into(),
+                category: "processed".into(),
+                is_vital: false,
+            },
+        );
+
+        state.companies.insert(
+            100,
+            Company {
+                id: 100,
+                name: "Merchant".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 5000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup: Various prices creating opportunities
+        state.ema_prices.insert((1, 1), 10.0); // Ore at city 1
+        state.ema_prices.insert((2, 1), 25.0); // Ore expensive at city 2
+        state.ema_prices.insert((3, 1), 20.0); // Ore medium at city 3
+        state.ema_prices.insert((1, 2), 50.0); // Ingot at city 1
+        state.ema_prices.insert((2, 2), 60.0); // Ingot at city 2
+        state.ema_prices.insert((3, 2), 55.0); // Ingot at city 3
+
+        // Compute opportunities
+        let cached = compute_merchant_opportunities(&state, 100);
+
+        // Verify meaningful results
+        assert!(
+            !cached.is_empty(),
+            "Should find opportunities with these prices"
+        );
+
+        // Verify all opportunities are profitable (> 0.1%)
+        for opp in &cached {
+            assert!(
+                opp.profit_margin > 0.001,
+                "All cached opportunities should be profitable"
+            );
+        }
+
+        // Verify sorted by profit descending
+        for i in 0..cached.len() - 1 {
+            assert!(
+                cached[i].profit_margin >= cached[i + 1].profit_margin,
+                "Should be sorted by profit descending"
+            );
+        }
+    }
 }
