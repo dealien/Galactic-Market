@@ -2,16 +2,29 @@ use tracing::debug;
 
 use crate::sim::state::{MarketOrder, SimState};
 
-/// Credits earned per citizen per tick (represents wages, taxes, etc.)
-const INCOME_PER_CAPITA_PER_TICK: f64 = 0.01; // Increased from 0.005
-
 /// Ingots demanded per 1,000 citizens per tick.
 const DEMAND_PER_1K_POPULATION: i64 = 1;
 
-/// Phase 5: Population consumption.
+/// Issue #10: Population fulfillment thresholds for growth/decline
+/// - Above 95% food: population grows +0.05% per tick
+/// - 70-95% food: population stable
+/// - 40-70% food: population declines -0.1% per tick
+/// - Below 40% food: famine starvation -0.5% per tick
+const FOOD_FULFILLMENT_GROWTH_THRESHOLD: f64 = 0.95;
+const FOOD_FULFILLMENT_STABLE_MIN: f64 = 0.70;
+const FOOD_FULFILLMENT_DECLINE_MIN: f64 = 0.40;
+
+const POPULATION_GROWTH_RATE: f64 = 0.0005; // +0.05% per tick
+const POPULATION_STABLE_RATE: f64 = 0.0; // No change
+const POPULATION_DECLINE_RATE: f64 = -0.001; // -0.1% per tick
+const POPULATION_STARVATION_RATE: f64 = -0.005; // -0.5% per tick
+
+/// Phase 6: Population consumption.
 ///
-/// Each city's consumer company receives a per-capita income credit, then
-/// posts buy orders for all Refined and Consumer goods.
+/// Issue #9/#10: Draw per-capita income from city wage pools (closed-loop economy).
+/// Instead of manifesting credits, cities spend accumulated wages on goods.
+/// Posts buy orders for all Refined and Consumer goods.
+/// After consumption, updates population based on food fulfillment.
 pub fn run_consumption(state: &mut SimState, current_tick: u64) {
     // Snapshot last known prices for budgeting
     let last_prices = state.price_cache.clone();
@@ -39,27 +52,76 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
         .collect();
 
     for (city_id, population, company_id) in consumers {
-        // 1. Credit per-tick income to the consumer treasury
-        let income = population as f64 * INCOME_PER_CAPITA_PER_TICK;
-        let mut available_cash = 0.0;
+        // Check for active famine in this city
+        let famine_severity = state
+            .active_events
+            .values()
+            .filter(|e| e.event_type == "famine" && e.target_id == Some((city_id, 0)))
+            .map(|e| e.severity)
+            .sum::<f64>();
 
+        // Issue #9: Draw income from city wage pool instead of manifesting credits
+        let available_wages = state.get_wage_pool(city_id);
+        let consumption_budget = available_wages * 0.8; // Use 80% of wages, keep 20% as buffer
+
+        if consumption_budget < 0.01 && available_wages < 0.01 {
+            // No wages available; skip consumption this tick
+            // Population may decline due to lack of food (handled in population update)
+            state
+                .market_orders
+                .retain(|_, order| order.company_id != company_id);
+            continue;
+        }
+
+        // Deduct wages from pool (Issue #9: closed-loop economy)
+        state.withdraw_from_wage_pool(city_id, consumption_budget);
+
+        // Ensure company has cash for orders (fallback to manifested if needed, but log it)
         if let Some(company) = state.companies.get_mut(&company_id) {
-            company.cash += income;
+            company.cash += consumption_budget;
+            if company.cash < 1.0 {
+                // Company still has minimal cash; skip
+                state
+                    .market_orders
+                    .retain(|_, order| order.company_id != company_id);
+                continue;
+            }
+        }
+
+        let mut available_cash = 0.0;
+        if let Some(company) = state.companies.get(&company_id) {
             available_cash = company.cash;
         }
 
-        // 2. Budgeting: Split 80% of available cash among target resources
+        // Clear existing orders for this consumer to prevent leaking orders every tick
+        state
+            .market_orders
+            .retain(|_, order| order.company_id != company_id);
+
+        // 2. Budgeting: Split available cash among target resources
         let total_budget = available_cash * 0.8;
         let budget_per_resource = total_budget / target_resource_ids.len() as f64;
 
         for &res_id in &target_resource_ids {
+            let res = &state.resource_types[&res_id];
             let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(20.0);
 
-            // Consumers are willing to pay slightly above market to ensure fulfillment
-            let bid_price = (market_price * 1.1).min(500.0);
+            // Consumers are willing to pay slightly above market to ensure fulfillment.
+            // Spikes significantly during famine for vital resources (food, water).
+            let mut bid_modifier = 1.1;
+            let mut demand_modifier = 1.0;
+
+            if res.is_vital && famine_severity > 0.0 {
+                bid_modifier += famine_severity * 2.0; // Desperation price
+                demand_modifier += famine_severity * 3.0; // Inelastic demand spike
+            }
+
+            let bid_price = (market_price * bid_modifier).min(1000.0);
 
             // Demand scales with population
-            let ideal_demand = (population / 1000).max(1) * DEMAND_PER_1K_POPULATION;
+            let ideal_demand =
+                ((population / 1000).max(1) * DEMAND_PER_1K_POPULATION) as f64 * demand_modifier;
+            let ideal_demand = ideal_demand as i64;
 
             // Can we afford the ideal demand?
             let affordable_qty = (budget_per_resource / bid_price) as i64;
@@ -86,6 +148,88 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 
         debug!(city_id, population, "Consumer demand updated for city");
     }
+
+    // Issue #10: Update population based on food fulfillment
+    update_population_dynamics(state);
+}
+
+/// Issue #10: Update city populations based on food fulfillment.
+///
+/// Population growth/decline is based on the ratio of food consumed to food required:
+/// - fulfillment > 95%: growth +0.05% per tick
+/// - fulfillment 70-95%: stable (0% change)
+/// - fulfillment 40-70%: decline -0.1% per tick
+/// - fulfillment < 40%: starvation -0.5% per tick
+fn update_population_dynamics(state: &mut SimState) {
+    let mut city_updates: Vec<(i32, i64)> = Vec::new();
+
+    for (city_id, city) in state.cities.iter() {
+        if city.population <= 0 {
+            continue;
+        }
+
+        // Calculate food fulfillment: actual food consumed / required for full population
+        let food_required = city.population as f64;
+        let mut food_consumed = 0.0;
+
+        // Find food resource ID
+        let food_resource_id = state
+            .resource_types
+            .values()
+            .find(|r| r.name.contains("Food") || r.name.contains("Ration"))
+            .map(|r| r.id);
+
+        if let Some(food_id) = food_resource_id {
+            // Count food in consumer company inventory for this city
+            // Inventories are keyed by (company_id, city_id, resource_type_id)
+            if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id)
+                && let Some(inv) = state.inventories.get(&(*consumer_co_id, *city_id, food_id))
+            {
+                food_consumed = inv.quantity as f64;
+            }
+        }
+
+        let food_fulfillment = if food_required > 0.0 {
+            (food_consumed / food_required).min(2.0) // Cap at 200%
+        } else {
+            1.0
+        };
+
+        let growth_rate = if food_fulfillment >= FOOD_FULFILLMENT_GROWTH_THRESHOLD {
+            POPULATION_GROWTH_RATE
+        } else if food_fulfillment >= FOOD_FULFILLMENT_STABLE_MIN {
+            POPULATION_STABLE_RATE
+        } else if food_fulfillment >= FOOD_FULFILLMENT_DECLINE_MIN {
+            // Linear interpolation between decline and starvation
+            let t = (food_fulfillment - FOOD_FULFILLMENT_DECLINE_MIN)
+                / (FOOD_FULFILLMENT_STABLE_MIN - FOOD_FULFILLMENT_DECLINE_MIN);
+            POPULATION_STABLE_RATE * t + POPULATION_DECLINE_RATE * (1.0 - t)
+        } else {
+            POPULATION_STARVATION_RATE
+        };
+
+        let new_population_f64 = city.population as f64 * (1.0 + growth_rate);
+        let new_population = new_population_f64.max(1.0) as i64; // Never go below 1
+
+        if new_population != city.population {
+            debug!(
+                city_id,
+                old_pop = city.population,
+                new_pop = new_population,
+                fulfillment = food_fulfillment,
+                growth_rate,
+                "Population updated"
+            );
+            city_updates.push((*city_id, new_population));
+        }
+    }
+
+    // Apply population updates
+    for (city_id, new_pop) in city_updates {
+        if let Some(city) = state.cities.get_mut(&city_id) {
+            city.population = new_pop;
+        }
+    }
 }
 
 // ─── Unit Tests ────────────────────────────────────────────────────────────────
@@ -104,6 +248,7 @@ mod tests {
                 id: 1,
                 name: "Test Ingot".into(),
                 category: "Refined Material".into(),
+                is_vital: false,
             },
         );
 
@@ -140,16 +285,30 @@ mod tests {
     }
 
     #[test]
-    fn consumer_receives_income_each_tick() {
+    fn consumer_draws_from_wage_pool() {
         let mut state = make_consumer_state(1_000_000, 0.0);
+
+        // Set up a wage pool for the city
+        let wage_amount = 1_000.0;
+        state.add_to_wage_pool(1, wage_amount);
+
         run_consumption(&mut state, 1);
-        let expected_income = 1_000_000.0 * INCOME_PER_CAPITA_PER_TICK;
-        assert!((state.companies[&1].cash - expected_income).abs() < 0.001);
+
+        // Should have drawn 80% of the wage pool
+        let remaining_wage = state.get_wage_pool(1);
+        assert!(
+            (remaining_wage - (wage_amount * 0.2)).abs() < 0.001,
+            "Wage pool should have 20% remaining"
+        );
     }
 
     #[test]
     fn consumer_posts_buy_orders() {
         let mut state = make_consumer_state(1_000_000, 10_000.0);
+
+        // Set up a wage pool for the city
+        state.add_to_wage_pool(1, 10_000.0);
+
         run_consumption(&mut state, 1);
         let orders: Vec<_> = state.market_orders.values().collect();
         assert!(!orders.is_empty(), "Should have posted buy orders");

@@ -1,12 +1,15 @@
 use crate::sim::state::{Inventory, SimState};
 use petgraph::algo::dijkstra;
 use petgraph::graphmap::UnGraphMap;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 /// Phase 3: Logistics.
 ///
 /// Advance in-transit shipments and deliver cargo at destination.
 pub fn run_logistics(state: &mut SimState, current_tick: u64) {
+    // Refresh distance cache to account for blockades
+    build_system_distances(state);
+
     let mut to_deliver = Vec::new();
 
     // Identify shipments that have arrived
@@ -42,11 +45,35 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
 }
 
 /// Builds the all-pairs shortest path cache for the system jump network.
+/// Account for active blockades by skipping blocked lanes.
+///
+/// This is a potentially expensive operation (Dijkstra from every node), so it
+/// is skipped when the set of active `blockade_lane` events has not changed
+/// since the last rebuild (tracked via `state.blockade_version`).
 pub fn build_system_distances(state: &mut SimState) {
+    // Only recompute when the blockade set has changed.
+    if state.distances_blockade_version == state.blockade_version {
+        return;
+    }
+
+    state.system_distances.clear();
     let mut graph = UnGraphMap::<i32, f64>::new();
 
-    // Add edges for all lanes
-    for lane in state.system_lanes.values() {
+    // Identify blockaded lanes (now stored as tuples in events)
+    let mut blockaded_lanes = std::collections::HashSet::new();
+    for event in state.active_events.values() {
+        if event.event_type == "blockade_lane"
+            && let Some(target) = event.target_id
+        {
+            blockaded_lanes.insert(target);
+        }
+    }
+
+    // Add edges for all lanes that aren't blockaded
+    for (tuple, lane) in &state.system_lanes {
+        if blockaded_lanes.contains(tuple) {
+            continue;
+        }
         graph.add_edge(lane.system_a_id, lane.system_b_id, lane.distance_ly);
     }
 
@@ -57,6 +84,23 @@ pub fn build_system_distances(state: &mut SimState) {
             state.system_distances.insert((start_node, end_node), cost);
         }
     }
+
+    // Detect and log changes in network connectivity
+    let components = petgraph::algo::connected_components(&graph);
+    if components != state.last_connected_components {
+        if components > 1 {
+            warn!(
+                "System network fragmentation changed: {} -> {} components (check for blockades)",
+                state.last_connected_components, components
+            );
+        } else if state.last_connected_components > 1 {
+            info!("System network has been fully RECONNECTED.");
+        }
+        state.last_connected_components = components;
+    }
+
+    // Mark distances as up-to-date for the current blockade version.
+    state.distances_blockade_version = state.blockade_version;
 }
 
 /// Metadata about a potential transport route.
@@ -138,7 +182,7 @@ pub fn get_transport_info(
         };
     }
 
-    warn!(
+    debug!(
         from_sys = origin_system_id,
         to_sys = dest_system_id,
         "No jump lane path found between systems"
@@ -199,6 +243,7 @@ mod tests {
                 id: 1,
                 system_id: 1,
                 name: "Body 1".into(),
+                fertility: 1.5,
             },
         );
         state.celestial_bodies.insert(
@@ -207,6 +252,7 @@ mod tests {
                 id: 2,
                 system_id: 1,
                 name: "Body 2".into(),
+                fertility: 1.2,
             },
         );
 
@@ -274,6 +320,7 @@ mod tests {
                 id: 3,
                 system_id: 3,
                 name: "Body 3".into(),
+                fertility: 1.0,
             },
         );
         state.cities.insert(
@@ -295,6 +342,7 @@ mod tests {
                 id: 4,
                 system_id: 2,
                 name: "Body 4".into(),
+                fertility: 1.8,
             },
         );
         state.cities.insert(

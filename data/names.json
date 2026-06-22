@@ -1,0 +1,50 @@
+{
+  "system": {
+    "core": {
+      "prefixes": ["Alpha", "Beta", "Nova", "Proxima", "Sirius", "Vega", "Orion", "Gilead", "Helios", "Oasis"],
+      "cores": ["Centauri", "Eridani", "Ceti", "Pegasi", "Cygni", "Lyrae", "Sol", "Antares", "Rigel", "Polaris"],
+      "suffixes": ["Prime", "Major", "I", "II", "A", "Alpha"]
+    },
+    "outpost": {
+      "prefixes": ["Sector", "Zone", "Rim", "Void", "Dust", "Wasteland", "Fringe", "Deep", "Dark", "Ghost"],
+      "cores": ["X-99", "Gamma-7", "Omega-4", "Theta-2", "Delta-1", "Sigma-9", "Epsilon-5", "Kappa-3", "Zeta-8", "Rho-6"],
+      "suffixes": ["Station", "Node", "Hub", "Relay", "Outpost", "Sentry"]
+    }
+  },
+  "planet": {
+    "core": {
+      "prefixes": ["New", "Great", "High", "Upper", "Old", "Aethel", "Sanctuary", "Haven"],
+      "cores": ["Earth", "Eden", "Terra", "Gaia", "Apollo", "Athena", "Ares", "Hera", "Zeus", "Hermes"],
+      "suffixes": ["I", "II", "III", "IV", "V"]
+    },
+    "outpost": {
+      "prefixes": ["Low", "Lower", "Dark", "Cold", "Dry", "Red", "Grey", "Scorched", "Frozen"],
+      "cores": ["Mars", "Hades", "Pluto", "Vesta", "Ceres", "Titan", "Europa", "Io", "Ganymede", "Callisto"],
+      "suffixes": ["IV", "V", "VI", "VII", "VIII"]
+    }
+  },
+  "city": {
+    "core": {
+      "prefixes": ["Port", "Mount", "Lake", "New", "Great", "Grand", "Saint", "Royal"],
+      "cores": ["Hope", "Faith", "Grace", "Joy", "Wisdom", "Honor", "Glory", "Victory", "Unity", "Liberty"],
+      "suffixes": ["City", "Metropolis", "Capital", "Center", "Hub", "Gateway"]
+    },
+    "outpost": {
+      "prefixes": ["Fort", "Camp", "Base", "Relay", "Scrap", "Dust", "Iron", "Last", "End"],
+      "cores": ["Despair", "Truth", "Mercy", "Peace", "Courage", "Sorrow", "Fury", "Silence", "Echo", "Shadow"],
+      "suffixes": ["Station", "Outpost", "Settlement", "Camp", "Landing", "Dig"]
+    }
+  },
+  "company": {
+    "core": {
+      "prefixes": ["Aegis", "Apex", "Atlas", "Aurora", "Celestial", "Cosmic", "Eclipse", "Elysium", "Equinox", "Galactic", "Horizon", "Infinity", "Meridian", "Nebula", "Nova", "Olympus", "Omega", "Orion", "Pinnacle", "Quantum", "Solaris", "Starlight", "Stellar", "Titan", "Vanguard", "Zenith"],
+      "industries": ["Technologies", "Dynamics", "Systems", "Solutions", "Industries", "Enterprises", "Corporation", "Consortium", "Cybernetics", "Robotics", "Aeronautics"],
+      "suffixes": ["Corp", "Inc", "Ltd", "Plc", "Group", "Holdings", "Global"]
+    },
+    "outpost": {
+      "prefixes": ["Dust", "Rough", "Wild", "Iron", "Steel", "Drill", "Pick", "Blast", "Hard", "Deep", "Grim"],
+      "industries": ["Mining", "Refining", "Trading", "Logistics", "Transport", "Shipping", "Manufacturing", "Production", "Excavation", "Salvage", "Freight"],
+      "suffixes": ["Syndicate", "Alliance", "Union", "Co", "GmbH", "Partners", "Brothers"]
+    }
+  }
+}
