@@ -571,17 +571,22 @@ The project is in **active development**, past the foundation stages and into co
 
 ### Immediate Priorities
 
-1. **Stabilize consumption model** — Population growth curves, demand elasticity, food crisis mechanics
+1. **Phase 2 Refactor: COMPLETE** ✅ — Merchant routing optimization for food distribution
+   - All 4 stages implemented: food balance caching, famine routing, automatic routing, opportunity caching
+   - 200+ tick integration testing validated
+   - ~79% performance improvement in arbitrage scan overhead
+
+2. **Stabilize consumption model** — Population growth curves, demand elasticity, food crisis mechanics
    - *Tracked in GitHub issue #10 (Dynamic Population, Migration, Empire Relief System) and #9 (Balanced Economic Cycle)*
 
-2. **Complete event system** — Load event definitions from JSON; implement all event types
+3. **Complete event system** — Load event definitions from JSON; implement all event types
    - *Related to issue #11 (Dynamic Resource Loading via JSON)*
 
-3. **Improve trading AI** — Multi-hop routing, arbitrage detection, margin calculations
+4. **Improve trading AI** — Multi-hop routing (deferred as GitHub issue #14), arbitrage detection, margin calculations
 
-4. **Performance benchmarking** — Profile hot paths; optimize market matching and decision AI
+5. **Performance benchmarking** — Profile hot paths; optimize market matching and decision AI
 
-5. **Roadmap refinement** — Determine UI priorities (god mode vs. analytics vs. playback)
+6. **Roadmap refinement** — Determine UI priorities (god mode vs. analytics vs. playback)
 
 > **Note:** See GitHub repository for active issues: https://github.com/dealien/Galactic-Market/issues
 > Key blockers: Issues #9 (Economic Cycle) and #10 (Population) are prerequisites for meaningful war mechanics and should be prioritized before Stage 4 political simulation.
@@ -598,6 +603,7 @@ This table maps open GitHub issues to relevant DESIGN.md sections and roadmap st
 | **#11** | [Dynamic Resource Loading (JSON)](https://github.com/dealien/Galactic-Market/issues/11) | §4.1 (Seeding) | 3 | 🟡 High | — | Infrastructure; can be done in parallel |
 | **#12** | [Terrain-based Fertility System](https://github.com/dealien/Galactic-Market/issues/12) | §3.1a (Production) | 3 | 🟢 Medium | #11 | Geographic specialization |
 | **#13** | [Ship Transport Capacity & Fleet System](https://github.com/dealien/Galactic-Market/issues/13) | §3.2 (Logistics) | 5 | 🟢 Medium | #9, #10 | Future infrastructure; replaces unlimited capacity assumption |
+| **#14** | [Multi-hop Smart Routing for Merchants](https://github.com/dealien/Galactic-Market/issues/14) | §3.2 (Trade Logistics), §5.4 (Merchant AI) | 2e | 🟢 Low | — | Deferred optimization; simple A-B routing sufficient for MVP |
 | **#2** | [Procedural Name Generator](https://github.com/dealien/Galactic-Market/issues/2) | §5.2 (modules), §8.1 | 1 | 🟢 Low | — | Quality-of-life enhancement |
 
 **Recommendation:** Address issues in this priority order:
