@@ -554,7 +554,7 @@ The project is in **active development**, past the foundation stages and into co
 - ⏳ Full event definition system with JSON/TOML configs
 - ⏳ Diplomatic tension and faction relations
 - ⏳ Blockade effects on trade (partially done; routes respect blockades)
-- ⏳ War mechanics and territory control
+- ⏳ War mechanics and territory control *(deferred — tracked in [Issue #15](https://github.com/dealien/Galactic-Market/issues/15))*
 - ⏳ Random seed reproducibility
 
 **Stage 5 — Web UI:**
@@ -589,7 +589,7 @@ The project is in **active development**, past the foundation stages and into co
 6. **Roadmap refinement** — Determine UI priorities (god mode vs. analytics vs. playback)
 
 > **Note:** See GitHub repository for active issues: https://github.com/dealien/Galactic-Market/issues
-> Key blockers: Issues #9 (Economic Cycle) and #10 (Population) are prerequisites for meaningful war mechanics and should be prioritized before Stage 4 political simulation.
+> Stage 4 complete (via PR #8): Issues #9 (Economic Cycle) and #10 (Population) resolved in PR #8. War mechanics deferred to Issue #15.
 
 ### GitHub Issues Cross-Reference
 
@@ -660,3 +660,4 @@ These are deliberate open questions — decisions to revisit as the simulation m
 | **Procedural world-gen vs. hand-crafted universe** | Hand-crafted gives more control; procedural enables multiple playthroughs. Start with a procedural world-gen, then add hand-crafted elements later. |
 | **Simulation speed target** | How many ticks/second? 1000 ticks/s would simulate ~19 simulated years/second at 1-week ticks. Benchmark after Stage 1. |
 | **Save / replay system** | Full tick snapshots are expensive. Consider event-sourcing: log all changes; replay from tick 0 to reconstruct any state. |
+
