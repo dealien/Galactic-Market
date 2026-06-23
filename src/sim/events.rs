@@ -27,8 +27,8 @@ pub fn run_events(state: &mut SimState, rng: &mut impl Rng) {
         trigger_random_event(state, rng);
     }
 
-    // 3. Process Diplomatic Tensions & War status
-    process_politics(state, rng);
+    // Note: Politics (tension, war, alliances) is now handled by the dedicated
+    // politics phase in src/sim/politics.rs.
 }
 
 fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
@@ -139,36 +139,6 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
         }
 
         state.active_events.insert(event.id, event);
-    }
-}
-
-fn process_politics(state: &mut SimState, _rng: &mut impl Rng) {
-    for rel in state.diplomatic_relations.values_mut() {
-        // Natural tension decay
-        if rel.status == "neutral" {
-            rel.tension = (rel.tension - 0.01).max(0.0);
-        }
-
-        // Trigger War if tension too high
-        if rel.status == "neutral" && rel.tension >= 100.0 {
-            rel.status = "war".to_string();
-            let name_a = &state.empires[&rel.empire_a_id].name;
-            let name_b = &state.empires[&rel.empire_b_id].name;
-            info!("WAR DECLARED between {} and {}!", name_a, name_b);
-
-            // Create a war event
-            let event = ActiveEvent {
-                id: state.next_event_id,
-                event_type: "war".to_string(),
-                target_id: None, // Targets both empires
-                severity: 1.0,
-                start_tick: state.tick,
-                end_tick: state.tick + 1000, // Long duration
-                flavor_text: Some(format!("The {} and {} are at open war!", name_a, name_b)),
-            };
-            state.next_event_id += 1;
-            state.active_events.insert(event.id, event);
-        }
     }
 }
 

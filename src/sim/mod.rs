@@ -1,10 +1,13 @@
+pub mod alliances;
 pub mod consumption;
 pub mod decisions;
 pub mod events;
 pub mod finance;
 pub mod logistics;
 pub mod markets;
+pub mod military;
 pub mod namegen;
+pub mod politics;
 pub mod production;
 pub mod resources;
 pub mod state;
@@ -63,6 +66,10 @@ impl SimState {
 
         // ── Phase 9: Random Events ───────────────────────────────────────────
         events::run_events(self, rng);
+
+        // ── Phase 9b: Politics (war, occupation, alliances, sector control) ──
+        politics::run_politics(self, rng);
+        alliances::run_alliances(self, rng);
 
         // ── Phase 10: Periodic DB flush ───────────────────────────────────────
         if self.tick.is_multiple_of(FLUSH_INTERVAL) {
@@ -352,6 +359,121 @@ impl SimState {
             .bind(event.start_tick as i64)
             .bind(event.end_tick as i64)
             .bind(&event.flavor_text)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Military Units ────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM military_units")
+            .execute(&mut *tx)
+            .await?;
+
+        for unit in self.military_units.values() {
+            sqlx::query(
+                "INSERT INTO military_units (id, empire_id, unit_type, strength, system_id, status, morale)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(unit.id)
+            .bind(unit.empire_id)
+            .bind(&unit.unit_type)
+            .bind(unit.strength)
+            .bind(unit.system_id)
+            .bind(&unit.status)
+            .bind(unit.morale)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Treaties ──────────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM treaty_members")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM treaties")
+            .execute(&mut *tx)
+            .await?;
+
+        for treaty in self.treaties.values() {
+            sqlx::query(
+                "INSERT INTO treaties (id, alliance_name, formed_tick, dissolved_tick)
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(treaty.id)
+            .bind(&treaty.alliance_name)
+            .bind(treaty.formed_tick as i64)
+            .bind(treaty.dissolved_tick.map(|t| t as i64))
+            .execute(&mut *tx)
+            .await?;
+
+            for &empire_id in &treaty.member_empire_ids {
+                sqlx::query(
+                    "INSERT INTO treaty_members (treaty_id, empire_id, joined_tick) VALUES ($1, $2, $3)",
+                )
+                .bind(treaty.id)
+                .bind(empire_id)
+                .bind(treaty.formed_tick as i64)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        // ── Wars ──────────────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM war_theaters")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM war_participants")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM wars").execute(&mut *tx).await?;
+
+        for war in self.wars.values() {
+            sqlx::query(
+                "INSERT INTO wars (id, aggressor_id, defender_id, start_tick, end_tick, status)
+                 VALUES ($1, $2, $3, $4, $5, $6)",
+            )
+            .bind(war.id)
+            .bind(war.aggressor_id)
+            .bind(war.defender_id)
+            .bind(war.start_tick as i64)
+            .bind(war.end_tick.map(|t| t as i64))
+            .bind(&war.status)
+            .execute(&mut *tx)
+            .await?;
+
+            for (empire_id, role) in &war.participants {
+                sqlx::query(
+                    "INSERT INTO war_participants (war_id, empire_id, role) VALUES ($1, $2, $3)",
+                )
+                .bind(war.id)
+                .bind(empire_id)
+                .bind(role)
+                .execute(&mut *tx)
+                .await?;
+            }
+
+            for &system_id in &war.theaters {
+                sqlx::query("INSERT INTO war_theaters (war_id, system_id) VALUES ($1, $2)")
+                    .bind(war.id)
+                    .bind(system_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        // ── Occupied Systems ──────────────────────────────────────────────────
+        // Reset all occupation status then set occupied ones
+        sqlx::query(
+            "UPDATE star_systems SET occupier_empire_id = NULL, occupied_since_tick = NULL",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        for occ in self.occupied_systems.values() {
+            sqlx::query(
+                "UPDATE star_systems SET occupier_empire_id = $1, occupied_since_tick = $2 WHERE id = $3",
+            )
+            .bind(occ.occupier_empire_id)
+            .bind(occ.since_tick as i64)
+            .bind(occ.system_id)
             .execute(&mut *tx)
             .await?;
         }
