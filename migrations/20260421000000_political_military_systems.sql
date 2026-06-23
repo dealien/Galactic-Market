@@ -1,4 +1,4 @@
--- Phase: Political & Military Systems
+-- Feature: Political & Military Systems
 -- Adds military units, treaties/alliances, wars, and occupation mechanics.
 
 -- ═══════════════════════════════════════════════════════════════════════════════

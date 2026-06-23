@@ -185,22 +185,23 @@ fn has_conflicting_alliances(state: &SimState, empire_a: i32, empire_b: i32) -> 
         let b_involved = war.participants.iter().any(|(id, _)| *id == empire_b);
 
         if a_involved && b_involved {
-            // Check if on opposite sides
-            let a_side = war
-                .participants
-                .iter()
-                .find(|(id, _)| *id == empire_a)
-                .map(|(_, role)| role.as_str());
-            let b_side = war
-                .participants
-                .iter()
-                .find(|(id, _)| *id == empire_b)
-                .map(|(_, role)| role.as_str());
+            // Determine which side each is on: aggressor side vs defender side.
+            // The aggressor_id and its allies are one side; defender_id and its allies the other.
+            let aggressor_side: Vec<i32> = std::iter::once(war.aggressor_id)
+                .chain(
+                    war.participants
+                        .iter()
+                        .filter(|(id, _)| *id != war.aggressor_id && *id != war.defender_id)
+                        .filter(|(_, role)| role == "ally")
+                        .map(|(id, _)| *id),
+                )
+                .collect();
 
-            let a_is_aggressor = matches!(a_side, Some("aggressor") | Some("ally"));
-            let b_is_aggressor = matches!(b_side, Some("aggressor") | Some("ally"));
+            let a_on_aggressor_side = aggressor_side.contains(&empire_a);
+            let b_on_aggressor_side = aggressor_side.contains(&empire_b);
 
-            if a_is_aggressor != b_is_aggressor {
+            // If on opposite sides, it's a conflict
+            if a_on_aggressor_side != b_on_aggressor_side {
                 return true;
             }
         }

@@ -9,6 +9,9 @@ use tracing::info;
 use crate::sim::military;
 use crate::sim::state::{Occupation, SectorControl, SimState, War};
 
+/// Tension reduction per tick for allied empires.
+const ALLIED_TENSION_DECAY_RATE: f64 = 0.1;
+
 /// Tension threshold that triggers war declaration.
 const WAR_TENSION_THRESHOLD: f64 = 100.0;
 
@@ -79,7 +82,7 @@ fn update_tension(state: &mut SimState) {
 
         // Allied empires cannot have tension increase
         if allied_pairs.contains(&key) {
-            rel.tension = (rel.tension - 0.1).max(0.0);
+            rel.tension = (rel.tension - ALLIED_TENSION_DECAY_RATE).max(0.0);
             continue;
         }
 

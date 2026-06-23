@@ -67,7 +67,7 @@ impl SimState {
         // ── Phase 9: Random Events ───────────────────────────────────────────
         events::run_events(self, rng);
 
-        // ── Phase 9b: Politics (war, occupation, alliances, sector control) ──
+        // ── Phase 10: Politics (war, occupation, alliances, sector control) ──
         politics::run_politics(self, rng);
         alliances::run_alliances(self, rng);
 
