@@ -1,0 +1,35 @@
+{
+  "name": "Galactic Market Simulator",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+  "forwardPorts": [
+    5432
+  ],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "serayuzgur.crates",
+        "mtxr.sqltools",
+        "mtxr.sqltools-driver-pg",
+        "vadimcn.vscode-lldb"
+      ],
+      "settings": {
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.check.extraArgs": [
+          "--",
+          "-D",
+          "warnings"
+        ]
+      }
+    }
+  },
+  "containerEnv": {
+    "DATABASE_URL": "postgres://postgres:password@localhost:5432/galactic_market"
+  },
+  "postCreateCommand": "docker compose up -d --wait && cargo build",
+  "remoteUser": "vscode"
+}
