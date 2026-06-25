@@ -282,6 +282,9 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.wars.len(), "Loaded wars.");
 
     // ── Occupied Systems ──────────────────────────────────────────────────────
+    // The migration constraint keeps occupier_empire_id and occupied_since_tick
+    // nullability in sync. The Option<i64> mapping is retained for resilience
+    // when loading legacy/inconsistent data that predates this invariant.
     let occ_rows = sqlx::query_as::<_, (i32, i32, Option<i64>)>(
         "SELECT id, occupier_empire_id, occupied_since_tick FROM star_systems WHERE occupier_empire_id IS NOT NULL",
     )
