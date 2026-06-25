@@ -155,6 +155,7 @@ fn check_war_declarations(state: &mut SimState) {
                 start_tick: state.tick,
                 end_tick: None,
                 status: "active".to_string(),
+                cumulative_losses: 0.0,
             },
         );
 
@@ -311,15 +312,25 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
             }
         }
 
-        // Check war exhaustion → end war
-        let total_losses = aggressor_losses + defender_losses;
-        if total_losses > WAR_EXHAUSTION_THRESHOLD {
+        // Accumulate tick losses into the war's cumulative total, then check
+        // war exhaustion against the running sum so endings are reachable.
+        let tick_losses = aggressor_losses + defender_losses;
+        if let Some(war) = state.wars.get_mut(&war_id) {
+            war.cumulative_losses += tick_losses;
+        }
+        let cumulative_losses = state
+            .wars
+            .get(&war_id)
+            .map(|w| w.cumulative_losses)
+            .unwrap_or(0.0);
+
+        if cumulative_losses > WAR_EXHAUSTION_THRESHOLD {
             if let Some(war) = state.wars.get_mut(&war_id) {
                 war.status = "concluded".to_string();
                 war.end_tick = Some(state.tick);
                 info!(
-                    "War {} concluded due to exhaustion (losses: {:.0}).",
-                    war_id, total_losses
+                    "War {} concluded due to exhaustion (cumulative losses: {:.0}).",
+                    war_id, cumulative_losses
                 );
             }
 

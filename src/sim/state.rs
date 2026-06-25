@@ -132,6 +132,9 @@ pub struct War {
     pub end_tick: Option<u64>,
     /// "active", "ceasefire", or "concluded".
     pub status: String,
+    /// Total military-strength losses accumulated across all ticks of this war.
+    /// Compared against `WAR_EXHAUSTION_THRESHOLD` to trigger a war-exhaustion ending.
+    pub cumulative_losses: f64,
 }
 
 /// A system occupied by a foreign empire.
