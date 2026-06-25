@@ -243,7 +243,8 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .fetch_all(pool)
     .await?;
 
-    for (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses) in war_rows {
+    for (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses) in war_rows
+    {
         let participant_rows = sqlx::query_as::<_, (i32, String)>(
             "SELECT empire_id, role FROM war_participants WHERE war_id = $1",
         )
@@ -291,8 +292,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         let since_tick = since_tick.unwrap_or_else(|| {
             warn!(
                 system_id,
-                occupier_empire_id,
-                "Occupied system missing occupied_since_tick; defaulting to 0."
+                occupier_empire_id, "Occupied system missing occupied_since_tick; defaulting to 0."
             );
             0
         });
