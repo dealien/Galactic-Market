@@ -1,9 +1,9 @@
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::sim::state::{
     ActiveEvent, BankAccount, City, Company, Deposit, DiplomaticRelation, Empire, Facility,
-    Inventory, Recipe, RecipeInput, SimState,
+    Inventory, MilitaryUnit, Occupation, Recipe, RecipeInput, SimState, Treaty, War,
 };
 
 /// Load the full simulation state from the database into memory.
@@ -167,6 +167,153 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(
         count = state.diplomatic_relations.len(),
         "Loaded diplomatic relations."
+    );
+
+    // ── Military Units ────────────────────────────────────────────────────────
+    let rows = sqlx::query_as::<_, (i32, i32, String, f64, i32, String, f64)>(
+        "SELECT id, empire_id, unit_type, strength, system_id, status, morale FROM military_units",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, empire_id, unit_type, strength, system_id, status, morale) in rows {
+        state.military_units.insert(
+            id,
+            MilitaryUnit {
+                id,
+                empire_id,
+                unit_type,
+                strength,
+                system_id,
+                status,
+                morale,
+            },
+        );
+    }
+
+    // Set next_military_unit_id
+    let max_unit_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM military_units")
+        .fetch_one(pool)
+        .await?;
+    state.next_military_unit_id = max_unit_id.0.unwrap_or(0) + 1;
+
+    info!(count = state.military_units.len(), "Loaded military units.");
+
+    // ── Treaties ──────────────────────────────────────────────────────────────
+    let treaty_rows = sqlx::query_as::<_, (i32, String, i64, Option<i64>)>(
+        "SELECT id, alliance_name, formed_tick, dissolved_tick FROM treaties",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, alliance_name, formed_tick, dissolved_tick) in treaty_rows {
+        // Load members for this treaty
+        let member_rows = sqlx::query_as::<_, (i32,)>(
+            "SELECT empire_id FROM treaty_members WHERE treaty_id = $1",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await?;
+
+        let member_empire_ids: Vec<i32> = member_rows.into_iter().map(|(eid,)| eid).collect();
+
+        state.treaties.insert(
+            id,
+            Treaty {
+                id,
+                alliance_name,
+                member_empire_ids,
+                formed_tick: formed_tick as u64,
+                dissolved_tick: dissolved_tick.map(|t| t as u64),
+            },
+        );
+    }
+
+    let max_treaty_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM treaties")
+        .fetch_one(pool)
+        .await?;
+    state.next_treaty_id = max_treaty_id.0.unwrap_or(0) + 1;
+
+    info!(count = state.treaties.len(), "Loaded treaties.");
+
+    // ── Wars ──────────────────────────────────────────────────────────────────
+    let war_rows = sqlx::query_as::<_, (i32, i32, i32, i64, Option<i64>, String, f64)>(
+        "SELECT id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses FROM wars",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses) in war_rows
+    {
+        let participant_rows = sqlx::query_as::<_, (i32, String)>(
+            "SELECT empire_id, role FROM war_participants WHERE war_id = $1",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await?;
+
+        let theater_rows =
+            sqlx::query_as::<_, (i32,)>("SELECT system_id FROM war_theaters WHERE war_id = $1")
+                .bind(id)
+                .fetch_all(pool)
+                .await?;
+
+        state.wars.insert(
+            id,
+            War {
+                id,
+                aggressor_id,
+                defender_id,
+                participants: participant_rows,
+                theaters: theater_rows.into_iter().map(|(s,)| s).collect(),
+                start_tick: start_tick as u64,
+                end_tick: end_tick.map(|t| t as u64),
+                status,
+                cumulative_losses,
+            },
+        );
+    }
+
+    let max_war_id: (Option<i32>,) = sqlx::query_as("SELECT MAX(id) FROM wars")
+        .fetch_one(pool)
+        .await?;
+    state.next_war_id = max_war_id.0.unwrap_or(0) + 1;
+
+    info!(count = state.wars.len(), "Loaded wars.");
+
+    // ── Occupied Systems ──────────────────────────────────────────────────────
+    // The migration constraint keeps occupier_empire_id and occupied_since_tick
+    // nullability in sync. The Option<i64> mapping is retained for resilience
+    // when loading legacy/inconsistent data that predates this invariant.
+    let occ_rows = sqlx::query_as::<_, (i32, i32, Option<i64>)>(
+        "SELECT id, occupier_empire_id, occupied_since_tick FROM star_systems WHERE occupier_empire_id IS NOT NULL",
+    )
+    .fetch_all(pool)
+    .await?;
+
+    for (system_id, occupier_empire_id, since_tick) in occ_rows {
+        let Some(since_tick) = since_tick else {
+            warn!(
+                system_id,
+                occupier_empire_id,
+                "Occupied system missing occupied_since_tick; skipping invalid row."
+            );
+            continue;
+        };
+
+        state.occupied_systems.insert(
+            system_id,
+            Occupation {
+                system_id,
+                occupier_empire_id,
+                since_tick: since_tick as u64,
+            },
+        );
+    }
+
+    info!(
+        count = state.occupied_systems.len(),
+        "Loaded occupied systems."
     );
 
     // ── Active Events ────────────────────────────────────────────────────────

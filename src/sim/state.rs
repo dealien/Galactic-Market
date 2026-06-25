@@ -89,6 +89,74 @@ pub struct DiplomaticRelation {
     pub status: String, // neutral, war, alliance
 }
 
+/// A military unit (fleet or garrison) belonging to an empire.
+#[derive(Debug, Clone)]
+pub struct MilitaryUnit {
+    pub id: i32,
+    pub empire_id: i32,
+    /// "fleet" (mobile offense/defense) or "garrison" (stationary defense).
+    pub unit_type: String,
+    /// Numeric combat power.
+    pub strength: f64,
+    /// Star system where the unit is located.
+    pub system_id: i32,
+    /// "stationed", "deployed", or "in_combat".
+    pub status: String,
+    /// Morale multiplier (0.0–1.0); affects combat effectiveness.
+    pub morale: f64,
+}
+
+/// An alliance/treaty between N empires.
+#[derive(Debug, Clone)]
+pub struct Treaty {
+    pub id: i32,
+    pub alliance_name: String,
+    pub member_empire_ids: Vec<i32>,
+    pub formed_tick: u64,
+    /// None if still active.
+    pub dissolved_tick: Option<u64>,
+}
+
+/// An active or concluded war between empires.
+#[derive(Debug, Clone)]
+pub struct War {
+    pub id: i32,
+    pub aggressor_id: i32,
+    pub defender_id: i32,
+    /// (empire_id, role) tuples — role is "aggressor", "defender", or "ally".
+    pub participants: Vec<(i32, String)>,
+    /// System IDs that are contested theaters of war.
+    pub theaters: Vec<i32>,
+    pub start_tick: u64,
+    /// None if still active.
+    pub end_tick: Option<u64>,
+    /// "active", "ceasefire", or "concluded".
+    pub status: String,
+    /// Total military-strength losses accumulated across all ticks of this war.
+    /// Compared against `WAR_EXHAUSTION_THRESHOLD` to trigger a war-exhaustion ending.
+    pub cumulative_losses: f64,
+}
+
+/// A system occupied by a foreign empire.
+#[derive(Debug, Clone)]
+pub struct Occupation {
+    pub system_id: i32,
+    pub occupier_empire_id: i32,
+    pub since_tick: u64,
+}
+
+/// Tracks empire control within a sector.
+#[derive(Debug, Clone)]
+pub struct SectorControl {
+    pub sector_id: i32,
+    /// Maps empire_id → count of systems controlled in this sector.
+    pub empire_system_counts: HashMap<i32, usize>,
+    /// Total systems in the sector.
+    pub total_systems: usize,
+    /// Whether this sector is split between multiple empires.
+    pub is_split: bool,
+}
+
 /// An active event affecting the simulation.
 ///
 /// For blockade_lane events, target_id contains a tuple (sys_a, sys_b) representing
@@ -365,6 +433,30 @@ pub struct SimState {
     /// Diplomatic relations keyed by (emp_a, emp_b) tuple.
     pub diplomatic_relations: HashMap<(i32, i32), DiplomaticRelation>,
 
+    /// Military units keyed by unit ID.
+    pub military_units: HashMap<i32, MilitaryUnit>,
+
+    /// Active and dissolved treaties keyed by treaty ID.
+    pub treaties: HashMap<i32, Treaty>,
+
+    /// Active and concluded wars keyed by war ID.
+    pub wars: HashMap<i32, War>,
+
+    /// Occupied systems keyed by system_id.
+    pub occupied_systems: HashMap<i32, Occupation>,
+
+    /// Sector control status keyed by sector_id.
+    pub sector_control: HashMap<i32, SectorControl>,
+
+    /// Monotonic counter for generating military unit IDs.
+    pub next_military_unit_id: i32,
+
+    /// Monotonic counter for generating treaty IDs.
+    pub next_treaty_id: i32,
+
+    /// Monotonic counter for generating war IDs.
+    pub next_war_id: i32,
+
     /// Active events keyed by event ID.
     pub active_events: HashMap<i32, ActiveEvent>,
 
@@ -447,6 +539,14 @@ impl SimState {
             next_loan_id: 1,
             empires: HashMap::new(),
             diplomatic_relations: HashMap::new(),
+            military_units: HashMap::new(),
+            treaties: HashMap::new(),
+            wars: HashMap::new(),
+            occupied_systems: HashMap::new(),
+            sector_control: HashMap::new(),
+            next_military_unit_id: 1,
+            next_treaty_id: 1,
+            next_war_id: 1,
             active_events: HashMap::new(),
             event_definitions: Vec::new(),
             next_event_id: 1,
@@ -486,6 +586,27 @@ impl SimState {
     pub fn next_loan_id(&mut self) -> i32 {
         let id = self.next_loan_id;
         self.next_loan_id += 1;
+        id
+    }
+
+    /// Generate a unique military unit ID.
+    pub fn next_military_unit_id(&mut self) -> i32 {
+        let id = self.next_military_unit_id;
+        self.next_military_unit_id += 1;
+        id
+    }
+
+    /// Generate a unique treaty ID.
+    pub fn next_treaty_id(&mut self) -> i32 {
+        let id = self.next_treaty_id;
+        self.next_treaty_id += 1;
+        id
+    }
+
+    /// Generate a unique war ID.
+    pub fn next_war_id(&mut self) -> i32 {
+        let id = self.next_war_id;
+        self.next_war_id += 1;
         id
     }
 
