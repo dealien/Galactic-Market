@@ -1,5 +1,5 @@
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{info, warn};
 
 use crate::sim::state::{
     ActiveEvent, BankAccount, City, Company, Deposit, DiplomaticRelation, Empire, Facility,
@@ -281,13 +281,22 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.wars.len(), "Loaded wars.");
 
     // ── Occupied Systems ──────────────────────────────────────────────────────
-    let occ_rows = sqlx::query_as::<_, (i32, i32, i64)>(
+    let occ_rows = sqlx::query_as::<_, (i32, i32, Option<i64>)>(
         "SELECT id, occupier_empire_id, occupied_since_tick FROM star_systems WHERE occupier_empire_id IS NOT NULL",
     )
     .fetch_all(pool)
     .await?;
 
     for (system_id, occupier_empire_id, since_tick) in occ_rows {
+        let since_tick = since_tick.unwrap_or_else(|| {
+            warn!(
+                system_id,
+                occupier_empire_id,
+                "Occupied system missing occupied_since_tick; defaulting to 0."
+            );
+            0
+        });
+
         state.occupied_systems.insert(
             system_id,
             Occupation {
