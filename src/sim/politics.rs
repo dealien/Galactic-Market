@@ -315,14 +315,12 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         // Accumulate tick losses into the war's cumulative total, then check
         // war exhaustion against the running sum so endings are reachable.
         let tick_losses = aggressor_losses + defender_losses;
-        if let Some(war) = state.wars.get_mut(&war_id) {
+        let cumulative_losses = if let Some(war) = state.wars.get_mut(&war_id) {
             war.cumulative_losses += tick_losses;
-        }
-        let cumulative_losses = state
-            .wars
-            .get(&war_id)
-            .map(|w| w.cumulative_losses)
-            .unwrap_or(0.0);
+            war.cumulative_losses
+        } else {
+            0.0
+        };
 
         if cumulative_losses > WAR_EXHAUSTION_THRESHOLD {
             if let Some(war) = state.wars.get_mut(&war_id) {
