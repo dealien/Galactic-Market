@@ -46,28 +46,28 @@ impl SimState {
         // ── Phase 3: Logistics ───────────────────────────────────────────────
         logistics::run_logistics(self, self.tick);
 
-        // ── Phase 2: Food balance analysis (precompute for merchant routing) ──────
+        // ── Phase 4 (precompute): City food balance for merchant routing ────────
         decisions::analyze_city_food_balance(self);
 
-        // ── Phase 6: Company AI decisions ─────────────────────────────────────
+        // ── Phase 4: Company AI decisions ─────────────────────────────────────
         decisions::run_decisions(self, self.tick);
 
-        // ── Phase 3: Population consumption ───────────────────────────────
+        // ── Phase 5: Population consumption ───────────────────────────────────
         consumption::run_consumption(self, self.tick);
 
-        // ── Phase 5 (NEW): Empire Relief (use treasury to stabilize populations) ──
+        // ── Phase 5b: Empire Relief (empire treasury stabilizes starving cities)
         decisions::run_empire_relief(self, self.tick);
 
-        // ── Phase 4: Market clearing ────────────────────────────────────
+        // ── Phase 6: Market clearing ──────────────────────────────────────────
         markets::clear_orders(self, self.tick);
 
-        // ── Phase 5: Finance ───────────────────────────────────────────────
+        // ── Phase 7: Finance ──────────────────────────────────────────────────
         finance::run_finance(self);
 
-        // ── Phase 9: Random Events ───────────────────────────────────────────
+        // ── Phase 8: Random Events ────────────────────────────────────────────
         events::run_events(self, rng);
 
-        // ── Phase 10: Politics (war, occupation, alliances, sector control) ──
+        // ── Phase 9: Politics (war, occupation, alliances, sector control) ─────
         politics::run_politics(self, rng);
         alliances::run_alliances(self, rng);
     }

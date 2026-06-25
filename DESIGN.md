@@ -292,6 +292,7 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 | 6. Market Clearing | Match buy/sell orders; compute clearing prices; collect port fees to city tax pools | `markets::clear_orders()` | market orders, inventory, tax pools |
 | 7. Finance | Pay corporate taxes to empires; update company cash/debt; handle depreciation | `finance::run_finance()` | companies, bank accounts, empire treasuries |
 | 8. Random Events | Roll random events; trigger blockades, disasters, tech breakthroughs | `events::run_events()` | active events, various (event-dependent) |
+| 9. Politics | Tension decay; war declaration / resolution; occupation updates; sector control; alliance formation & dissolution; military maintenance & morale recovery | `politics::run_politics()`, `alliances::run_alliances()` | diplomatic_relations, wars, occupied_systems, sector_control, military_units, treaties |
 
 **Periodic Flush (every 100 ticks):**
 - All dirty state written to database in a single transaction
@@ -308,8 +309,6 @@ The Phase 2 and Phase 5 modifications enable a closed-loop economic system:
 6. Outcome: wages → consumption → demand → production → repeat; this creates realistic economic feedback
 
 > **Design note:** Relief is a temporary safety valve for food crises. Permanent population stability requires merchant networks (Phase 2 refactor) to distribute food from surplus to deficit cities naturally. Without Phase 2 refactor, relief merely delays starvation; it does not eliminate food scarcity.
-
-> **Note:** Each phase is a separate Rust module. The tick loop runs entirely in memory for performance. Politics phase (diplomacy, faction relations, taxation) is currently integrated into the Events phase but is planned as a separate phase in future development.
 
 ---
 
@@ -356,13 +355,16 @@ galactic-market/
       mod.rs                    # Tick loop implementation; coordinates all phases
       state.rs                  # In-memory SimState struct; mirrors DB schema
       resources.rs              # Phase 1: resource extraction & deposit management
-      production.rs             # Phase 2: production job execution
+      production.rs             # Phase 2: production job execution (refining + manufacturing)
       logistics.rs              # Phase 3: cargo routing & transit
-      decisions.rs              # Phase 4: company AI decision-making
+      decisions.rs              # Phase 4: company AI decision-making & city food balance
       consumption.rs            # Phase 5: population consumption & demand updates
       markets.rs                # Phase 6: order matching & price discovery
       finance.rs                # Phase 7: wages, interest, cash/debt tracking
-      events.rs                 # Phase 8: random events & political mechanics
+      events.rs                 # Phase 8: random events (blockades, price spikes, etc.)
+      politics.rs               # Phase 9: tension, war execution, occupation, sector control
+      military.rs               # Military unit management & combat resolution (called by politics)
+      alliances.rs              # Phase 9: alliance formation & dissolution
       namegen.rs                # Procedural name generation for entities
   benches/
     sim_bench.rs                # Performance benchmarks (Divan + CodSpeed)
@@ -426,40 +428,46 @@ This minimizes round-trips, keeps tick duration predictable, and ensures Postgre
 
 ---
 
-## 6. Political Simulation *(Planned / Partial Implementation)*
+## 6. Political Simulation
 
 Politics is the second simulation layer sitting above economics. It does not replace economic logic — it modifies it. Wars raise taxes and disrupt trade; alliances open new markets; political instability increases risk premiums.
 
-> **Status:** This section describes the intended design. Current implementation includes basic `DiplomaticRelation` structures and blockade event mechanics, but full diplomatic states, faction politics, and war mechanics are **not yet implemented**. Political effects are currently integrated into the Events phase. A dedicated Politics phase is planned for future development.
+> **Status:** Phase 9 (Politics) is implemented as a dedicated tick-loop phase in `politics.rs`, `military.rs`, and `alliances.rs`. Diplomatic relations, tension tracking, war declaration and resolution, occupation mechanics, sector control, military units, and alliance formation/dissolution are all active. The items below marked *(Planned)* describe further sophistication not yet built on top of this foundation.
 
-### 6.1 Diplomatic States *(Planned)*
+### 6.1 Diplomatic States
 
-| State | Economic Effect | Trigger Conditions |
-| --- | --- | --- |
-| Allied | Open borders; shared intelligence; possible joint taxation | Treaty signed; mutual defense activated |
-| Neutral | Normal trade; standard tariffs | Default state; post-war cool-down |
-| Cold War | Embargoes possible; higher tariffs; espionage events active | Tension > threshold without declaration |
-| War | Blockades; territorial seizures; supply chain disruption; defense spending spike | Formal declaration or border incident |
-| Occupation | Occupied territories taxed at higher rate; resistance events | War victory condition met |
+| State | Economic Effect | Trigger Conditions | Implemented |
+| --- | --- | --- | --- |
+| Allied | Open borders; shared intelligence; possible joint taxation | Treaty signed; mutual defense activated | ✅ (treaties, alliance formation) |
+| Neutral | Normal trade; standard tariffs | Default state; post-war cool-down | ✅ |
+| Cold War | Embargoes possible; higher tariffs; espionage events active | Tension > threshold without declaration | ⏳ Planned |
+| War | Blockades; territorial seizures; supply chain disruption; defense spending spike | Formal declaration or border incident | ✅ (wars, theaters, exhaustion) |
+| Occupation | Occupied territories taxed at higher rate; resistance events | War victory condition met | ✅ (occupied_systems, production penalty) |
 
-### 6.2 Political Event Types *(Planned)*
+### 6.2 Political Event Types *(Partial — some planned)*
 
-- **Leadership change** — new ruler may change tax policy, alliances, or trigger military buildup
-- **Election / Coup** — faction government type may shift; economic policy uncertainty spike
-- **Trade deal signed** — tariff reduction between factions; new trade route profitability
-- **Blockade declared** — specific jump lane(s) blocked; prices diverge between systems *(currently implemented as event type)*
-- **Sanction imposed** — specific goods cannot cross faction borders; new smuggling opportunity
-- **Rebellion** — city or sector breaks away; creates a new mini-faction or joins neighbor
+- **Blockade declared** — specific jump lane(s) blocked; prices diverge between systems *(implemented as event type)*
+- **Leadership change** — new ruler may change tax policy, alliances, or trigger military buildup *(planned)*
+- **Election / Coup** — faction government type may shift; economic policy uncertainty spike *(planned)*
+- **Trade deal signed** — tariff reduction between factions; new trade route profitability *(planned)*
+- **Sanction imposed** — specific goods cannot cross faction borders; new smuggling opportunity *(planned)*
+- **Rebellion** — city or sector breaks away; creates a new mini-faction or joins neighbor *(planned)*
 
-### 6.3 War Mechanics *(Planned - Simplified Model)*
+### 6.3 War Mechanics *(Implemented — Simplified Model)*
 
-Full military simulation is out of scope for v1. A simplified war model:
+A simplified war model is fully wired into Phase 9:
 
-- Wars have a **theater** (set of contested systems/sectors)
-- Each tick, `military_strength` scores are compared with dice rolls + terrain + supply line modifiers
-- Outcomes: territory changes, infrastructure damage to random cities in theater, economic disruption events
-- War ends when one side's territory falls below `capitulation_threshold` or a peace treaty is accepted
-- War cost model: defense spending rises; consumer goods production capacity falls; debt rises
+- Wars have a **theater** (set of contested systems) tracked in `wars` + `war_theaters`
+- Each tick, `military_strength` scores (strength × morale) are compared with random variance rolls
+- **Outcomes:** winner occupies the contested system; loser's units take proportional damage; destroyed units (strength < 5.0) are removed
+- **War exhaustion:** cumulative losses across all ticks are tracked in `wars.cumulative_losses`; when losses exceed `WAR_EXHAUSTION_THRESHOLD` the war ends
+- **Occupation:** winning empire occupies the system (`occupied_systems`); production penalty applies (-25%)
+- **Sector split penalty:** systems in a sector split between empires suffer a -15% production penalty and +0.1 tension per tick
+- **Alliances:** empires with low tension and sustained neutral status can form treaties; allies share tension decay; alliances dissolve at high tension
+
+**Military units** (`military.rs`):
+- Each empire spawns initial fleet and garrison units on seeding
+- Per-tick maintenance cost (0.5 cr per strength point); morale recovers +0.02/tick when stationed peacefully
 
 ---
 
@@ -479,10 +487,9 @@ Events are stored in memory as `EventDefinition` structs loaded from the databas
   - `duration_range` — [min, max] ticks the effect persists
   - Additional effect-specific parameters
 
-**Tick 8 Event Flow:**
+**Phase 8 Event Flow:**
 1. **Expiration:** Remove events whose `end_tick < current_tick`; increment `blockade_version` if any blockade expires (triggers rerouting logic)
 2. **New Events:** 5% chance per tick to fire a random event (weighted by event definition weights)
-3. **Politics:** Process diplomatic tensions and war status (integrated into events phase; planned as separate phase)
 
 ### 7.2 Implemented Event Types
 
@@ -518,7 +525,7 @@ The project is in **active development**, past the foundation stages and into co
 - ✅ Rust project with sqlx, tokio, tracing, clap configured
 - ✅ PostgreSQL schema with migrations (empires, sectors, systems, cities, resources, etc.)
 - ✅ Procedural world generation (seeding ~1000+ entities)
-- ✅ Tick loop framework with all 8 phases
+- ✅ Tick loop framework with all 9 phases (Politics phase added)
 - ✅ CLI arguments: `--ticks`, `--seed`, `--clear`, `--debug`, `--random-seed`
 
 **Stage 1 — Basic Economy:**
@@ -551,10 +558,13 @@ The project is in **active development**, past the foundation stages and into co
 - ⏳ Advanced trading AI exploiting arbitrage
 
 **Stage 4 — Politics & Events:**
+- ✅ Diplomatic tension and faction relations
+- ✅ War mechanics and territory control (occupation, sector control, war exhaustion)
+- ✅ Alliance formation and dissolution (treaties)
+- ✅ Military units: fleets and garrisons with strength, morale, maintenance
+- ✅ Dedicated Phase 9 (Politics) wired into tick loop
+- 🔶 Blockade effects on trade (routes respect blockades; full enforcement partial)
 - ⏳ Full event definition system with JSON/TOML configs
-- ⏳ Diplomatic tension and faction relations
-- ⏳ Blockade effects on trade (partially done; routes respect blockades)
-- ⏳ War mechanics and territory control *(deferred — tracked in [Issue #15](https://github.com/dealien/Galactic-Market/issues/15))*
 - ⏳ Random seed reproducibility
 
 **Stage 5 — Web UI:**
