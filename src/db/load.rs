@@ -289,13 +289,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     .await?;
 
     for (system_id, occupier_empire_id, since_tick) in occ_rows {
-        let since_tick = since_tick.unwrap_or_else(|| {
+        let Some(since_tick) = since_tick else {
             warn!(
                 system_id,
-                occupier_empire_id, "Occupied system missing occupied_since_tick; defaulting to 0."
+                occupier_empire_id,
+                "Occupied system missing occupied_since_tick; skipping invalid row."
             );
-            0
-        });
+            continue;
+        };
 
         state.occupied_systems.insert(
             system_id,
