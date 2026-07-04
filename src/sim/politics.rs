@@ -509,8 +509,8 @@ mod tests {
     use crate::sim::state::{
         DiplomaticRelation, Empire, MilitaryUnit, Sector, StarSystem, SystemLane,
     };
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     fn setup_political_state() -> SimState {
         let mut state = SimState::new();

@@ -53,36 +53,36 @@ impl SimState {
         // ── Phase 1: Resource extraction ─────────────────────────────────────
         resources::run_extraction(self);
 
-        // ── Phase 2: Production / refining ───────────────────────────────────
-        production::run_production(self);
-
-        // ── Phase 3: Logistics ───────────────────────────────────────────────
-        logistics::run_logistics(self, self.tick);
-
-        // ── Phase 4a (precompute): City food balance for merchant routing ───────
-        decisions::analyze_city_food_balance(self);
-
-        // ── Phase 4b: Company AI decisions ────────────────────────────────────
-        decisions::run_decisions(self, self.tick);
-
-        // ── Phase 5: Population consumption ───────────────────────────────────
-        consumption::run_consumption(self, self.tick);
-
-        // ── Phase 5b: Empire Relief (empire treasury stabilizes starving cities)
-        decisions::run_empire_relief(self, self.tick);
-
-        // ── Phase 6: Market clearing ──────────────────────────────────────────
-        markets::clear_orders(self, self.tick);
-
-        // ── Phase 7: Finance ──────────────────────────────────────────────────
-        finance::run_finance(self);
-
-        // ── Phase 8: Random Events ────────────────────────────────────────────
-        events::run_events(self, rng);
-
-        // ── Phase 9: Politics and alliances (war, occupation, sector control) ──
+        // ── Phase 2: Politics and alliances (war, occupation, sector control) ──
         politics::run_politics(self, rng);
         alliances::run_alliances(self, rng);
+
+        // ── Phase 3: Production / refining ───────────────────────────────────
+        production::run_production(self);
+
+        // ── Phase 4: Logistics ───────────────────────────────────────────────
+        logistics::run_logistics(self, self.tick);
+
+        // ── Phase 5a (precompute): City food balance for merchant routing ───────
+        decisions::analyze_city_food_balance(self);
+
+        // ── Phase 5b: Company AI decisions ────────────────────────────────────
+        decisions::run_decisions(self, self.tick);
+
+        // ── Phase 6: Population consumption ───────────────────────────────────
+        consumption::run_consumption(self, self.tick);
+
+        // ── Phase 6b: Empire Relief (empire treasury stabilizes starving cities)
+        decisions::run_empire_relief(self, self.tick);
+
+        // ── Phase 7: Market clearing ──────────────────────────────────────────
+        markets::clear_orders(self, self.tick);
+
+        // ── Phase 8: Finance ──────────────────────────────────────────────────
+        finance::run_finance(self);
+
+        // ── Phase 9: Random Events ────────────────────────────────────────────
+        events::run_events(self, rng);
     }
 
     /// Log the Economic Pulse summary tables and flush in-memory state to the

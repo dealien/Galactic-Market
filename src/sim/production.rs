@@ -1,5 +1,6 @@
 use tracing::debug;
 
+use crate::sim::politics;
 use crate::sim::state::{Inventory, Recipe, SimState};
 
 /// Phase 2: Production / refining.
@@ -62,6 +63,8 @@ pub fn run_production(state: &mut SimState) {
 
     // Process refineries (original logic)
     for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
+        let production_multiplier = get_city_production_multiplier(state, city_id);
+
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
             None => continue,
@@ -82,7 +85,8 @@ pub fn run_production(state: &mut SimState) {
                 None => continue,
             };
 
-            let allocated_capacity = (capacity as f64 * ratio).round() as i64;
+            let allocated_capacity =
+                (capacity as f64 * ratio * production_multiplier).round() as i64;
             if allocated_capacity <= 0 {
                 continue;
             }
@@ -143,6 +147,8 @@ pub fn run_production(state: &mut SimState) {
 
     // Process plantations (fertility-driven food production)
     for (_facility_id, city_id, company_id, capacity) in active_plantations {
+        let production_multiplier = get_city_production_multiplier(state, city_id);
+
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
             None => continue,
@@ -176,7 +182,12 @@ pub fn run_production(state: &mut SimState) {
             // Production is: capacity * (1.0 + fertility_bonus)
             // fertility_bonus ranges from 0.0 (0.0x) to 3.0 (3.0x)
             let fertility_multiplier = fertility;
-            let adjusted_capacity = (capacity as f64 * (1.0 + fertility_multiplier)).round() as i64;
+            let adjusted_capacity =
+                (capacity as f64 * (1.0 + fertility_multiplier) * production_multiplier).round()
+                    as i64;
+            if adjusted_capacity <= 0 {
+                continue;
+            }
 
             // Issue #9: Calculate labor costs for plantation runs
             let total_labor_cost = recipe.labor_cost_per_run * adjusted_capacity as f64;
@@ -220,6 +231,21 @@ pub fn run_production(state: &mut SimState) {
     }
 }
 
+/// Returns a city-level production multiplier after politics penalties.
+fn get_city_production_multiplier(state: &SimState, city_id: i32) -> f64 {
+    let system_id = state
+        .cities
+        .get(&city_id)
+        .and_then(|city| state.celestial_bodies.get(&city.body_id))
+        .map(|body| body.system_id);
+
+    let penalty = system_id
+        .map(|system_id| politics::get_system_production_penalty(state, system_id))
+        .unwrap_or(0.0);
+
+    (1.0 - penalty).clamp(0.0, 1.0)
+}
+
 /// Returns the maximum number of times a recipe can run given current inventory.
 fn compute_max_runs(state: &SimState, company_id: i32, city_id: i32, recipe: &Recipe) -> i64 {
     recipe
@@ -239,10 +265,41 @@ fn compute_max_runs(state: &SimState, company_id: i32, city_id: i32, recipe: &Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{City, Company, Facility, Inventory, Recipe, RecipeInput, SimState};
+    use crate::sim::state::{
+        CelestialBody, City, Company, Facility, Inventory, Occupation, Recipe, RecipeInput, Sector,
+        SimState, StarSystem,
+    };
 
     fn make_state() -> SimState {
         let mut s = SimState::new();
+
+        s.sectors.insert(
+            1,
+            Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Test Sector".into(),
+            },
+        );
+
+        s.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Test System".into(),
+            },
+        );
+
+        s.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Test Planet".into(),
+                fertility: 1.0,
+            },
+        );
 
         s.cities.insert(
             1,
@@ -347,9 +404,26 @@ mod tests {
     }
 
     #[test]
-    fn plantation_produces_food_at_base_fertility() {
-        use crate::sim::state::CelestialBody;
+    fn refinery_output_reduced_by_occupation_penalty() {
+        let mut state = make_state();
 
+        state.occupied_systems.insert(
+            1,
+            Occupation {
+                system_id: 1,
+                occupier_empire_id: 2,
+                since_tick: 0,
+            },
+        );
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert_eq!(state.inventories[&ingot_key].quantity, 4);
+    }
+
+    #[test]
+    fn plantation_produces_food_at_base_fertility() {
         let mut state = SimState::new();
 
         // Set up city and planet with 1.0x fertility
@@ -437,8 +511,6 @@ mod tests {
 
     #[test]
     fn plantation_produces_more_on_high_fertility() {
-        use crate::sim::state::CelestialBody;
-
         let mut state = SimState::new();
 
         // Set up city and planet with 2.0x fertility (double production)
