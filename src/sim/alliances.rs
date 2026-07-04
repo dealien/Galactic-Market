@@ -176,34 +176,43 @@ fn check_alliance_dissolution(state: &mut SimState) {
 /// Check if forming an alliance between two empires would conflict with
 /// existing war obligations (can't be allied with both sides of a war).
 fn has_conflicting_alliances(state: &SimState, empire_a: i32, empire_b: i32) -> bool {
+    let participant_side = |role: &str| -> Option<bool> {
+        match role {
+            "aggressor" | "aggressor_ally" => Some(true),
+            "defender" | "defender_ally" => Some(false),
+            // Legacy role from older persisted data has no side information.
+            "ally" => None,
+            _ => None,
+        }
+    };
+
     for war in state.wars.values() {
         if war.status != "active" {
             continue;
         }
 
-        let a_involved = war.participants.iter().any(|(id, _)| *id == empire_a);
-        let b_involved = war.participants.iter().any(|(id, _)| *id == empire_b);
+        let a_side = war
+            .participants
+            .iter()
+            .find(|(id, _)| *id == empire_a)
+            .and_then(|(_, role)| participant_side(role));
+        let b_side = war
+            .participants
+            .iter()
+            .find(|(id, _)| *id == empire_b)
+            .and_then(|(_, role)| participant_side(role));
 
-        if a_involved && b_involved {
-            // Determine which side each is on: aggressor side vs defender side.
-            // The aggressor_id and its allies are one side; defender_id and its allies the other.
-            let aggressor_side: Vec<i32> = std::iter::once(war.aggressor_id)
-                .chain(
-                    war.participants
-                        .iter()
-                        .filter(|(id, _)| *id != war.aggressor_id && *id != war.defender_id)
-                        .filter(|(_, role)| role == "ally")
-                        .map(|(id, _)| *id),
-                )
-                .collect();
-
-            let a_on_aggressor_side = aggressor_side.contains(&empire_a);
-            let b_on_aggressor_side = aggressor_side.contains(&empire_b);
-
-            // If on opposite sides, it's a conflict
-            if a_on_aggressor_side != b_on_aggressor_side {
+        if a_side.is_some() && b_side.is_some() {
+            // If on opposite sides, it's a conflict.
+            if a_side != b_side {
                 return true;
             }
+        } else if war.participants.iter().any(|(id, _)| *id == empire_a)
+            && war.participants.iter().any(|(id, _)| *id == empire_b)
+        {
+            // If both are in an active war but either side is unknown (legacy "ally" role),
+            // reject alliance formation conservatively.
+            return true;
         }
     }
     false
@@ -212,7 +221,7 @@ fn has_conflicting_alliances(state: &SimState, empire_a: i32, empire_b: i32) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{DiplomaticRelation, Empire, SimState};
+    use crate::sim::state::{DiplomaticRelation, Empire, SimState, War};
 
     fn setup_alliance_state() -> SimState {
         let mut state = SimState::new();
@@ -297,5 +306,59 @@ mod tests {
         check_alliance_dissolution(&mut state);
 
         assert!(state.treaties.get(&1).unwrap().dissolved_tick.is_none());
+    }
+
+    #[test]
+    fn test_conflicting_alliances_detect_opposite_war_sides() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "aggressor_ally".to_string()),
+                    (4, "defender_ally".to_string()),
+                ],
+                theaters: vec![],
+                start_tick: 1,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        assert!(has_conflicting_alliances(&state, 3, 4));
+        assert!(!has_conflicting_alliances(&state, 1, 3));
+    }
+
+    #[test]
+    fn test_conflicting_alliances_treat_legacy_ally_role_as_conflict() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "ally".to_string()),
+                ],
+                theaters: vec![],
+                start_tick: 1,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        assert!(has_conflicting_alliances(&state, 2, 3));
     }
 }

@@ -123,7 +123,14 @@ pub struct War {
     pub id: i32,
     pub aggressor_id: i32,
     pub defender_id: i32,
-    /// (empire_id, role) tuples — role is "aggressor", "defender", or "ally".
+    /// (empire_id, role) tuples.
+    ///
+    /// Role values:
+    /// - "aggressor"
+    /// - "defender"
+    /// - "aggressor_ally"
+    /// - "defender_ally"
+    /// - "ally" (legacy/ambiguous persisted data)
     pub participants: Vec<(i32, String)>,
     /// System IDs that are contested theaters of war.
     pub theaters: Vec<i32>,

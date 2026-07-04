@@ -132,14 +132,14 @@ fn check_war_declarations(state: &mut SimState) {
 
         for ally_id in &defender_allies {
             if *ally_id != aggressor_id && *ally_id != defender_id {
-                participants.push((*ally_id, "ally".to_string()));
+                participants.push((*ally_id, "defender_ally".to_string()));
                 // Set ally's relation with aggressor to war
                 set_war_status(state, *ally_id, aggressor_id);
             }
         }
         for ally_id in &aggressor_allies {
             if *ally_id != aggressor_id && *ally_id != defender_id {
-                participants.push((*ally_id, "ally".to_string()));
+                participants.push((*ally_id, "aggressor_ally".to_string()));
                 set_war_status(state, *ally_id, defender_id);
             }
         }
