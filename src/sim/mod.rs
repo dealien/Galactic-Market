@@ -46,10 +46,10 @@ impl SimState {
         // ── Phase 3: Logistics ───────────────────────────────────────────────
         logistics::run_logistics(self, self.tick);
 
-        // ── Phase 4 (precompute): City food balance for merchant routing ────────
+        // ── Phase 4a (precompute): City food balance for merchant routing ───────
         decisions::analyze_city_food_balance(self);
 
-        // ── Phase 4: Company AI decisions ─────────────────────────────────────
+        // ── Phase 4b: Company AI decisions ────────────────────────────────────
         decisions::run_decisions(self, self.tick);
 
         // ── Phase 5: Population consumption ───────────────────────────────────
@@ -67,7 +67,7 @@ impl SimState {
         // ── Phase 8: Random Events ────────────────────────────────────────────
         events::run_events(self, rng);
 
-        // ── Phase 9: Politics (war, occupation, alliances, sector control) ─────
+        // ── Phase 9: Politics and alliances (war, occupation, sector control) ──
         politics::run_politics(self, rng);
         alliances::run_alliances(self, rng);
     }

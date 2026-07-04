@@ -140,7 +140,7 @@ There are no global price tables. Prices exist per market (city or station) and 
 - Price signals drive production decisions: if iron ore prices rise, miners invest more
 - Elastic demand: populations buy more of goods that become cheaper and substitute when prices rise
 
-> **Design note — avoiding oscillation:** With fully reactive AI, all miners will simultaneously pivot to the highest-priced resource in the same tick, flood the market, crash the price to zero, then all pivot away — producing pendulum swings rather than equilibrium. Mitigate this by giving company AI **imperfect information and decision stickiness**: not every company re-evaluates strategy every tick; companies should have a configurable re-evaluation interval (e.g., every 5–20 ticks, jittered), and switching production should carry a **retooling cost** (time + capital) that makes short-cycle pivots unprofitable. This is implemented in the Decisions phase (Phase 6) of the tick loop.
+> **Design note — avoiding oscillation:** With fully reactive AI, all miners will simultaneously pivot to the highest-priced resource in the same tick, flood the market, crash the price to zero, then all pivot away — producing pendulum swings rather than equilibrium. Mitigate this by giving company AI **imperfect information and decision stickiness**: not every company re-evaluates strategy every tick; companies should have a configurable re-evaluation interval (e.g., every 5–20 ticks, jittered), and switching production should carry a **retooling cost** (time + capital) that makes short-cycle pivots unprofitable. This is implemented in the Decisions phase (Phase 4b) of the tick loop.
 
 ### 3.3 Population Dynamics & Food Economy
 
@@ -286,7 +286,8 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 | 1. Resource Extraction | Advance extraction jobs; deplete deposits | `resources::run_extraction()` | deposits, companies, inventory |
 | 2. Production | Advance production jobs; consume inputs; create output; credit labor costs to wage pools | `production::run_production()` | production jobs, inventory, wage pools |
 | 3. Logistics | Advance in-transit shipments; deliver cargo at destination | `logistics::run_logistics()` | trade routes, inventory |
-| 4. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
+| 4a. Food Balance Precompute | Cache city food surplus/deficit signals used by merchant routing | `decisions::analyze_city_food_balance()` | city food balance cache |
+| 4b. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
 | 5. Population Consumption | Populations consume goods from wage pools; update demand; calculate food fulfillment; update population growth/decline | `consumption::run_consumption()` + `update_population_dynamics()` | companies, inventory, populations, wage pools |
 | 5b. Empire Relief | Scan for starving cities; post relief orders from empire treasury | `decisions::run_empire_relief()` | market orders, empire treasuries |
 | 6. Market Clearing | Match buy/sell orders; compute clearing prices; collect port fees to city tax pools | `markets::clear_orders()` | market orders, inventory, tax pools |
@@ -442,7 +443,7 @@ Politics is the second simulation layer sitting above economics. It does not rep
 | Neutral | Normal trade; standard tariffs | Default state; post-war cool-down | ✅ |
 | Cold War | Embargoes possible; higher tariffs; espionage events active | Tension > threshold without declaration | ⏳ Planned |
 | War | Blockades; territorial seizures; supply chain disruption; defense spending spike | Formal declaration or border incident | ✅ (wars, theaters, exhaustion) |
-| Occupation | Occupied territories taxed at higher rate; resistance events | War victory condition met | ✅ (occupied_systems, production penalty) |
+| Occupation | System control shifts to occupier; occupied systems suffer production penalties until liberated | War victory condition met | ✅ (occupied_systems, production penalty) |
 
 ### 6.2 Political Event Types *(Partial — some planned)*
 
@@ -461,8 +462,10 @@ A simplified war model is fully wired into Phase 9:
 - Each tick, `military_strength` scores (strength × morale) are compared with random variance rolls
 - **Outcomes:** winner occupies the contested system; loser's units take proportional damage; destroyed units (strength < 5.0) are removed
 - **War exhaustion:** cumulative losses across all ticks are tracked in `wars.cumulative_losses`; when losses exceed `WAR_EXHAUSTION_THRESHOLD` the war ends
+- **Theater disruption:** systems in active war theaters apply an additional production penalty (-50%)
 - **Occupation:** winning empire occupies the system (`occupied_systems`); production penalty applies (-25%)
 - **Sector split penalty:** systems in a sector split between empires suffer a -15% production penalty and +0.1 tension per tick
+- **Peace conditions:** wars conclude on exhaustion or when no contested systems remain
 - **Alliances:** empires with low tension and sustained neutral status can form treaties; allies share tension decay; alliances dissolve at high tension
 
 **Military units** (`military.rs`):
@@ -525,7 +528,7 @@ The project is in **active development**, past the foundation stages and into co
 - ✅ Rust project with sqlx, tokio, tracing, clap configured
 - ✅ PostgreSQL schema with migrations (empires, sectors, systems, cities, resources, etc.)
 - ✅ Procedural world generation (seeding ~1000+ entities)
-- ✅ Tick loop framework with all 9 phases (Politics phase added)
+- ✅ Tick loop framework with core phases plus implemented sub-phases (4a precompute, 5b relief)
 - ✅ CLI arguments: `--ticks`, `--seed`, `--clear`, `--debug`, `--random-seed`
 
 **Stage 1 — Basic Economy:**
@@ -599,7 +602,7 @@ The project is in **active development**, past the foundation stages and into co
 6. **Roadmap refinement** — Determine UI priorities (god mode vs. analytics vs. playback)
 
 > **Note:** See GitHub repository for active issues: https://github.com/dealien/Galactic-Market/issues
-> Stage 4 complete (via PR #8): Issues #9 (Economic Cycle) and #10 (Population) resolved in PR #8. War mechanics deferred to Issue #15.
+> Stage 4 military and alliance foundations are implemented in the tick loop; additional event/politics depth remains planned.
 
 ### GitHub Issues Cross-Reference
 
