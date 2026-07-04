@@ -140,7 +140,7 @@ There are no global price tables. Prices exist per market (city or station) and 
 - Price signals drive production decisions: if iron ore prices rise, miners invest more
 - Elastic demand: populations buy more of goods that become cheaper and substitute when prices rise
 
-> **Design note — avoiding oscillation:** With fully reactive AI, all miners will simultaneously pivot to the highest-priced resource in the same tick, flood the market, crash the price to zero, then all pivot away — producing pendulum swings rather than equilibrium. Mitigate this by giving company AI **imperfect information and decision stickiness**: not every company re-evaluates strategy every tick; companies should have a configurable re-evaluation interval (e.g., every 5–20 ticks, jittered), and switching production should carry a **retooling cost** (time + capital) that makes short-cycle pivots unprofitable. This is implemented in the Decisions phase (Phase 4b) of the tick loop.
+> **Design note — avoiding oscillation:** With fully reactive AI, all miners will simultaneously pivot to the highest-priced resource in the same tick, flood the market, crash the price to zero, then all pivot away — producing pendulum swings rather than equilibrium. Mitigate this by giving company AI **imperfect information and decision stickiness**: not every company re-evaluates strategy every tick; companies should have a configurable re-evaluation interval (e.g., every 5–20 ticks, jittered), and switching production should carry a **retooling cost** (time + capital) that makes short-cycle pivots unprofitable. This is implemented in the Decisions phase (Phase 5b) of the tick loop.
 
 ### 3.3 Population Dynamics & Food Economy
 
@@ -154,18 +154,18 @@ City populations are dynamic, growing or declining based on food availability. T
 - **Fulfillment 40–70%** → Population declines at -0.1% per tick (food scarcity)
 - **Fulfillment < 40%** → Population crashes at -0.5% per tick (starvation)
 
-Population updates occur at the end of the **Consumption phase (Phase 5)**, after demand is calculated but before market clearing. This ensures starvation feedback is observable in the same tick.
+Population updates occur at the end of the **Consumption phase (Phase 6)**, after demand is calculated but before market clearing. This ensures starvation feedback is observable in the same tick.
 
 **Wage Pools & Consumption Redirection:**
 
 Income is no longer a manifested per-capita credit. Instead:
-- **Phase 2 (Production):** Labor costs are deducted from company cash and credited to **city wage pools** (one pool per city)
-- **Phase 5 (Consumption):** Population budget is drawn from the city wage pool (not manifested)
+- **Phase 3 (Production):** Labor costs are deducted from company cash and credited to **city wage pools** (one pool per city)
+- **Phase 6 (Consumption):** Population budget is drawn from the city wage pool (not manifested)
   - Budget = wage_pool × 0.8 (keeps 20% buffer for next tick)
   - If wage_pool is zero or insufficient, populations **cannot consume**, triggering starvation
 - **Outcome:** Wage pools create a tight feedback loop: no production → no wages → no consumption → starvation
 
-**Empire Relief System (Phase 5b):**
+**Empire Relief System (Phase 6b):**
 
 When a city's food fulfillment drops below 40%, the empire treasury can intervene to prevent total collapse:
 - **Relief Trigger:** Empire scans for starving cities (fulfillment < 40%)
@@ -284,16 +284,16 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 | Phase | Operations | Module | State Modified |
 | --- | --- | --- | --- |
 | 1. Resource Extraction | Advance extraction jobs; deplete deposits | `resources::run_extraction()` | deposits, companies, inventory |
-| 2. Production | Advance production jobs; consume inputs; create output; credit labor costs to wage pools | `production::run_production()` | production jobs, inventory, wage pools |
-| 3. Logistics | Advance in-transit shipments; deliver cargo at destination | `logistics::run_logistics()` | trade routes, inventory |
-| 4a. Food Balance Precompute | Cache city food surplus/deficit signals used by merchant routing | `decisions::analyze_city_food_balance()` | city food balance cache |
-| 4b. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
-| 5. Population Consumption | Populations consume goods from wage pools; update demand; calculate food fulfillment; update population growth/decline | `consumption::run_consumption()` + `update_population_dynamics()` | companies, inventory, populations, wage pools |
-| 5b. Empire Relief | Scan for starving cities; post relief orders from empire treasury | `decisions::run_empire_relief()` | market orders, empire treasuries |
-| 6. Market Clearing | Match buy/sell orders; compute clearing prices; collect port fees to city tax pools | `markets::clear_orders()` | market orders, inventory, tax pools |
-| 7. Finance | Pay corporate taxes to empires; update company cash/debt; handle depreciation | `finance::run_finance()` | companies, bank accounts, empire treasuries |
-| 8. Random Events | Roll random events; trigger blockades, disasters, tech breakthroughs | `events::run_events()` | active events, various (event-dependent) |
-| 9. Politics | Tension decay; war declaration / resolution; occupation updates; sector control; alliance formation & dissolution; military maintenance & morale recovery | `politics::run_politics()`, `alliances::run_alliances()` | diplomatic_relations, wars, occupied_systems, sector_control, military_units, treaties |
+| 2. Politics & Alliances | Tension decay; war declaration / resolution; occupation updates; sector control; alliance formation & dissolution; military maintenance & morale recovery | `politics::run_politics()`, `alliances::run_alliances()` | diplomatic_relations, wars, occupied_systems, sector_control, military_units, treaties |
+| 3. Production | Advance production jobs; consume inputs; create output; credit labor costs to wage pools; apply current system production penalties | `production::run_production()` | production jobs, inventory, wage pools |
+| 4. Logistics | Advance in-transit shipments; deliver cargo at destination | `logistics::run_logistics()` | trade routes, inventory |
+| 5a. Food Balance Precompute | Cache city food surplus/deficit signals used by merchant routing | `decisions::analyze_city_food_balance()` | city food balance cache |
+| 5b. Company AI Decisions | Each company AI evaluates profitability and queues new actions | `decisions::run_decisions()` | market orders, production jobs |
+| 6. Population Consumption | Populations consume goods from wage pools; update demand; calculate food fulfillment; update population growth/decline | `consumption::run_consumption()` + `update_population_dynamics()` | companies, inventory, populations, wage pools |
+| 6b. Empire Relief | Scan for starving cities; post relief orders from empire treasury | `decisions::run_empire_relief()` | market orders, empire treasuries |
+| 7. Market Clearing | Match buy/sell orders; compute clearing prices; collect port fees to city tax pools | `markets::clear_orders()` | market orders, inventory, tax pools |
+| 8. Finance | Pay corporate taxes to empires; update company cash/debt; handle depreciation | `finance::run_finance()` | companies, bank accounts, empire treasuries |
+| 9. Random Events | Roll random events; trigger blockades, disasters, tech breakthroughs | `events::run_events()` | active events, various (event-dependent) |
 
 **Periodic Flush (every 100 ticks):**
 - All dirty state written to database in a single transaction
@@ -301,12 +301,12 @@ The simulation advances in discrete ticks (e.g., 1 tick = 1 simulated day or wee
 - Crash recovery: can restart from last clean checkpoint (see §5.4)
 
 **Closed-Loop Economy (Stage 4):**
-The Phase 2 and Phase 5 modifications enable a closed-loop economic system:
-1. Companies pay labor costs during production (Phase 2), crediting city wage pools
-2. Populations draw consumption budget from wage pools (Phase 5), not manifested credits
-3. Port fees collected during market clearing are added to city tax pools (Phase 6)
-4. Corporate taxes (5% of cash) are routed to empire treasuries (Phase 7)
-5. Empire treasuries fund relief orders when cities face starvation (Phase 5b)
+The Phase 3 and Phase 6 modifications enable a closed-loop economic system:
+1. Companies pay labor costs during production (Phase 3), crediting city wage pools
+2. Populations draw consumption budget from wage pools (Phase 6), not manifested credits
+3. Port fees collected during market clearing are added to city tax pools (Phase 7)
+4. Corporate taxes (5% of cash) are routed to empire treasuries (Phase 8)
+5. Empire treasuries fund relief orders when cities face starvation (Phase 6b)
 6. Outcome: wages → consumption → demand → production → repeat; this creates realistic economic feedback
 
 > **Design note:** Relief is a temporary safety valve for food crises. Permanent population stability requires merchant networks (Phase 2 refactor) to distribute food from surplus to deficit cities naturally. Without Phase 2 refactor, relief merely delays starvation; it does not eliminate food scarcity.
@@ -356,16 +356,16 @@ galactic-market/
       mod.rs                    # Tick loop implementation; coordinates all phases
       state.rs                  # In-memory SimState struct; mirrors DB schema
       resources.rs              # Phase 1: resource extraction & deposit management
-      production.rs             # Phase 2: production job execution (refining + manufacturing)
-      logistics.rs              # Phase 3: cargo routing & transit
-      decisions.rs              # Phase 4: company AI decision-making & city food balance
-      consumption.rs            # Phase 5: population consumption & demand updates
-      markets.rs                # Phase 6: order matching & price discovery
-      finance.rs                # Phase 7: wages, interest, cash/debt tracking
-      events.rs                 # Phase 8: random events (blockades, price spikes, etc.)
-      politics.rs               # Phase 9: tension, war execution, occupation, sector control
+      politics.rs               # Phase 2: tension, war execution, occupation, sector control
       military.rs               # Military unit management & combat resolution (called by politics)
-      alliances.rs              # Phase 9: alliance formation & dissolution
+      alliances.rs              # Phase 2: alliance formation & dissolution
+      production.rs             # Phase 3: production job execution (refining + manufacturing)
+      logistics.rs              # Phase 4: cargo routing & transit
+      decisions.rs              # Phase 5: company AI decision-making & city food balance
+      consumption.rs            # Phase 6: population consumption & demand updates
+      markets.rs                # Phase 7: order matching & price discovery
+      finance.rs                # Phase 8: wages, interest, cash/debt tracking
+      events.rs                 # Phase 9: random events (blockades, price spikes, etc.)
       namegen.rs                # Procedural name generation for entities
   benches/
     sim_bench.rs                # Performance benchmarks (Divan + CodSpeed)
@@ -389,7 +389,7 @@ The simulation implements adaptive company AI driven by **re-evaluation interval
 - **Commercial Banks:** 5–20 ticks
 - **Central Banks:** 50–100 ticks
 
-**Decision Types (implemented in Phase 4 — Decisions):**
+**Decision Types (implemented in Phase 5b — Decisions):**
 
 1. **Liquidation (Bankrupt Companies):** Post fire-sale orders at 50% market price to quickly convert inventory to cash.
 
@@ -433,7 +433,7 @@ This minimizes round-trips, keeps tick duration predictable, and ensures Postgre
 
 Politics is the second simulation layer sitting above economics. It does not replace economic logic — it modifies it. Wars raise taxes and disrupt trade; alliances open new markets; political instability increases risk premiums.
 
-> **Status:** Phase 9 (Politics) is implemented as a dedicated tick-loop phase in `politics.rs`, `military.rs`, and `alliances.rs`. Diplomatic relations, tension tracking, war declaration and resolution, occupation mechanics, sector control, military units, and alliance formation/dissolution are all active. The items below marked *(Planned)* describe further sophistication not yet built on top of this foundation.
+> **Status:** Phase 2 (Politics & Alliances) is implemented as an early tick-loop phase in `politics.rs`, `military.rs`, and `alliances.rs`, so production and logistics feel war/occupation/split penalties in the same tick. Diplomatic relations, tension tracking, war declaration and resolution, occupation mechanics, sector control, military units, and alliance formation/dissolution are all active. The items below marked *(Planned)* describe further sophistication not yet built on top of this foundation.
 
 ### 6.1 Diplomatic States
 
@@ -456,7 +456,7 @@ Politics is the second simulation layer sitting above economics. It does not rep
 
 ### 6.3 War Mechanics *(Implemented — Simplified Model)*
 
-A simplified war model is fully wired into Phase 9:
+A simplified war model is fully wired into Phase 2:
 
 - Wars have a **theater** (set of contested systems) tracked in `wars` + `war_theaters`
 - Each tick, `military_strength` scores (strength × morale) are compared with random variance rolls
@@ -467,6 +467,7 @@ A simplified war model is fully wired into Phase 9:
 - **Sector split penalty:** systems in a sector split between empires suffer a -15% production penalty and +0.1 tension per tick
 - **Peace conditions:** wars conclude on exhaustion or when no contested systems remain
 - **Alliances:** empires with low tension and sustained neutral status can form treaties; allies share tension decay; alliances dissolve at high tension
+- **Participant side roles:** war participants use side-aware roles (`aggressor`, `defender`, `aggressor_ally`, `defender_ally`) with legacy `ally` accepted for backward compatibility in persisted data
 
 **Military units** (`military.rs`):
 - Each empire spawns initial fleet and garrison units on seeding
@@ -476,7 +477,7 @@ A simplified war model is fully wired into Phase 9:
 
 ## 7. Random Event Engine
 
-Events are the third simulation layer (Phase 8 of the tick loop). They inject irreducible uncertainty — even a perfectly-managed company can be disrupted by blockade events or market crashes.
+Events are the third simulation layer (Phase 9 of the tick loop). They inject irreducible uncertainty — even a perfectly-managed company can be disrupted by blockade events or market crashes.
 
 ### 7.1 Event System *(Current Implementation)*
 
@@ -490,7 +491,7 @@ Events are stored in memory as `EventDefinition` structs loaded from the databas
   - `duration_range` — [min, max] ticks the effect persists
   - Additional effect-specific parameters
 
-**Phase 8 Event Flow:**
+**Phase 9 Event Flow:**
 1. **Expiration:** Remove events whose `end_tick < current_tick`; increment `blockade_version` if any blockade expires (triggers rerouting logic)
 2. **New Events:** 5% chance per tick to fire a random event (weighted by event definition weights)
 
@@ -565,7 +566,7 @@ The project is in **active development**, past the foundation stages and into co
 - ✅ War mechanics and territory control (occupation, sector control, war exhaustion)
 - ✅ Alliance formation and dissolution (treaties)
 - ✅ Military units: fleets and garrisons with strength, morale, maintenance
-- ✅ Dedicated Phase 9 (Politics) wired into tick loop
+- ✅ Dedicated early politics phase (Phase 2) wired into tick loop
 - 🔶 Blockade effects on trade (routes respect blockades; full enforcement partial)
 - ⏳ Full event definition system with JSON/TOML configs
 - ⏳ Random seed reproducibility
