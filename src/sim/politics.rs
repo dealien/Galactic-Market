@@ -509,6 +509,8 @@ mod tests {
     use crate::sim::state::{
         DiplomaticRelation, Empire, MilitaryUnit, Sector, StarSystem, SystemLane,
     };
+    use rand::rngs::StdRng;
+    use rand::SeedableRng;
 
     fn setup_political_state() -> SimState {
         let mut state = SimState::new();
@@ -718,5 +720,67 @@ mod tests {
 
         // Should remain occupied
         assert!(state.occupied_systems.contains_key(&3));
+    }
+
+    #[test]
+    fn test_war_exhaustion_accumulates_across_ticks() {
+        let mut state = setup_political_state();
+        state.star_systems.insert(
+            5,
+            StarSystem {
+                id: 5,
+                sector_id: 1,
+                name: "Frontier".to_string(),
+            },
+        );
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 1,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 5,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.military_units.insert(
+            2,
+            MilitaryUnit {
+                id: 2,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 5,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![5],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(42);
+
+        resolve_active_wars(&mut state, &mut rng);
+        let first_tick_losses = state.wars.get(&1).unwrap().cumulative_losses;
+        assert!(first_tick_losses > 0.0);
+
+        resolve_active_wars(&mut state, &mut rng);
+        let second_tick_losses = state.wars.get(&1).unwrap().cumulative_losses;
+
+        assert!(second_tick_losses > first_tick_losses);
     }
 }
