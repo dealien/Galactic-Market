@@ -1,15 +1,28 @@
+/// Alliance coordination and diplomacy logic.
 pub mod alliances;
+/// Population consumption and demand balancing.
 pub mod consumption;
+/// AI decisions and city food balance analysis.
 pub mod decisions;
+/// Random event generation and state transitions.
 pub mod events;
+/// Financial accounting, profitability, and bankruptcy logic.
 pub mod finance;
+/// Cargo routing, transit, and logistics execution.
 pub mod logistics;
+/// Market clearing, price discovery, and order matching.
 pub mod markets;
+/// Military operations and conflict resolution.
 pub mod military;
+/// Procedural name generation helpers.
 pub mod namegen;
+/// Political systems, war, occupation, and sector control.
 pub mod politics;
+/// Manufacturing and production workflows.
 pub mod production;
+/// Resource extraction and deposit management.
 pub mod resources;
+/// In-memory simulation state and persistence helpers.
 pub mod state;
 
 use comfy_table::Table;
