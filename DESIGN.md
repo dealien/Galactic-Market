@@ -443,7 +443,7 @@ Politics is the second simulation layer sitting above economics. It does not rep
 | Neutral | Normal trade; standard tariffs | Default state; post-war cool-down | ✅ |
 | Cold War | Embargoes possible; higher tariffs; espionage events active | Tension > threshold without declaration | ⏳ Planned |
 | War | Blockades; territorial seizures; supply chain disruption; defense spending spike | Formal declaration or border incident | ✅ (wars, theaters, exhaustion) |
-| Occupation | System control shifts to occupier; occupied systems suffer production penalties until liberated | War victory condition met | ✅ (occupied_systems, production penalty) |
+| Occupation | System control shifts to occupier; occupied systems suffer production penalties until liberated | During active war, when one side controls an enemy-owned system uncontested | ✅ (occupied_systems, production penalty) |
 
 ### 6.2 Political Event Types *(Partial — some planned)*
 
@@ -460,10 +460,10 @@ A simplified war model is fully wired into Phase 2:
 
 - Wars have a **theater** (set of contested systems) tracked in `wars` + `war_theaters`
 - Each tick, `military_strength` scores (strength × morale) are compared with random variance rolls
-- **Outcomes:** winner occupies the contested system; loser's units take proportional damage; destroyed units (strength < 5.0) are removed
+- **Outcomes:** if only one side remains present in an enemy-owned system, that side occupies it (works for both aggressor and defender); loser's units take proportional damage; destroyed units (strength < 5.0) are removed
 - **War exhaustion:** cumulative losses across all ticks are tracked in `wars.cumulative_losses`; when losses exceed `WAR_EXHAUSTION_THRESHOLD` the war ends
 - **Theater disruption:** systems in active war theaters apply an additional production penalty (-50%)
-- **Occupation:** winning empire occupies the system (`occupied_systems`); production penalty applies (-25%)
+- **Occupation:** either side can occupy enemy-owned systems when uncontested (`occupied_systems`); owner presence with no occupier presence liberates the system; production penalty applies (-25%)
 - **Sector split penalty:** systems in a sector split between empires suffer a -15% production penalty and +0.1 tension per tick
 - **Peace conditions:** wars conclude on exhaustion or when no contested systems remain
 - **Alliances:** empires with low tension and sustained neutral status can form treaties; allies share tension decay; alliances dissolve at high tension

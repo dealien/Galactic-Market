@@ -284,30 +284,62 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 military::calculate_military_strength(state, aggressor_id, system_id);
             let defender_str = military::calculate_military_strength(state, defender_id, system_id);
 
-            if attacker_str > 0.0 && defender_str <= 0.0 {
-                // Check if system belongs to the defender
-                if let Some(system) = state.star_systems.get(&system_id)
-                    && let Some(sector) = state.sectors.get(&system.sector_id)
-                    && sector.empire_id == defender_id
-                    && !state.occupied_systems.contains_key(&system_id)
+            let system_owner_empire_id = state
+                .star_systems
+                .get(&system_id)
+                .and_then(|system| state.sectors.get(&system.sector_id))
+                .map(|sector| sector.empire_id);
+
+            if let Some(owner_empire_id) = system_owner_empire_id {
+                let new_occupier_id = if attacker_str > 0.0
+                    && defender_str <= 0.0
+                    && owner_empire_id == defender_id
                 {
-                    state.occupied_systems.insert(
-                        system_id,
-                        Occupation {
+                    Some(aggressor_id)
+                } else if defender_str > 0.0
+                    && attacker_str <= 0.0
+                    && owner_empire_id == aggressor_id
+                {
+                    Some(defender_id)
+                } else {
+                    None
+                };
+
+                if let Some(occupier_empire_id) = new_occupier_id {
+                    let existing_occupier_id = state
+                        .occupied_systems
+                        .get(&system_id)
+                        .map(|occ| occ.occupier_empire_id);
+                    if existing_occupier_id != Some(occupier_empire_id) {
+                        state.occupied_systems.insert(
                             system_id,
-                            occupier_empire_id: aggressor_id,
-                            since_tick: state.tick,
-                        },
-                    );
-                    info!("System {} occupied by empire {}!", system_id, aggressor_id);
+                            Occupation {
+                                system_id,
+                                occupier_empire_id,
+                                since_tick: state.tick,
+                            },
+                        );
+                        info!("System {} occupied by empire {}!", system_id, occupier_empire_id);
+                    }
                 }
-            } else if defender_str > 0.0 && attacker_str <= 0.0 {
-                // Defender retakes their own system
-                if let Some(system) = state.star_systems.get(&system_id)
-                    && let Some(sector) = state.sectors.get(&system.sector_id)
-                    && sector.empire_id == defender_id
+
+                // Liberation when the owner has forces present and the current occupier does not.
+                if let Some(current_occupier_id) = state
+                    .occupied_systems
+                    .get(&system_id)
+                    .map(|occ| occ.occupier_empire_id)
                 {
-                    state.occupied_systems.remove(&system_id);
+                    let owner_strength =
+                        military::calculate_military_strength(state, owner_empire_id, system_id);
+                    let occupier_strength = military::calculate_military_strength(
+                        state,
+                        current_occupier_id,
+                        system_id,
+                    );
+
+                    if owner_strength > 0.0 && occupier_strength <= 0.0 {
+                        state.occupied_systems.remove(&system_id);
+                    }
                 }
             }
         }
@@ -720,6 +752,87 @@ mod tests {
 
         // Should remain occupied
         assert!(state.occupied_systems.contains_key(&3));
+    }
+
+    #[test]
+    fn test_defender_can_occupy_aggressor_system() {
+        let mut state = setup_political_state();
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 1,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![1],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(7);
+        resolve_active_wars(&mut state, &mut rng);
+
+        let occupation = state.occupied_systems.get(&1).unwrap();
+        assert_eq!(occupation.occupier_empire_id, 2);
+    }
+
+    #[test]
+    fn test_owner_reclaims_occupied_system_when_occupier_absent() {
+        let mut state = setup_political_state();
+        state.occupied_systems.insert(
+            1,
+            Occupation {
+                system_id: 1,
+                occupier_empire_id: 2,
+                since_tick: 95,
+            },
+        );
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 1,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 1,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![1],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(9);
+        resolve_active_wars(&mut state, &mut rng);
+
+        assert!(!state.occupied_systems.contains_key(&1));
     }
 
     #[test]
