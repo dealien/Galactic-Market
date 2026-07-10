@@ -1,12 +1,28 @@
+/// Alliance coordination and diplomacy logic.
+pub mod alliances;
+/// Population consumption and demand balancing.
 pub mod consumption;
+/// AI decisions and city food balance analysis.
 pub mod decisions;
+/// Random event generation and state transitions.
 pub mod events;
+/// Financial accounting, profitability, and bankruptcy logic.
 pub mod finance;
+/// Cargo routing, transit, and logistics execution.
 pub mod logistics;
+/// Market clearing, price discovery, and order matching.
 pub mod markets;
+/// Military operations and conflict resolution.
+pub mod military;
+/// Procedural name generation helpers.
 pub mod namegen;
+/// Political systems, war, occupation, and sector control.
+pub mod politics;
+/// Manufacturing and production workflows.
 pub mod production;
+/// Resource extraction and deposit management.
 pub mod resources;
+/// In-memory simulation state and persistence helpers.
 pub mod state;
 
 use comfy_table::Table;
@@ -18,15 +34,15 @@ use tracing::info;
 pub use state::SimState;
 
 /// Flush interval: write dirty state to the database every N ticks.
-const FLUSH_INTERVAL: u64 = 100;
+pub const FLUSH_INTERVAL: u64 = 100;
 
 impl SimState {
     /// Advance the simulation by one tick, running all active phases in order.
-    pub async fn run_tick(
-        &mut self,
-        pool: &PgPool,
-        rng: &mut impl rand::Rng,
-    ) -> Result<(), sqlx::Error> {
+    ///
+    /// This method is pure in-memory: it performs no database I/O. Callers are
+    /// responsible for invoking [`SimState::flush_with_pulse`] every
+    /// [`FLUSH_INTERVAL`] ticks to persist state to the database.
+    pub fn run_tick(&mut self, rng: &mut impl rand::Rng) {
         self.tick += 1;
 
         // Only log every 100 ticks to avoid spamming the log
@@ -37,133 +53,140 @@ impl SimState {
         // ── Phase 1: Resource extraction ─────────────────────────────────────
         resources::run_extraction(self);
 
-        // ── Phase 2: Production / refining ───────────────────────────────────
+        // ── Phase 2: Politics and alliances (war, occupation, sector control) ──
+        politics::run_politics(self, rng);
+        alliances::run_alliances(self, rng);
+
+        // ── Phase 3: Production / refining ───────────────────────────────────
         production::run_production(self);
 
-        // ── Phase 3: Logistics ───────────────────────────────────────────────
+        // ── Phase 4: Logistics ───────────────────────────────────────────────
         logistics::run_logistics(self, self.tick);
 
-        // ── Phase 2: Food balance analysis (precompute for merchant routing) ──────
+        // ── Phase 5a (precompute): City food balance for merchant routing ───────
         decisions::analyze_city_food_balance(self);
 
-        // ── Phase 6: Company AI decisions ─────────────────────────────────────
+        // ── Phase 5b: Company AI decisions ────────────────────────────────────
         decisions::run_decisions(self, self.tick);
 
-        // ── Phase 3: Population consumption ───────────────────────────────
+        // ── Phase 6: Population consumption ───────────────────────────────────
         consumption::run_consumption(self, self.tick);
 
-        // ── Phase 5 (NEW): Empire Relief (use treasury to stabilize populations) ──
+        // ── Phase 6b: Empire Relief (empire treasury stabilizes starving cities)
         decisions::run_empire_relief(self, self.tick);
 
-        // ── Phase 4: Market clearing ────────────────────────────────────
+        // ── Phase 7: Market clearing ──────────────────────────────────────────
         markets::clear_orders(self, self.tick);
 
-        // ── Phase 5: Finance ───────────────────────────────────────────────
+        // ── Phase 8: Finance ──────────────────────────────────────────────────
         finance::run_finance(self);
 
-        // ── Phase 9: Random Events ───────────────────────────────────────────
+        // ── Phase 9: Random Events ────────────────────────────────────────────
         events::run_events(self, rng);
+    }
 
-        // ── Phase 10: Periodic DB flush ───────────────────────────────────────
-        if self.tick.is_multiple_of(FLUSH_INTERVAL) {
-            let summary = self.generate_summary();
+    /// Log the Economic Pulse summary tables and flush in-memory state to the
+    /// database.
+    ///
+    /// Call this every [`FLUSH_INTERVAL`] ticks, **outside** the tick loop, to
+    /// keep all database I/O out of the hot path. All writes are batched inside
+    /// a single transaction so a crash between flushes recovers cleanly.
+    pub async fn flush_with_pulse(&mut self, pool: &PgPool) -> Result<(), sqlx::Error> {
+        let summary = self.generate_summary();
 
-            // ═══════════════════════════════════════════════════════════════════
-            // Build a comprehensive multi-column Economic Pulse display
-            // ═══════════════════════════════════════════════════════════════════
+        // ═══════════════════════════════════════════════════════════════════
+        // Build a comprehensive multi-column Economic Pulse display
+        // ═══════════════════════════════════════════════════════════════════
 
-            // --- Table 1: Financial Summary ---
-            let mut financial_table = Table::new();
-            financial_table.load_preset(UTF8_FULL_CONDENSED);
-            financial_table.set_header(vec!["Financial Metric", "Value"]);
-            financial_table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
-            financial_table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
-            financial_table.add_row(vec![
-                "Debt-to-Cash Ratio",
-                &format!("{:.2}", summary.avg_debt_to_cash),
-            ]);
-            financial_table.add_row(vec![
-                "Total Inventory",
-                &summary.total_inventory.to_string(),
-            ]);
-            financial_table.add_row(vec![
-                "Trade Volume (This Flush)",
-                &summary.trade_volume.to_string(),
-            ]);
+        // --- Table 1: Financial Summary ---
+        let mut financial_table = Table::new();
+        financial_table.load_preset(UTF8_FULL_CONDENSED);
+        financial_table.set_header(vec!["Financial Metric", "Value"]);
+        financial_table.add_row(vec!["Total Cash", &format!("{:.0}", summary.total_cash)]);
+        financial_table.add_row(vec!["Total Debt", &format!("{:.0}", summary.total_debt)]);
+        financial_table.add_row(vec![
+            "Debt-to-Cash Ratio",
+            &format!("{:.2}", summary.avg_debt_to_cash),
+        ]);
+        financial_table.add_row(vec![
+            "Total Inventory",
+            &summary.total_inventory.to_string(),
+        ]);
+        financial_table.add_row(vec![
+            "Trade Volume (This Flush)",
+            &summary.trade_volume.to_string(),
+        ]);
 
-            // --- Table 2: Market Activity ---
-            let mut market_table = Table::new();
-            market_table.load_preset(UTF8_FULL_CONDENSED);
-            market_table.set_header(vec!["Market Metric", "Value"]);
-            market_table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
-            market_table.add_row(vec!["  ├─ Buy Orders", &summary.buy_orders.to_string()]);
-            market_table.add_row(vec!["  └─ Sell Orders", &summary.sell_orders.to_string()]);
+        // --- Table 2: Market Activity ---
+        let mut market_table = Table::new();
+        market_table.load_preset(UTF8_FULL_CONDENSED);
+        market_table.set_header(vec!["Market Metric", "Value"]);
+        market_table.add_row(vec!["Active Orders", &summary.active_orders.to_string()]);
+        market_table.add_row(vec!["  ├─ Buy Orders", &summary.buy_orders.to_string()]);
+        market_table.add_row(vec!["  └─ Sell Orders", &summary.sell_orders.to_string()]);
+        market_table.add_row(vec![
+            "Avg Ore Price",
+            &format!("{:.2}", summary.avg_ore_price),
+        ]);
+
+        // Add refined material prices
+        let mut ingot_prices: Vec<_> = summary.ingot_prices.iter().collect();
+        ingot_prices.sort_by_key(|(name, _)| *name);
+        for (name, price) in ingot_prices {
             market_table.add_row(vec![
-                "Avg Ore Price",
-                &format!("{:.2}", summary.avg_ore_price),
+                &format!("  Price: {}", name),
+                &format!("{:.2}", price),
             ]);
-
-            // Add refined material prices
-            let mut ingot_prices: Vec<_> = summary.ingot_prices.iter().collect();
-            ingot_prices.sort_by_key(|(name, _)| *name);
-            for (name, price) in ingot_prices {
-                market_table.add_row(vec![
-                    &format!("  Price: {}", name),
-                    &format!("{:.2}", price),
-                ]);
-            }
-
-            // --- Table 3: Economy & Population ---
-            let mut economy_table = Table::new();
-            economy_table.load_preset(UTF8_FULL_CONDENSED);
-            economy_table.set_header(vec!["Economy Metric", "Value"]);
-            economy_table.add_row(vec![
-                "Total Population",
-                &summary.total_population.to_string(),
-            ]);
-            economy_table.add_row(vec![
-                "Food in Circulation",
-                &summary.total_food_inventory.to_string(),
-            ]);
-            economy_table.add_row(vec![
-                "Active Plantations",
-                &summary.active_plantations.to_string(),
-            ]);
-            economy_table.add_row(vec![
-                "Active Events",
-                &summary.total_active_events.to_string(),
-            ]);
-
-            // --- Table 4: Companies ---
-            let mut company_table = Table::new();
-            company_table.load_preset(UTF8_FULL_CONDENSED);
-            company_table.set_header(vec!["Company Type", "Count"]);
-            company_table.add_row(vec![
-                "Total Companies",
-                &summary.total_companies.to_string(),
-            ]);
-
-            let mut company_types: Vec<_> = summary.company_breakdown.iter().collect();
-            company_types.sort_by_key(|(name, _)| *name);
-            for (company_type, count) in company_types {
-                company_table.add_row(vec![&format!("  ├─ {}", company_type), &count.to_string()]);
-            }
-
-            info!("\n╔════════════════════════════════════════════════════════════════════════╗");
-            info!(
-                "║                        ECONOMIC PULSE - TICK {}                         ║",
-                summary.tick
-            );
-            info!("╚════════════════════════════════════════════════════════════════════════╝");
-            info!("\n📊 FINANCIAL SUMMARY\n{financial_table}");
-            info!("\n💱 MARKET ACTIVITY\n{market_table}");
-            info!("\n🌍 ECONOMY & POPULATION\n{economy_table}");
-            info!("\n🏢 COMPANY BREAKDOWN\n{company_table}");
-
-            self.flush(pool).await?;
         }
 
-        Ok(())
+        // --- Table 3: Economy & Population ---
+        let mut economy_table = Table::new();
+        economy_table.load_preset(UTF8_FULL_CONDENSED);
+        economy_table.set_header(vec!["Economy Metric", "Value"]);
+        economy_table.add_row(vec![
+            "Total Population",
+            &summary.total_population.to_string(),
+        ]);
+        economy_table.add_row(vec![
+            "Food in Circulation",
+            &summary.total_food_inventory.to_string(),
+        ]);
+        economy_table.add_row(vec![
+            "Active Plantations",
+            &summary.active_plantations.to_string(),
+        ]);
+        economy_table.add_row(vec![
+            "Active Events",
+            &summary.total_active_events.to_string(),
+        ]);
+
+        // --- Table 4: Companies ---
+        let mut company_table = Table::new();
+        company_table.load_preset(UTF8_FULL_CONDENSED);
+        company_table.set_header(vec!["Company Type", "Count"]);
+        company_table.add_row(vec![
+            "Total Companies",
+            &summary.total_companies.to_string(),
+        ]);
+
+        let mut company_types: Vec<_> = summary.company_breakdown.iter().collect();
+        company_types.sort_by_key(|(name, _)| *name);
+        for (company_type, count) in company_types {
+            company_table.add_row(vec![&format!("  ├─ {}", company_type), &count.to_string()]);
+        }
+
+        info!("\n╔════════════════════════════════════════════════════════════════════════╗");
+        info!(
+            "║                        ECONOMIC PULSE - TICK {}                         ║",
+            summary.tick
+        );
+        info!("╚════════════════════════════════════════════════════════════════════════╝");
+        info!("\n📊 FINANCIAL SUMMARY\n{financial_table}");
+        info!("\n💱 MARKET ACTIVITY\n{market_table}");
+        info!("\n🌍 ECONOMY & POPULATION\n{economy_table}");
+        info!("\n🏢 COMPANY BREAKDOWN\n{company_table}");
+
+        self.flush(pool).await
     }
 
     /// Flush in-memory state to the database.
@@ -352,6 +375,122 @@ impl SimState {
             .bind(event.start_tick as i64)
             .bind(event.end_tick as i64)
             .bind(&event.flavor_text)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Military Units ────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM military_units")
+            .execute(&mut *tx)
+            .await?;
+
+        for unit in self.military_units.values() {
+            sqlx::query(
+                "INSERT INTO military_units (id, empire_id, unit_type, strength, system_id, status, morale)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(unit.id)
+            .bind(unit.empire_id)
+            .bind(&unit.unit_type)
+            .bind(unit.strength)
+            .bind(unit.system_id)
+            .bind(&unit.status)
+            .bind(unit.morale)
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        // ── Treaties ──────────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM treaty_members")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM treaties")
+            .execute(&mut *tx)
+            .await?;
+
+        for treaty in self.treaties.values() {
+            sqlx::query(
+                "INSERT INTO treaties (id, alliance_name, formed_tick, dissolved_tick)
+                 VALUES ($1, $2, $3, $4)",
+            )
+            .bind(treaty.id)
+            .bind(&treaty.alliance_name)
+            .bind(treaty.formed_tick as i64)
+            .bind(treaty.dissolved_tick.map(|t| t as i64))
+            .execute(&mut *tx)
+            .await?;
+
+            for &empire_id in &treaty.member_empire_ids {
+                sqlx::query(
+                    "INSERT INTO treaty_members (treaty_id, empire_id, joined_tick) VALUES ($1, $2, $3)",
+                )
+                .bind(treaty.id)
+                .bind(empire_id)
+                .bind(treaty.formed_tick as i64)
+                .execute(&mut *tx)
+                .await?;
+            }
+        }
+
+        // ── Wars ──────────────────────────────────────────────────────────────
+        sqlx::query("DELETE FROM war_theaters")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM war_participants")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM wars").execute(&mut *tx).await?;
+
+        for war in self.wars.values() {
+            sqlx::query(
+                "INSERT INTO wars (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            )
+            .bind(war.id)
+            .bind(war.aggressor_id)
+            .bind(war.defender_id)
+            .bind(war.start_tick as i64)
+            .bind(war.end_tick.map(|t| t as i64))
+            .bind(&war.status)
+            .bind(war.cumulative_losses)
+            .execute(&mut *tx)
+            .await?;
+
+            for (empire_id, role) in &war.participants {
+                sqlx::query(
+                    "INSERT INTO war_participants (war_id, empire_id, role) VALUES ($1, $2, $3)",
+                )
+                .bind(war.id)
+                .bind(empire_id)
+                .bind(role)
+                .execute(&mut *tx)
+                .await?;
+            }
+
+            for &system_id in &war.theaters {
+                sqlx::query("INSERT INTO war_theaters (war_id, system_id) VALUES ($1, $2)")
+                    .bind(war.id)
+                    .bind(system_id)
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
+
+        // ── Occupied Systems ──────────────────────────────────────────────────
+        // Reset all occupation status then set occupied ones
+        sqlx::query(
+            "UPDATE star_systems SET occupier_empire_id = NULL, occupied_since_tick = NULL",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        for occ in self.occupied_systems.values() {
+            sqlx::query(
+                "UPDATE star_systems SET occupier_empire_id = $1, occupied_since_tick = $2 WHERE id = $3",
+            )
+            .bind(occ.occupier_empire_id)
+            .bind(occ.since_tick as i64)
+            .bind(occ.system_id)
             .execute(&mut *tx)
             .await?;
         }

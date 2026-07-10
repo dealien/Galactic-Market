@@ -253,6 +253,41 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     }
     info!("Seeded structured jump lane network (Ring).");
 
+    // 6.2 Seed Military Units (2 fleets + 1 garrison per empire per system)
+    for (i, &empire_id) in empire_ids.iter().enumerate() {
+        // Systems for this empire (2 per sector, sectors are 1:1 with empires)
+        let empire_system_ids: Vec<i32> = system_ids[i * 2..(i + 1) * 2].to_vec();
+        for &system_id in &empire_system_ids {
+            // 2 fleets
+            for _ in 0..2 {
+                sqlx::query(
+                    "INSERT INTO military_units (empire_id, unit_type, strength, system_id, status, morale) VALUES ($1, $2, $3, $4, $5, $6)"
+                )
+                .bind(empire_id).bind("fleet").bind(100.0_f64).bind(system_id).bind("stationed").bind(1.0_f64)
+                .execute(&mut *tx).await?;
+            }
+            // 1 garrison
+            sqlx::query(
+                "INSERT INTO military_units (empire_id, unit_type, strength, system_id, status, morale) VALUES ($1, $2, $3, $4, $5, $6)"
+            )
+            .bind(empire_id).bind("garrison").bind(150.0_f64).bind(system_id).bind("stationed").bind(1.0_f64)
+            .execute(&mut *tx).await?;
+        }
+    }
+    info!("Seeded military units (2 fleets + 1 garrison per system per empire).");
+
+    // 6.3 Seed Diplomatic Relations (generic N×(N-1)/2 pairs)
+    for i in 0..empire_ids.len() {
+        for j in (i + 1)..empire_ids.len() {
+            sqlx::query(
+                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status) VALUES ($1, $2, $3, $4)"
+            )
+            .bind(empire_ids[i]).bind(empire_ids[j]).bind(0.0_f64).bind("neutral")
+            .execute(&mut *tx).await?;
+        }
+    }
+    info!("Seeded diplomatic relations.");
+
     // 7. Recipes (Issue #9: labor_cost_per_run for closed-loop economy)
     let iron_recipe_id = sqlx::query_as::<_, (i32,)>(
         "INSERT INTO recipes (name, output_resource_id, output_qty, facility_type, time_ticks, labor_cost_per_run) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id"
