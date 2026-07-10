@@ -29,22 +29,7 @@ pub fn run_politics(state: &mut SimState, rng: &mut impl Rng) {
 }
 
 fn update_tension(state: &mut SimState) {
-    let mut allied_pairs: Vec<(i32, i32)> = Vec::new();
-    for treaty in state.treaties.values() {
-        if treaty.dissolved_tick.is_none() {
-            let members = &treaty.member_empire_ids;
-            for i in 0..members.len() {
-                for j in (i + 1)..members.len() {
-                    let (a, b) = if members[i] < members[j] {
-                        (members[i], members[j])
-                    } else {
-                        (members[j], members[i])
-                    };
-                    allied_pairs.push((a, b));
-                }
-            }
-        }
-    }
+    let allied_pairs = active_treaty_pairs(state);
 
     for rel in state.diplomatic_relations.values_mut() {
         let key = if rel.empire_a_id < rel.empire_b_id {
@@ -62,6 +47,28 @@ fn update_tension(state: &mut SimState) {
             rel.tension = (rel.tension - TENSION_DECAY_RATE).max(0.0);
         }
     }
+}
+
+fn active_treaty_pairs(state: &SimState) -> HashSet<(i32, i32)> {
+    let mut allied_pairs = HashSet::new();
+
+    for treaty in state.treaties.values() {
+        if treaty.dissolved_tick.is_none() {
+            let members = &treaty.member_empire_ids;
+            for i in 0..members.len() {
+                for j in (i + 1)..members.len() {
+                    let (a, b) = if members[i] < members[j] {
+                        (members[i], members[j])
+                    } else {
+                        (members[j], members[i])
+                    };
+                    allied_pairs.insert((a, b));
+                }
+            }
+        }
+    }
+
+    allied_pairs
 }
 
 fn station_participant_units_in_system(
@@ -189,20 +196,25 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         let mut war_concluded = false;
 
         for &system_id in &theaters {
-            let pre_attacker = military::calculate_military_strength(state, aggressor_id, system_id);
+            let pre_attacker =
+                military::calculate_military_strength(state, aggressor_id, system_id);
             let pre_defender = military::calculate_military_strength(state, defender_id, system_id);
 
             if pre_attacker > 0.0 && pre_defender > 0.0 {
-                let _winner = military::resolve_combat(state, aggressor_id, defender_id, system_id, rng);
+                let _winner =
+                    military::resolve_combat(state, aggressor_id, defender_id, system_id, rng);
 
-                let post_attacker = military::calculate_military_strength(state, aggressor_id, system_id);
-                let post_defender = military::calculate_military_strength(state, defender_id, system_id);
+                let post_attacker =
+                    military::calculate_military_strength(state, aggressor_id, system_id);
+                let post_defender =
+                    military::calculate_military_strength(state, defender_id, system_id);
 
                 aggressor_losses += (pre_attacker - post_attacker).max(0.0);
                 defender_losses += (pre_defender - post_defender).max(0.0);
             }
 
-            let attacker_str = military::calculate_military_strength(state, aggressor_id, system_id);
+            let attacker_str =
+                military::calculate_military_strength(state, aggressor_id, system_id);
             let defender_str = military::calculate_military_strength(state, defender_id, system_id);
 
             let system_owner_empire_id = state
@@ -240,7 +252,10 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                                 since_tick: state.tick,
                             },
                         );
-                        info!("System {} occupied by empire {}!", system_id, occupier_empire_id);
+                        info!(
+                            "System {} occupied by empire {}!",
+                            system_id, occupier_empire_id
+                        );
                     }
                 }
 
@@ -249,7 +264,8 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                     .get(&system_id)
                     .map(|occ| occ.occupier_empire_id)
                 {
-                    let owner_strength = military::calculate_military_strength(state, owner_empire_id, system_id);
+                    let owner_strength =
+                        military::calculate_military_strength(state, owner_empire_id, system_id);
                     let occupier_strength = military::calculate_military_strength(
                         state,
                         current_occupier_id,
@@ -262,8 +278,9 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 }
             }
 
-            let system_contested = military::calculate_military_strength(state, aggressor_id, system_id) > 0.0
-                && military::calculate_military_strength(state, defender_id, system_id) > 0.0;
+            let system_contested =
+                military::calculate_military_strength(state, aggressor_id, system_id) > 0.0
+                    && military::calculate_military_strength(state, defender_id, system_id) > 0.0;
 
             if !system_contested {
                 station_participant_units_in_system(state, &participant_empire_ids, system_id);
@@ -279,8 +296,7 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 war_concluded = true;
                 info!(
                     "War {} concluded due to exhaustion (cumulative losses: {:.0}).",
-                    war_id,
-                    war.cumulative_losses
+                    war_id, war.cumulative_losses
                 );
             }
         }
@@ -341,7 +357,9 @@ fn find_border_systems(state: &SimState, empire_a: i32, empire_b: i32) -> Vec<i3
             } else {
                 None
             };
-            if let Some(n) = neighbor && b_systems.contains(&n) {
+            if let Some(n) = neighbor
+                && b_systems.contains(&n)
+            {
                 if !theaters.contains(&sys_a) {
                     theaters.push(sys_a);
                 }
@@ -389,13 +407,13 @@ fn process_occupations(state: &mut SimState) {
             None => continue,
         };
 
-        let occupier_strength = military::calculate_military_strength(state, occupier_id, system_id);
+        let occupier_strength =
+            military::calculate_military_strength(state, occupier_id, system_id);
         if occupier_strength <= 0.0 {
             state.occupied_systems.remove(&system_id);
             info!(
                 "System {} liberated (occupier {} has no garrison).",
-                system_id,
-                occupier_id
+                system_id, occupier_id
             );
         }
     }
@@ -403,6 +421,7 @@ fn process_occupations(state: &mut SimState) {
 
 pub fn compute_sector_control(state: &mut SimState) {
     state.sector_control.clear();
+    let allied_pairs = active_treaty_pairs(state);
 
     let mut sector_systems: std::collections::HashMap<i32, Vec<i32>> =
         std::collections::HashMap::new();
@@ -450,7 +469,8 @@ pub fn compute_sector_control(state: &mut SimState) {
 
     for control in state.sector_control.values() {
         if control.is_split {
-            let empires_in_sector: Vec<i32> = control.empire_system_counts.keys().cloned().collect();
+            let empires_in_sector: Vec<i32> =
+                control.empire_system_counts.keys().cloned().collect();
             for i in 0..empires_in_sector.len() {
                 for j in (i + 1)..empires_in_sector.len() {
                     let (a, b) = if empires_in_sector[i] < empires_in_sector[j] {
@@ -458,6 +478,10 @@ pub fn compute_sector_control(state: &mut SimState) {
                     } else {
                         (empires_in_sector[j], empires_in_sector[i])
                     };
+                    if allied_pairs.contains(&(a, b)) {
+                        continue;
+                    }
+
                     if let Some(rel) = state.diplomatic_relations.get_mut(&(a, b)) {
                         rel.tension += SECTOR_SPLIT_TENSION_INCREASE;
                     }
@@ -498,9 +522,11 @@ pub fn get_system_production_penalty(state: &SimState, system_id: i32) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{DiplomaticRelation, Empire, MilitaryUnit, Sector, StarSystem, SystemLane};
-    use rand::rngs::StdRng;
+    use crate::sim::state::{
+        DiplomaticRelation, Empire, MilitaryUnit, Sector, StarSystem, SystemLane, Treaty,
+    };
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     fn setup_political_state() -> SimState {
         let mut state = SimState::new();
@@ -646,6 +672,99 @@ mod tests {
         );
         compute_sector_control(&mut state);
         assert!(state.sector_control.get(&1).unwrap().is_split);
+    }
+
+    #[test]
+    fn test_sector_split_tension_skips_active_treaty_pairs() {
+        let mut state = setup_political_state();
+
+        state.empires.insert(
+            3,
+            Empire {
+                id: 3,
+                name: "Consortium".to_string(),
+                government_type: "Corporate".to_string(),
+                tax_rate_base: 0.08,
+            },
+        );
+
+        state.sectors.insert(
+            3,
+            Sector {
+                id: 3,
+                empire_id: 3,
+                name: "Outer".to_string(),
+            },
+        );
+
+        state.star_systems.insert(
+            5,
+            StarSystem {
+                id: 5,
+                sector_id: 1,
+                name: "Delta".to_string(),
+            },
+        );
+
+        state.diplomatic_relations.insert(
+            (1, 3),
+            DiplomaticRelation {
+                empire_a_id: 1,
+                empire_b_id: 3,
+                tension: 5.0,
+                status: "neutral".to_string(),
+            },
+        );
+        state.diplomatic_relations.insert(
+            (2, 3),
+            DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: 7.5,
+                status: "neutral".to_string(),
+            },
+        );
+
+        state.treaties.insert(
+            1,
+            Treaty {
+                id: 1,
+                alliance_name: "Republic-Syndicate Accord".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 90,
+                dissolved_tick: None,
+            },
+        );
+
+        state.occupied_systems.insert(
+            2,
+            Occupation {
+                system_id: 2,
+                occupier_empire_id: 2,
+                since_tick: 95,
+            },
+        );
+        state.occupied_systems.insert(
+            5,
+            Occupation {
+                system_id: 5,
+                occupier_empire_id: 3,
+                since_tick: 95,
+            },
+        );
+
+        compute_sector_control(&mut state);
+
+        assert!(state.sector_control.get(&1).unwrap().is_split);
+
+        let allied_rel = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        assert!((allied_rel.tension - 0.0).abs() < f64::EPSILON);
+
+        let rel_1_3 = state.diplomatic_relations.get(&(1, 3)).unwrap();
+        assert!((rel_1_3.tension - 5.1).abs() < f64::EPSILON);
+
+        let rel_2_3 = state.diplomatic_relations.get(&(2, 3)).unwrap();
+        assert!((rel_2_3.tension - 7.6).abs() < f64::EPSILON);
     }
 
     #[test]
