@@ -4,6 +4,8 @@
 //! (stationary, defend a star system). Each unit has strength (combat power)
 //! and morale (effectiveness multiplier).
 
+use std::collections::HashSet;
+
 use rand::Rng;
 use tracing::info;
 
@@ -17,6 +19,9 @@ const MORALE_LOSS_ON_RETREAT: f64 = 0.15;
 
 /// Morale recovery per tick when stationed peacefully.
 const MORALE_RECOVERY_PER_TICK: f64 = 0.02;
+
+/// Morale recovery per tick for deployed units away from active theaters.
+const DEPLOYED_MORALE_RECOVERY_PER_TICK: f64 = 0.01;
 
 /// Random variance factor in combat (±percentage of effective strength).
 const COMBAT_VARIANCE: f64 = 0.2;
@@ -133,9 +138,20 @@ pub fn apply_maintenance_costs(state: &mut SimState) {
 
 /// Recover morale for units that are stationed (not in combat).
 pub fn recover_morale(state: &mut SimState) {
+    let active_theater_systems: HashSet<i32> = state
+        .wars
+        .values()
+        .filter(|war| war.status == "active")
+        .flat_map(|war| war.theaters.iter().copied())
+        .collect();
+
     for unit in state.military_units.values_mut() {
         if unit.status == "stationed" {
             unit.morale = (unit.morale + MORALE_RECOVERY_PER_TICK).min(1.0);
+        } else if unit.status == "deployed"
+            && !active_theater_systems.contains(&unit.system_id)
+        {
+            unit.morale = (unit.morale + DEPLOYED_MORALE_RECOVERY_PER_TICK).min(1.0);
         }
     }
 }
@@ -285,6 +301,91 @@ mod tests {
         assert!((state.get_empire_treasury(1) - 9950.0).abs() < 0.01);
         // Empire 2 has unit with strength 80, cost = 80 * 0.5 = 40
         assert!((state.get_empire_treasury(2) - 9960.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_recover_morale_for_stationed_and_idle_deployed_units() {
+        let mut state = SimState::new();
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".to_string(),
+            },
+        );
+        state.star_systems.insert(
+            2,
+            StarSystem {
+                id: 2,
+                sector_id: 1,
+                name: "System 2".to_string(),
+            },
+        );
+        state.star_systems.insert(
+            3,
+            StarSystem {
+                id: 3,
+                sector_id: 1,
+                name: "System 3".to_string(),
+            },
+        );
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![3],
+                start_tick: 1,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 1,
+                unit_type: "garrison".to_string(),
+                strength: 100.0,
+                system_id: 1,
+                status: "stationed".to_string(),
+                morale: 0.5,
+            },
+        );
+        state.military_units.insert(
+            2,
+            MilitaryUnit {
+                id: 2,
+                empire_id: 1,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 2,
+                status: "deployed".to_string(),
+                morale: 0.5,
+            },
+        );
+        state.military_units.insert(
+            3,
+            MilitaryUnit {
+                id: 3,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 0.5,
+            },
+        );
+
+        recover_morale(&mut state);
+
+        assert!((state.military_units.get(&1).unwrap().morale - 0.52).abs() < 0.0001);
+        assert!((state.military_units.get(&2).unwrap().morale - 0.51).abs() < 0.0001);
+        assert!((state.military_units.get(&3).unwrap().morale - 0.5).abs() < 0.0001);
     }
 
     #[test]
