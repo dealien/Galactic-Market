@@ -248,6 +248,7 @@ When you discover a non-obvious pattern specific to this codebase (e.g., a borro
 
 - **Windows path handling:** Use backslashes (`\`) in paths when working on Windows; tools in this environment expect Windows-style paths.
 - **No manual Cargo.lock edits** — Let Cargo manage dependencies.
+- **Commenting style:** Use `//` for single-line comments and `/* */` for multi-line comments in Rust code. Use comments to explain logic or functionality. Never remove comments that explain logic or functionality; instead, clarify or expand them if needed.
 
 # Lore Protocol Integration
 
