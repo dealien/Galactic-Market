@@ -90,6 +90,24 @@ pub struct DiplomaticRelation {
 }
 
 /// A military unit (fleet or garrison) belonging to an empire.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::MilitaryUnit;
+///
+/// let unit = MilitaryUnit {
+///     id: 7,
+///     empire_id: 3,
+///     unit_type: "fleet".to_string(),
+///     strength: 120.0,
+///     system_id: 42,
+///     status: "stationed".to_string(),
+///     morale: 0.95,
+/// };
+///
+/// assert_eq!(unit.empire_id, 3);
+/// ```
 #[derive(Debug, Clone)]
 pub struct MilitaryUnit {
     pub id: i32,
@@ -107,6 +125,22 @@ pub struct MilitaryUnit {
 }
 
 /// An alliance/treaty between N empires.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::Treaty;
+///
+/// let treaty = Treaty {
+///     id: 11,
+///     alliance_name: "Core Pact".to_string(),
+///     member_empire_ids: vec![1, 2],
+///     formed_tick: 100,
+///     dissolved_tick: None,
+/// };
+///
+/// assert!(treaty.dissolved_tick.is_none());
+/// ```
 #[derive(Debug, Clone)]
 pub struct Treaty {
     pub id: i32,
@@ -118,6 +152,29 @@ pub struct Treaty {
 }
 
 /// An active or concluded war between empires.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::War;
+///
+/// let war = War {
+///     id: 21,
+///     aggressor_id: 1,
+///     defender_id: 2,
+///     participants: vec![
+///         (1, "aggressor".to_string()),
+///         (2, "defender".to_string()),
+///     ],
+///     theaters: vec![10, 11],
+///     start_tick: 250,
+///     end_tick: None,
+///     status: "active".to_string(),
+///     cumulative_losses: 0.0,
+/// };
+///
+/// assert_eq!(war.status, "active");
+/// ```
 #[derive(Debug, Clone)]
 pub struct War {
     pub id: i32,
@@ -145,6 +202,20 @@ pub struct War {
 }
 
 /// A system occupied by a foreign empire.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::Occupation;
+///
+/// let occupation = Occupation {
+///     system_id: 5,
+///     occupier_empire_id: 2,
+///     since_tick: 300,
+/// };
+///
+/// assert_eq!(occupation.occupier_empire_id, 2);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Occupation {
     pub system_id: i32,
@@ -153,6 +224,23 @@ pub struct Occupation {
 }
 
 /// Tracks empire control within a sector.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+///
+/// use galactic_market::sim::state::SectorControl;
+///
+/// let control = SectorControl {
+///     sector_id: 9,
+///     empire_system_counts: HashMap::from([(1, 3_usize), (2, 1_usize)]),
+///     total_systems: 4,
+///     is_split: true,
+/// };
+///
+/// assert!(control.is_split);
+/// ```
 #[derive(Debug, Clone)]
 pub struct SectorControl {
     pub sector_id: i32,
@@ -583,6 +671,17 @@ impl SimState {
     }
 
     /// Generate a unique facility ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_facility_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_facility_id(&mut self) -> i32 {
         let id = self.next_facility_id;
         self.next_facility_id += 1;
@@ -590,6 +689,17 @@ impl SimState {
     }
 
     /// Generate a unique loan ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_loan_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_loan_id(&mut self) -> i32 {
         let id = self.next_loan_id;
         self.next_loan_id += 1;
@@ -597,6 +707,17 @@ impl SimState {
     }
 
     /// Generate a unique military unit ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_military_unit_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_military_unit_id(&mut self) -> i32 {
         let id = self.next_military_unit_id;
         self.next_military_unit_id += 1;
@@ -604,6 +725,17 @@ impl SimState {
     }
 
     /// Generate a unique treaty ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_treaty_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_treaty_id(&mut self) -> i32 {
         let id = self.next_treaty_id;
         self.next_treaty_id += 1;

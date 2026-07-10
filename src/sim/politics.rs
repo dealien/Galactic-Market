@@ -18,6 +18,21 @@ const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.25;
 const WAR_THEATER_PRODUCTION_PENALTY: f64 = 0.50;
 const WAR_EXHAUSTION_THRESHOLD: f64 = 500.0;
 
+/// Run the politics phase over the current simulation state.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::politics::run_politics;
+/// use galactic_market::sim::state::SimState;
+/// use rand::rngs::StdRng;
+/// use rand::SeedableRng;
+///
+/// let mut state = SimState::new();
+/// let mut rng = StdRng::seed_from_u64(42);
+///
+/// run_politics(&mut state, &mut rng);
+/// ```
 pub fn run_politics(state: &mut SimState, rng: &mut impl Rng) {
     update_tension(state);
     check_war_declarations(state);
@@ -419,6 +434,36 @@ fn process_occupations(state: &mut SimState) {
     }
 }
 
+/// Rebuild sector control from the current ownership and occupation state.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::politics::compute_sector_control;
+/// use galactic_market::sim::state::{Sector, SimState, StarSystem};
+///
+/// let mut state = SimState::new();
+/// state.sectors.insert(
+///     1,
+///     Sector {
+///         id: 1,
+///         empire_id: 1,
+///         name: "Core".to_string(),
+///     },
+/// );
+/// state.star_systems.insert(
+///     10,
+///     StarSystem {
+///         id: 10,
+///         sector_id: 1,
+///         name: "Home".to_string(),
+///     },
+/// );
+///
+/// compute_sector_control(&mut state);
+///
+/// assert_eq!(state.sector_control.get(&1).unwrap().total_systems, 1);
+/// ```
 pub fn compute_sector_control(state: &mut SimState) {
     state.sector_control.clear();
     let allied_pairs = active_treaty_pairs(state);
@@ -491,6 +536,35 @@ pub fn compute_sector_control(state: &mut SimState) {
     }
 }
 
+/// Determine whether a system is part of any active war theater.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::politics::is_system_in_war_theater;
+/// use galactic_market::sim::state::{SimState, War};
+///
+/// let mut state = SimState::new();
+/// state.wars.insert(
+///     1,
+///     War {
+///         id: 1,
+///         aggressor_id: 1,
+///         defender_id: 2,
+///         participants: vec![
+///             (1, "aggressor".to_string()),
+///             (2, "defender".to_string()),
+///         ],
+///         theaters: vec![10],
+///         start_tick: 0,
+///         end_tick: None,
+///         status: "active".to_string(),
+///         cumulative_losses: 0.0,
+///     },
+/// );
+///
+/// assert!(is_system_in_war_theater(&state, 10));
+/// ```
 pub fn is_system_in_war_theater(state: &SimState, system_id: i32) -> bool {
     state
         .wars
@@ -498,6 +572,18 @@ pub fn is_system_in_war_theater(state: &SimState, system_id: i32) -> bool {
         .any(|w| w.status == "active" && w.theaters.contains(&system_id))
 }
 
+/// Calculate the production penalty affecting a system.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::politics::get_system_production_penalty;
+/// use galactic_market::sim::state::SimState;
+///
+/// let state = SimState::new();
+///
+/// assert_eq!(get_system_production_penalty(&state, 10), 0.0);
+/// ```
 pub fn get_system_production_penalty(state: &SimState, system_id: i32) -> f64 {
     let mut penalty = 0.0;
 

@@ -27,6 +27,29 @@ const DEPLOYED_MORALE_RECOVERY_PER_TICK: f64 = 0.01;
 const COMBAT_VARIANCE: f64 = 0.2;
 
 /// Calculate total military strength for an empire at a specific system.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::military::calculate_military_strength;
+/// use galactic_market::sim::state::{MilitaryUnit, SimState};
+///
+/// let mut state = SimState::new();
+/// state.military_units.insert(
+///     1,
+///     MilitaryUnit {
+///         id: 1,
+///         empire_id: 1,
+///         unit_type: "fleet".to_string(),
+///         strength: 80.0,
+///         system_id: 10,
+///         status: "stationed".to_string(),
+///         morale: 1.0,
+///     },
+/// );
+///
+/// assert_eq!(calculate_military_strength(&state, 1, 10), 80.0);
+/// ```
 pub fn calculate_military_strength(state: &SimState, empire_id: i32, system_id: i32) -> f64 {
     state
         .military_units
@@ -40,6 +63,62 @@ pub fn calculate_military_strength(state: &SimState, empire_id: i32, system_id: 
 ///
 /// Returns `(winner_empire_id, loser_empire_id)`. The loser's units in that
 /// system are destroyed or retreat (strength reduced, morale penalized).
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::military::resolve_combat;
+/// use galactic_market::sim::state::{MilitaryUnit, Sector, SimState, StarSystem};
+/// use rand::rngs::StdRng;
+/// use rand::SeedableRng;
+///
+/// let mut state = SimState::new();
+/// state.sectors.insert(
+///     1,
+///     Sector {
+///         id: 1,
+///         empire_id: 1,
+///         name: "Alpha".to_string(),
+///     },
+/// );
+/// state.star_systems.insert(
+///     10,
+///     StarSystem {
+///         id: 10,
+///         sector_id: 1,
+///         name: "Sol".to_string(),
+///     },
+/// );
+/// state.military_units.insert(
+///     1,
+///     MilitaryUnit {
+///         id: 1,
+///         empire_id: 1,
+///         unit_type: "fleet".to_string(),
+///         strength: 100.0,
+///         system_id: 10,
+///         status: "stationed".to_string(),
+///         morale: 1.0,
+///     },
+/// );
+/// state.military_units.insert(
+///     2,
+///     MilitaryUnit {
+///         id: 2,
+///         empire_id: 2,
+///         unit_type: "fleet".to_string(),
+///         strength: 1.0,
+///         system_id: 10,
+///         status: "stationed".to_string(),
+///         morale: 1.0,
+///     },
+/// );
+///
+/// let mut rng = StdRng::seed_from_u64(7);
+/// let winner = resolve_combat(&mut state, 1, 2, 10, &mut rng);
+///
+/// assert_eq!(winner, Some(1));
+/// ```
 pub fn resolve_combat(
     state: &mut SimState,
     attacker_empire_id: i32,
@@ -123,6 +202,32 @@ pub fn resolve_combat(
 }
 
 /// Deduct military maintenance costs from empire treasuries each tick.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::military::apply_maintenance_costs;
+/// use galactic_market::sim::state::{MilitaryUnit, SimState};
+///
+/// let mut state = SimState::new();
+/// state.empire_treasuries.insert(1, 100.0);
+/// state.military_units.insert(
+///     1,
+///     MilitaryUnit {
+///         id: 1,
+///         empire_id: 1,
+///         unit_type: "fleet".to_string(),
+///         strength: 10.0,
+///         system_id: 10,
+///         status: "stationed".to_string(),
+///         morale: 1.0,
+///     },
+/// );
+///
+/// apply_maintenance_costs(&mut state);
+///
+/// assert!(state.empire_treasuries.get(&1).copied().unwrap() < 100.0);
+/// ```
 pub fn apply_maintenance_costs(state: &mut SimState) {
     // Collect per-empire total maintenance
     let mut empire_costs: std::collections::HashMap<i32, f64> = std::collections::HashMap::new();
@@ -137,6 +242,31 @@ pub fn apply_maintenance_costs(state: &mut SimState) {
 }
 
 /// Recover morale for units that are stationed (not in combat).
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::military::recover_morale;
+/// use galactic_market::sim::state::{MilitaryUnit, SimState};
+///
+/// let mut state = SimState::new();
+/// state.military_units.insert(
+///     1,
+///     MilitaryUnit {
+///         id: 1,
+///         empire_id: 1,
+///         unit_type: "garrison".to_string(),
+///         strength: 50.0,
+///         system_id: 10,
+///         status: "stationed".to_string(),
+///         morale: 0.5,
+///     },
+/// );
+///
+/// recover_morale(&mut state);
+///
+/// assert!(state.military_units.get(&1).unwrap().morale > 0.5);
+/// ```
 pub fn recover_morale(state: &mut SimState) {
     let active_theater_systems: HashSet<i32> = state
         .wars
@@ -157,6 +287,35 @@ pub fn recover_morale(state: &mut SimState) {
 /// Seed initial military units for each empire based on their system count.
 ///
 /// Each empire gets 2 fleets + 1 garrison per system they control.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::military::spawn_initial_units;
+/// use galactic_market::sim::state::{Sector, SimState, StarSystem};
+///
+/// let mut state = SimState::new();
+/// state.sectors.insert(
+///     1,
+///     Sector {
+///         id: 1,
+///         empire_id: 1,
+///         name: "Core".to_string(),
+///     },
+/// );
+/// state.star_systems.insert(
+///     1,
+///     StarSystem {
+///         id: 1,
+///         sector_id: 1,
+///         name: "Home".to_string(),
+///     },
+/// );
+///
+/// spawn_initial_units(&mut state);
+///
+/// assert_eq!(state.military_units.len(), 3);
+/// ```
 pub fn spawn_initial_units(state: &mut SimState) {
     // Build empire → systems mapping from sectors
     let mut empire_systems: std::collections::HashMap<i32, Vec<i32>> =
