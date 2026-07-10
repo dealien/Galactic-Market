@@ -31,6 +31,6 @@
   "containerEnv": {
     "DATABASE_URL": "postgres://postgres:password@localhost:5432/galactic_market"
   },
-  "postCreateCommand": "docker compose up -d --wait && cargo build",
+  "postCreateCommand": "npm install -g lore-protocol && docker compose up -d --wait && cargo build",
   "remoteUser": "vscode"
 }
