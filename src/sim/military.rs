@@ -148,9 +148,7 @@ pub fn recover_morale(state: &mut SimState) {
     for unit in state.military_units.values_mut() {
         if unit.status == "stationed" {
             unit.morale = (unit.morale + MORALE_RECOVERY_PER_TICK).min(1.0);
-        } else if unit.status == "deployed"
-            && !active_theater_systems.contains(&unit.system_id)
-        {
+        } else if unit.status == "deployed" && !active_theater_systems.contains(&unit.system_id) {
             unit.morale = (unit.morale + DEPLOYED_MORALE_RECOVERY_PER_TICK).min(1.0);
         }
     }
