@@ -11,5 +11,8 @@
             "database": "galactic_market",
             "username": "postgres"
         }
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "cargo test": true
+    }
 }
