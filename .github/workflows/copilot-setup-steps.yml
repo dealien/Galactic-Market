@@ -34,6 +34,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20' # lore-protocol requires Node.js >= 18
+
+      - name: Install Lore Protocol
+        run: npm install -g lore-protocol
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
@@ -47,6 +55,7 @@ jobs:
           rustc --version
           cargo --version
           psql --version
+          lore --version
 
       - name: Build project
         run: cargo build --release
