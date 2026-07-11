@@ -1,9 +1,10 @@
 {
   "name": "Galactic Market Simulator",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/node:1": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:4.0.0": {}
   },
   "forwardPorts": [
     5432
@@ -31,6 +32,6 @@
   "containerEnv": {
     "DATABASE_URL": "postgres://postgres:password@localhost:5432/galactic_market"
   },
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y ripgrep && npm install -g lore-protocol && docker compose up -d --wait && cargo build",
+  "postCreateCommand": "docker compose up -d --wait && cargo build",
   "remoteUser": "vscode"
 }
