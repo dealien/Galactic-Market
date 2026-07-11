@@ -6,3 +6,4 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs npm ripgrep \
     && npm install -g lore-protocol \
     && rm -rf /var/lib/apt/lists/*
+RUN cargo install cargo-codspeed --locked

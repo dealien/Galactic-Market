@@ -11,7 +11,7 @@
 - `cargo test <test_name>` — Run a specific test
 - `cargo clippy -- -D warnings` — Lint (warnings-as-errors)
 - `cargo fmt` — Format code
-- `cargo bench` — Run benchmarks
+- `cargo bench` or `cargo codspeed run` — Run benchmarks
 - `docker-compose up -d` — Start PostgreSQL database
 
 ## Project Overview
