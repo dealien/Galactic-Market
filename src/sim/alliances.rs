@@ -22,6 +22,20 @@ const ALLIANCE_DISSOLUTION_TENSION: f64 = 50.0;
 const ALLIANCE_FORMATION_CHANCE: f64 = 0.01;
 
 /// Run alliance logic: formation and dissolution checks.
+///
+/// # Examples
+///
+/// ```
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::alliances::run_alliances;
+/// use rand::thread_rng;
+///
+/// let mut state = SimState::new();
+/// let mut rng = thread_rng();
+///
+/// // Run the alliance check phase
+/// run_alliances(&mut state, &mut rng);
+/// ```
 pub fn run_alliances(state: &mut SimState, rng: &mut impl Rng) {
     check_alliance_formation(state, rng);
     check_alliance_dissolution(state);

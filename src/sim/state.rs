@@ -743,6 +743,19 @@ impl SimState {
     }
 
     /// Generate a unique war ID.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use galactic_market::sim::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let war_id_1 = state.next_war_id();
+    /// let war_id_2 = state.next_war_id();
+    ///
+    /// assert_eq!(war_id_1, 1);
+    /// assert_eq!(war_id_2, 2);
+    /// ```
     pub fn next_war_id(&mut self) -> i32 {
         let id = self.next_war_id;
         self.next_war_id += 1;

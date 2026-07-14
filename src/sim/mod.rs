@@ -34,6 +34,14 @@ use tracing::info;
 pub use state::SimState;
 
 /// Flush interval: write dirty state to the database every N ticks.
+///
+/// # Examples
+///
+/// ```
+/// use galactic_market::sim::FLUSH_INTERVAL;
+///
+/// assert_eq!(FLUSH_INTERVAL, 100);
+/// ```
 pub const FLUSH_INTERVAL: u64 = 100;
 
 impl SimState {
@@ -42,6 +50,20 @@ impl SimState {
     /// This method is pure in-memory: it performs no database I/O. Callers are
     /// responsible for invoking [`SimState::flush_with_pulse`] every
     /// [`FLUSH_INTERVAL`] ticks to persist state to the database.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use galactic_market::sim::SimState;
+    /// use rand::thread_rng;
+    ///
+    /// let mut state = SimState::new();
+    /// assert_eq!(state.tick, 0);
+    ///
+    /// let mut rng = thread_rng();
+    /// state.run_tick(&mut rng);
+    /// assert_eq!(state.tick, 1);
+    /// ```
     pub fn run_tick(&mut self, rng: &mut impl rand::Rng) {
         self.tick += 1;
 
@@ -91,6 +113,23 @@ impl SimState {
     /// Call this every [`FLUSH_INTERVAL`] ticks, **outside** the tick loop, to
     /// keep all database I/O out of the hot path. All writes are batched inside
     /// a single transaction so a crash between flushes recovers cleanly.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use galactic_market::sim::SimState;
+    /// use sqlx::PgPool;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), sqlx::Error> {
+    ///     let mut state = SimState::new();
+    ///     let pool = PgPool::connect("postgres://postgres:password@localhost:5432/galactic_market").await?;
+    ///
+    ///     // Flush the simulation state to the database
+    ///     state.flush_with_pulse(&pool).await?;
+    ///     Ok(())
+    /// }
+    /// ```
     pub async fn flush_with_pulse(&mut self, pool: &PgPool) -> Result<(), sqlx::Error> {
         let summary = self.generate_summary();
 
