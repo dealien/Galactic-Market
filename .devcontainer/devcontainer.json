@@ -14,10 +14,10 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
-        "serayuzgur.crates",
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg",
-        "vadimcn.vscode-lldb"
+        "vadimcn.vscode-lldb",
+        "fill-labs.dependi"
       ],
       "settings": {
         "rust-analyzer.check.command": "clippy",
