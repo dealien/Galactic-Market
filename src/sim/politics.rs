@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use rand::Rng;
 use tracing::info;
 
+use crate::db::seed::{DIPLOMATIC_STATUS_NEUTRAL, DIPLOMATIC_STATUS_WAR};
 use crate::sim::military;
 use crate::sim::state::{Occupation, SectorControl, SimState, War};
 
@@ -58,7 +59,7 @@ fn update_tension(state: &mut SimState) {
             continue;
         }
 
-        if rel.status == "neutral" {
+        if rel.status == DIPLOMATIC_STATUS_NEUTRAL {
             rel.tension = (rel.tension - TENSION_DECAY_RATE).max(0.0);
         }
     }
@@ -112,8 +113,8 @@ fn check_war_declarations(state: &mut SimState) {
     let mut new_wars: Vec<(i32, i32)> = Vec::new();
 
     for rel in state.diplomatic_relations.values_mut() {
-        if rel.status == "neutral" && rel.tension >= WAR_TENSION_THRESHOLD {
-            rel.status = "war".to_string();
+        if rel.status == DIPLOMATIC_STATUS_NEUTRAL && rel.tension >= WAR_TENSION_THRESHOLD {
+            rel.status = DIPLOMATIC_STATUS_WAR.to_string();
             new_wars.push((rel.empire_a_id, rel.empire_b_id));
         }
     }
@@ -341,7 +342,7 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 (defender_id, aggressor_id)
             };
             if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
-                rel.status = "neutral".to_string();
+                rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
                 rel.tension = 50.0;
             }
         }
@@ -409,7 +410,7 @@ fn set_war_status(state: &mut SimState, empire_a: i32, empire_b: i32) {
         (empire_b, empire_a)
     };
     if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
-        rel.status = "war".to_string();
+        rel.status = DIPLOMATIC_STATUS_WAR.to_string();
     }
 }
 
@@ -703,7 +704,7 @@ mod tests {
                 empire_a_id: 1,
                 empire_b_id: 2,
                 tension: 0.0,
-                status: "neutral".to_string(),
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
             },
         );
 
@@ -725,7 +726,7 @@ mod tests {
         state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 100.0;
         check_war_declarations(&mut state);
         let rel = state.diplomatic_relations.get(&(1, 2)).unwrap();
-        assert_eq!(rel.status, "war");
+        assert_eq!(rel.status, DIPLOMATIC_STATUS_WAR);
         assert_eq!(state.wars.len(), 1);
     }
 
@@ -798,7 +799,7 @@ mod tests {
                 empire_a_id: 1,
                 empire_b_id: 3,
                 tension: 5.0,
-                status: "neutral".to_string(),
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
             },
         );
         state.diplomatic_relations.insert(
@@ -807,7 +808,7 @@ mod tests {
                 empire_a_id: 2,
                 empire_b_id: 3,
                 tension: 7.5,
-                status: "neutral".to_string(),
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
             },
         );
 

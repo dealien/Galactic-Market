@@ -1,3 +1,4 @@
+use crate::db::seed::DIPLOMATIC_STATUS_NEUTRAL;
 use crate::sim::state::{ActiveEvent, SimState};
 use rand::Rng;
 use rand::distributions::{Distribution, WeightedIndex};
@@ -115,7 +116,7 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                             empire_a_id: key.0,
                             empire_b_id: key.1,
                             tension: 0.0,
-                            status: "neutral".to_string(),
+                            status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
                         }
                     });
                     rel.tension += 10.0 * severity;

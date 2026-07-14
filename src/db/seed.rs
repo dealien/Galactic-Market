@@ -4,6 +4,15 @@ use rand::{Rng, thread_rng};
 use sqlx::PgPool;
 use tracing::info;
 
+/// The status representing a neutral diplomatic relationship.
+pub const DIPLOMATIC_STATUS_NEUTRAL: &str = "neutral";
+
+/// The status representing an alliance diplomatic relationship.
+pub const DIPLOMATIC_STATUS_ALLIANCE: &str = "alliance";
+
+/// The status representing a state of war.
+pub const DIPLOMATIC_STATUS_WAR: &str = "war";
+
 pub async fn run_seed(pool: &PgPool) -> Result<()> {
     info!("Seeding universe...");
 
@@ -282,7 +291,7 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
             sqlx::query(
                 "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status) VALUES ($1, $2, $3, $4)"
             )
-            .bind(empire_ids[i]).bind(empire_ids[j]).bind(0.0_f64).bind("neutral")
+            .bind(empire_ids[i]).bind(empire_ids[j]).bind(0.0_f64).bind(DIPLOMATIC_STATUS_NEUTRAL)
             .execute(&mut *tx).await?;
         }
     }

@@ -7,6 +7,7 @@
 use rand::Rng;
 use tracing::info;
 
+use crate::db::seed::{DIPLOMATIC_STATUS_ALLIANCE, DIPLOMATIC_STATUS_NEUTRAL};
 use crate::sim::state::{SimState, Treaty};
 
 /// Minimum ticks at neutral before alliance can form.
@@ -47,7 +48,7 @@ fn check_alliance_formation(state: &mut SimState, rng: &mut impl Rng) {
     let mut eligible_pairs: Vec<(i32, i32)> = Vec::new();
 
     for rel in state.diplomatic_relations.values() {
-        if rel.status != "neutral" {
+        if rel.status != DIPLOMATIC_STATUS_NEUTRAL {
             continue;
         }
         if rel.tension > ALLIANCE_MAX_TENSION {
@@ -113,7 +114,7 @@ fn check_alliance_formation(state: &mut SimState, rng: &mut impl Rng) {
                 (empire_b, empire_a)
             };
             if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
-                rel.status = "alliance".to_string();
+                rel.status = DIPLOMATIC_STATUS_ALLIANCE.to_string();
                 rel.tension = 0.0;
             }
 
@@ -177,9 +178,9 @@ fn check_alliance_dissolution(state: &mut SimState) {
                         (members[j], members[i])
                     };
                     if let Some(rel) = state.diplomatic_relations.get_mut(&(a, b))
-                        && rel.status == "alliance"
+                        && rel.status == DIPLOMATIC_STATUS_ALLIANCE
                     {
-                        rel.status = "neutral".to_string();
+                        rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
                     }
                 }
             }
@@ -266,7 +267,7 @@ mod tests {
                 empire_a_id: 1,
                 empire_b_id: 2,
                 tension: 5.0,
-                status: "neutral".to_string(),
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
             },
         );
 
@@ -288,7 +289,8 @@ mod tests {
                 dissolved_tick: None,
             },
         );
-        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().status = "alliance".to_string();
+        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().status =
+            DIPLOMATIC_STATUS_ALLIANCE.to_string();
         state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 60.0;
 
         check_alliance_dissolution(&mut state);
@@ -296,7 +298,7 @@ mod tests {
         assert!(state.treaties.get(&1).unwrap().dissolved_tick.is_some());
         assert_eq!(
             state.diplomatic_relations.get(&(1, 2)).unwrap().status,
-            "neutral"
+            DIPLOMATIC_STATUS_NEUTRAL
         );
     }
 
@@ -314,7 +316,8 @@ mod tests {
                 dissolved_tick: None,
             },
         );
-        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().status = "alliance".to_string();
+        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().status =
+            DIPLOMATIC_STATUS_ALLIANCE.to_string();
         state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 10.0;
 
         check_alliance_dissolution(&mut state);
