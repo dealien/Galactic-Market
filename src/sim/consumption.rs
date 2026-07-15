@@ -3,6 +3,7 @@
 //! Simulates citizen demand for refined and consumer goods using accumulated city wages,
 //! and updates population growth/decline depending on food fulfillment thresholds.
 
+use std::collections::HashMap;
 use tracing::debug;
 
 use crate::sim::state::{MarketOrder, SimState};
@@ -166,6 +167,9 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 
     // Issue #10: Update population based on food fulfillment
     update_population_dynamics(state);
+
+    // Issue #10: Population migration between cities
+    run_migration(state);
 }
 
 /// Issue #10: Update city populations based on food fulfillment.
@@ -247,6 +251,96 @@ fn update_population_dynamics(state: &mut SimState) {
     }
 }
 
+/// Issue #10: How often migration runs (in ticks).
+const MIGRATION_INTERVAL: u64 = 50;
+
+/// Issue #10: Fraction of population that migrates per interval.
+const MIGRATION_RATE: f64 = 0.01;
+
+/// Issue #10: Population migration between cities within the same empire.
+///
+/// Every MIGRATION_INTERVAL ticks, population migrates from low-fulfillment
+/// cities to high-fulfillment cities in the same empire. Migration is capped
+/// to prevent sudden collapses.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::consumption::run_migration;
+///
+/// let mut state = SimState::new();
+/// state.tick = 50;
+/// run_migration(&mut state);
+/// ```
+pub fn run_migration(state: &mut SimState) {
+    // Only run every MIGRATION_INTERVAL ticks
+    if !state.tick.is_multiple_of(MIGRATION_INTERVAL) {
+        return;
+    }
+
+    // Group cities by empire (via sector → empire mapping)
+    let mut empire_cities: HashMap<i32, Vec<i32>> = HashMap::new();
+    for (&city_id, city) in &state.cities {
+        // Look up empire via: city → body → system → sector → empire
+        let empire_id = state
+            .celestial_bodies
+            .get(&city.body_id)
+            .and_then(|b| state.star_systems.get(&b.system_id))
+            .and_then(|s| state.sectors.get(&s.sector_id))
+            .map(|sec| sec.empire_id);
+
+        if let Some(emp_id) = empire_id {
+            empire_cities.entry(emp_id).or_default().push(city_id);
+        }
+    }
+
+    // For each empire, migrate from low-fulfillment to high-fulfillment
+    let mut migrations: Vec<(i32, i32, i64)> = Vec::new(); // (from, to, amount)
+
+    for city_ids in empire_cities.values() {
+        if city_ids.len() < 2 {
+            continue;
+        }
+
+        // Score each city by fulfillment ratio
+        let mut scored: Vec<(i32, f64, i64)> = city_ids
+            .iter()
+            .filter_map(|&cid| {
+                let balance = state.city_food_balance.get(&cid)?;
+                let pop = state.cities.get(&cid)?.population;
+                Some((cid, balance.fulfillment_ratio, pop))
+            })
+            .collect();
+
+        if scored.len() < 2 {
+            continue;
+        }
+
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Migrate from worst to best (small trickle)
+        if let (Some(worst), Some(best)) = (scored.first(), scored.last())
+            && best.1 > worst.1 + 0.3
+            && worst.2 > 100
+        {
+            // Migrate up to 1% of worst city's population
+            let amount = (worst.2 as f64 * MIGRATION_RATE).max(1.0) as i64;
+            migrations.push((worst.0, best.0, amount));
+        }
+    }
+
+    for (from_id, to_id, amount) in migrations {
+        if let Some(from_city) = state.cities.get_mut(&from_id) {
+            from_city.population = (from_city.population - amount).max(1);
+        }
+        if let Some(to_city) = state.cities.get_mut(&to_id) {
+            to_city.population += amount;
+        }
+        debug!(from = from_id, to = to_id, amount, "Population migrated");
+    }
+}
+
 // ─── Unit Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -274,6 +368,7 @@ mod tests {
                 body_id: 1,
                 name: "Consumer City".into(),
                 population,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
