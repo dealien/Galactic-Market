@@ -17,7 +17,6 @@ const SECTOR_SPLIT_TENSION_INCREASE: f64 = 0.1;
 pub const SECTOR_SPLIT_PRODUCTION_PENALTY: f64 = 0.15;
 pub const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.25;
 pub const WAR_THEATER_PRODUCTION_PENALTY: f64 = 0.50;
-const WAR_EXHAUSTION_THRESHOLD: f64 = 500.0;
 
 /// Run the politics phase over the current simulation state.
 ///
@@ -37,12 +36,86 @@ const WAR_EXHAUSTION_THRESHOLD: f64 = 500.0;
 pub fn run_politics(state: &mut SimState, rng: &mut impl Rng) {
     check_war_declarations(state);
     update_tension(state);
+    deploy_fleets_to_theaters(state);
     resolve_active_wars(state, rng);
     process_occupations(state);
     compute_sector_control(state);
     military::apply_maintenance_costs(state);
     military::recover_morale(state);
     repair_infrastructure(state);
+}
+
+/// Automatically deploys stationed fleets to their nearest active war theater.
+fn deploy_fleets_to_theaters(state: &mut SimState) {
+    // Ensure system distances are built (resilient for unit tests)
+    crate::sim::logistics::build_system_distances(state);
+
+    let active_wars: Vec<(i32, Vec<i32>, Vec<i32>)> = state
+        .wars
+        .values()
+        .filter(|w| w.status == "active")
+        .map(|w| {
+            let participant_ids = w.participants.iter().map(|(p, _)| *p).collect();
+            (w.id, w.theaters.clone(), participant_ids)
+        })
+        .collect();
+
+    for (war_id, theaters, participant_ids) in active_wars {
+        if theaters.is_empty() {
+            continue;
+        }
+
+        for &empire_id in &participant_ids {
+            let fleet_ids: Vec<i32> = state
+                .military_units
+                .values()
+                .filter(|u| {
+                    u.empire_id == empire_id && u.unit_type == "fleet" && u.status == "stationed"
+                })
+                .map(|u| u.id)
+                .collect();
+
+            for fleet_id in fleet_ids {
+                let fleet_sys = match state.military_units.get(&fleet_id) {
+                    Some(f) => f.system_id,
+                    None => continue,
+                };
+
+                let mut best_theater = None;
+                let mut min_distance = f64::MAX;
+
+                for &theater_sys in &theaters {
+                    let dist = if fleet_sys == theater_sys {
+                        Some(0.0)
+                    } else {
+                        state
+                            .system_distances
+                            .get(&(fleet_sys, theater_sys))
+                            .or_else(|| state.system_distances.get(&(theater_sys, fleet_sys)))
+                            .copied()
+                    };
+
+                    if let Some(d) = dist
+                        && d < min_distance
+                    {
+                        min_distance = d;
+                        best_theater = Some(theater_sys);
+                    }
+                }
+
+                if let Some(target_sys) = best_theater
+                    && let Some(fleet) = state.military_units.get_mut(&fleet_id)
+                {
+                    fleet.system_id = target_sys;
+                    fleet.status = "deployed".to_string();
+                    info!(
+                        "War {}: Fleet {} of empire {} deployed to theater system {} (distance: {:.2} ly).",
+                        war_id, fleet_id, empire_id, target_sys, min_distance
+                    );
+                }
+            }
+        }
+    }
 }
 
 fn update_tension(state: &mut SimState) {
@@ -254,6 +327,8 @@ fn check_war_declarations(state: &mut SimState) {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -401,13 +476,49 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         let tick_losses = aggressor_losses + defender_losses;
         if let Some(war) = state.wars.get_mut(&war_id) {
             war.cumulative_losses += tick_losses;
-            if war.cumulative_losses > WAR_EXHAUSTION_THRESHOLD {
+
+            // Calculate side-specific exhaustion changes
+            let base_attrition = 0.2;
+            let aggressor_loss_exh = aggressor_losses * 0.1;
+            let defender_loss_exh = defender_losses * 0.1;
+
+            let mut aggressor_occ_strain = 0.0;
+            let mut defender_occ_strain = 0.0;
+            for occ in state.occupied_systems.values() {
+                if let Some(system) = state.star_systems.get(&occ.system_id)
+                    && let Some(sector) = state.sectors.get(&system.sector_id)
+                {
+                    if aggressor_side.contains(&sector.empire_id) {
+                        aggressor_occ_strain += 1.0;
+                    } else if defender_side.contains(&sector.empire_id) {
+                        defender_occ_strain += 1.0;
+                    }
+                }
+            }
+
+            war.aggressor_exhaustion = (war.aggressor_exhaustion
+                + base_attrition
+                + aggressor_loss_exh
+                + aggressor_occ_strain)
+                .clamp(0.0, 100.0);
+            war.defender_exhaustion = (war.defender_exhaustion
+                + base_attrition
+                + defender_loss_exh
+                + defender_occ_strain)
+                .clamp(0.0, 100.0);
+
+            // Determine if the war concludes due to exhaustion
+            let forced_peace =
+                war.aggressor_exhaustion >= 100.0 || war.defender_exhaustion >= 100.0;
+            let ceasefire = war.aggressor_exhaustion >= 60.0 && war.defender_exhaustion >= 60.0;
+
+            if forced_peace || ceasefire {
                 war.status = "concluded".to_string();
                 war.end_tick = Some(state.tick);
                 war_concluded = true;
                 info!(
-                    "War {} concluded due to exhaustion (cumulative losses: {:.0}).",
-                    war_id, war.cumulative_losses
+                    "War {} concluded due to exhaustion. Aggressor exhaustion: {:.1}, Defender exhaustion: {:.1}.",
+                    war_id, war.aggressor_exhaustion, war.defender_exhaustion
                 );
             }
         }
@@ -491,22 +602,6 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                     defender_loss_ratio * 100.0
                 );
             }
-        }
-
-        let still_contested = theaters.iter().any(|&sys_id| {
-            let a = calculate_side_strength(state, &aggressor_side, sys_id);
-            let b = calculate_side_strength(state, &defender_side, sys_id);
-            a > 0.0 && b > 0.0
-        });
-
-        if !still_contested
-            && let Some(war) = state.wars.get_mut(&war_id)
-            && war.status == "active"
-        {
-            war.status = "concluded".to_string();
-            war.end_tick = Some(state.tick);
-            war_concluded = true;
-            info!("War {} concluded: no contested systems remain.", war_id);
         }
 
         if war_concluded {
@@ -791,6 +886,8 @@ pub fn compute_sector_control(state: &mut SimState) {
 ///         end_tick: None,
 ///         status: "active".to_string(),
 ///         cumulative_losses: 0.0,
+///         aggressor_exhaustion: 0.0,
+///         defender_exhaustion: 0.0,
 ///     },
 /// );
 ///
@@ -1318,6 +1415,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1379,6 +1478,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1416,6 +1517,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1461,6 +1564,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1517,6 +1622,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1598,6 +1705,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 100.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1660,6 +1769,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 100.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1675,6 +1786,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1840,6 +1953,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -1874,5 +1989,120 @@ mod tests {
         assert!(state.wars.get(&1).unwrap().cumulative_losses > 0.0);
         assert!(state.military_units.get(&1).unwrap().strength < 100.0);
         assert!(state.military_units.get(&2).unwrap().strength < 100.0);
+    }
+
+    #[test]
+    fn test_fleet_deployment_to_nearest_theater() {
+        let mut state = setup_political_state();
+        // Create an active war
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![3], // system 3 is the theater
+                start_tick: 0,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        // Put a fleet in system 1 (owned by Empire 1)
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 1,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 1,
+                status: "stationed".to_string(),
+                morale: 1.0,
+            },
+        );
+
+        // Define a lane between system 1 and system 3
+        state.system_lanes.insert(
+            (1, 3),
+            crate::sim::state::SystemLane {
+                system_a_id: 1,
+                system_b_id: 3,
+                distance_ly: 5.0,
+                lane_type: "standard".to_string(),
+            },
+        );
+
+        // Run fleet deployment
+        deploy_fleets_to_theaters(&mut state);
+
+        // Check that the fleet moved to system 3 and status is "deployed"
+        let fleet = state.military_units.get(&1).unwrap();
+        assert_eq!(fleet.system_id, 3);
+        assert_eq!(fleet.status, "deployed");
+    }
+
+    #[test]
+    fn test_war_exhaustion_accumulation_and_peace() {
+        let mut state = setup_political_state();
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![3],
+                start_tick: 0,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 99.9, // Aggressor is almost exhausted
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(42);
+        resolve_active_wars(&mut state, &mut rng);
+
+        // Check that exhaustion increased (base attrition +0.2)
+        // Aggressor exhaustion should hit 100.0 and conclude the war
+        let war = state.wars.get(&1).unwrap();
+        assert_eq!(war.status, "concluded");
+        assert_eq!(war.aggressor_exhaustion, 100.0);
+    }
+
+    #[test]
+    fn test_war_exhaustion_ceasefire() {
+        let mut state = setup_political_state();
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![3],
+                start_tick: 0,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 59.9, // Both sides close to ceasefire threshold (60.0)
+                defender_exhaustion: 59.9,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(42);
+        resolve_active_wars(&mut state, &mut rng);
+
+        // With attrition (+0.2), both cross 60.0 and trigger ceasefire
+        let war = state.wars.get(&1).unwrap();
+        assert_eq!(war.status, "concluded");
+        assert!(war.aggressor_exhaustion >= 60.0);
+        assert!(war.defender_exhaustion >= 60.0);
     }
 }

@@ -499,8 +499,8 @@ impl SimState {
 
         for war in self.wars.values() {
             sqlx::query(
-                "INSERT INTO wars (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)",
+                "INSERT INTO wars (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses, aggressor_exhaustion, defender_exhaustion)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             )
             .bind(war.id)
             .bind(war.aggressor_id)
@@ -509,6 +509,8 @@ impl SimState {
             .bind(war.end_tick.map(|t| t as i64))
             .bind(&war.status)
             .bind(war.cumulative_losses)
+            .bind(war.aggressor_exhaustion)
+            .bind(war.defender_exhaustion)
             .execute(&mut *tx)
             .await?;
 

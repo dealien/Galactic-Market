@@ -348,6 +348,8 @@ fn test_wartime_maintenance_multiplier() {
             end_tick: None,
             status: "active".to_string(),
             cumulative_losses: 0.0,
+            aggressor_exhaustion: 0.0,
+            defender_exhaustion: 0.0,
         },
     );
 
@@ -377,6 +379,8 @@ fn test_war_capitulation_threshold() {
             end_tick: None,
             status: "active".to_string(),
             cumulative_losses: 0.0,
+            aggressor_exhaustion: 0.0,
+            defender_exhaustion: 0.0,
         },
     );
 

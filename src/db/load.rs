@@ -267,13 +267,23 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.treaties.len(), "Loaded treaties.");
 
     // ── Wars ──────────────────────────────────────────────────────────────────
-    let war_rows = sqlx::query_as::<_, (i32, i32, i32, i64, Option<i64>, String, f64)>(
-        "SELECT id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses FROM wars",
+    let war_rows = sqlx::query_as::<_, (i32, i32, i32, i64, Option<i64>, String, f64, f64, f64)>(
+        "SELECT id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses, aggressor_exhaustion, defender_exhaustion FROM wars",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, aggressor_id, defender_id, start_tick, end_tick, status, cumulative_losses) in war_rows
+    for (
+        id,
+        aggressor_id,
+        defender_id,
+        start_tick,
+        end_tick,
+        status,
+        cumulative_losses,
+        aggressor_exhaustion,
+        defender_exhaustion,
+    ) in war_rows
     {
         let participant_rows = sqlx::query_as::<_, (i32, String)>(
             "SELECT empire_id, role FROM war_participants WHERE war_id = $1",
@@ -300,6 +310,8 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 end_tick: end_tick.map(|t| t as u64),
                 status,
                 cumulative_losses,
+                aggressor_exhaustion,
+                defender_exhaustion,
             },
         );
     }

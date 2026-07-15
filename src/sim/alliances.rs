@@ -349,6 +349,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 
@@ -376,6 +378,8 @@ mod tests {
                 end_tick: None,
                 status: "active".to_string(),
                 cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
             },
         );
 

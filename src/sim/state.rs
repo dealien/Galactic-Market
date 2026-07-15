@@ -180,6 +180,8 @@ pub struct Treaty {
 ///     end_tick: None,
 ///     status: "active".to_string(),
 ///     cumulative_losses: 0.0,
+///     aggressor_exhaustion: 0.0,
+///     defender_exhaustion: 0.0,
 /// };
 ///
 /// assert_eq!(war.status, "active");
@@ -208,6 +210,10 @@ pub struct War {
     /// Total military-strength losses accumulated across all ticks of this war.
     /// Compared against `WAR_EXHAUSTION_THRESHOLD` to trigger a war-exhaustion ending.
     pub cumulative_losses: f64,
+    /// Cumulative war exhaustion for the aggressor side (0.0 to 100.0).
+    pub aggressor_exhaustion: f64,
+    /// Cumulative war exhaustion for the defender side (0.0 to 100.0).
+    pub defender_exhaustion: f64,
 }
 
 /// A system occupied by a foreign empire.
