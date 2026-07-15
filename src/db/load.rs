@@ -1,3 +1,8 @@
+//! Database hydration logic.
+//!
+//! Provides functions to load the full simulation state from the PostgreSQL database
+//! into the in-memory `SimState` struct at startup.
+
 use sqlx::PgPool;
 use tracing::{info, warn};
 
@@ -13,6 +18,19 @@ use crate::sim::state::{
 ///
 /// # Errors
 /// Returns a `sqlx::Error` if any query fails.
+///
+/// # Examples
+/// ```no_run
+/// use sqlx::PgPool;
+/// use galactic_market::db::load::load;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), sqlx::Error> {
+///     let pool = PgPool::connect("postgres://postgres:password@localhost:5432/galactic_market").await?;
+///     let state = load(&pool).await?;
+///     Ok(())
+/// }
+/// ```
 pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 

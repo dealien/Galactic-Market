@@ -1,3 +1,8 @@
+//! Population consumption and food fulfillment dynamics.
+//!
+//! Simulates citizen demand for refined and consumer goods using accumulated city wages,
+//! and updates population growth/decline depending on food fulfillment thresholds.
+
 use tracing::debug;
 
 use crate::sim::state::{MarketOrder, SimState};
@@ -25,6 +30,16 @@ const POPULATION_STARVATION_RATE: f64 = -0.005; // -0.5% per tick
 /// Instead of manifesting credits, cities spend accumulated wages on goods.
 /// Posts buy orders for all Refined and Consumer goods.
 /// After consumption, updates population based on food fulfillment.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::consumption::run_consumption;
+///
+/// let mut state = SimState::new();
+/// run_consumption(&mut state, 1);
+/// ```
 pub fn run_consumption(state: &mut SimState, current_tick: u64) {
     // Snapshot last known prices for budgeting
     let last_prices = state.price_cache.clone();

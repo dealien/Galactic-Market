@@ -96,6 +96,7 @@ Select-String -Path sim_debug.log -Pattern "Match:" | Select-Object -First 20
 - **Public API:** Document all public items with `///` doc comments, including examples.
 - **Learnings:** Record non-obvious Rust patterns or codebase-specific discoveries in `.agent/learning/rust.md`.
 - **System Instructions:** Instructions in `.agent/rules/rust-env.md` must be followed for all Rust work.
+- **Commenting style:** Use `//` for single-line comments and `/* */` for multi-line comments in Rust code. Use comments to explain logic or functionality. Never remove comments that explain logic or functionality; instead, clarify or expand them if needed.
 
 ### Database
 

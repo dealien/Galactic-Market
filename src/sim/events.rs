@@ -1,9 +1,30 @@
+//! Random event generation and lifecycle management.
+//!
+//! Periodic events (such as solar flares, blockades, or market shocks) are
+//! triggered and updated.
+
 use crate::db::seed::DIPLOMATIC_STATUS_NEUTRAL;
 use crate::sim::state::{ActiveEvent, SimState};
 use rand::Rng;
 use rand::distributions::{Distribution, WeightedIndex};
 use tracing::info;
 
+/// Phase 9: Random Events.
+///
+/// Advance lifetimes of active events and roll to trigger new random events
+/// based on configured event weights.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::events::run_events;
+/// use rand::thread_rng;
+///
+/// let mut state = SimState::new();
+/// let mut rng = thread_rng();
+/// run_events(&mut state, &mut rng);
+/// ```
 pub fn run_events(state: &mut SimState, rng: &mut impl Rng) {
     // 1. Expire old events — increment blockade_version if any blockade expires.
     let mut blockade_expired = false;

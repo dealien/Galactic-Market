@@ -1,3 +1,8 @@
+//! Resource mining and mineral extraction logic.
+//!
+//! Handles ore extraction from deposits by mining facilities, manages ore depletion,
+//! and tracks mining production throttles to prevent market floods.
+
 use tracing::debug;
 
 use crate::sim::state::{Inventory, SimState};
@@ -179,6 +184,16 @@ pub fn run_extraction(state: &mut SimState) {
 }
 
 /// Remove a deposit from the state if it is exhausted.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::resources::prune_exhausted_deposits;
+///
+/// let mut state = SimState::new();
+/// prune_exhausted_deposits(&mut state);
+/// ```
 pub fn prune_exhausted_deposits(state: &mut SimState) {
     state.deposits.retain(|_, d| d.size_remaining > 0);
 }

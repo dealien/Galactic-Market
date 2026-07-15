@@ -1,8 +1,20 @@
+//! Procedural name generation engine.
+//!
+//! Generates immersive, contextual names for star systems, planets, cities,
+//! and companies based on dictionary patterns defined in JSON.
+
 use rand::seq::SliceRandom;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
+/// Dictionary of name templates grouped by location categories.
+///
+/// # Examples
+///
+/// ```
+/// // Loaded dynamically from JSON config on startup
+/// ```
 #[derive(Debug, Deserialize)]
 pub struct NameDictionary {
     pub system: HashMap<String, NameCategory>,
@@ -11,6 +23,7 @@ pub struct NameDictionary {
     pub company: HashMap<String, NameCategory>,
 }
 
+/// A specific collection of prefixes, cores, suffixes, and industries.
 #[derive(Debug, Deserialize)]
 pub struct NameCategory {
     #[serde(default)]
@@ -23,9 +36,21 @@ pub struct NameCategory {
     pub industries: Vec<String>,
 }
 
+/// Geographic categorization of location names.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::namegen::LocationType;
+///
+/// let loc = LocationType::Core;
+/// assert_ne!(loc, LocationType::Outpost);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LocationType {
+    /// Core systems are more formal and established.
     Core,
+    /// Outpost systems are wild and frontier-like.
     Outpost,
 }
 
@@ -47,6 +72,14 @@ static DICTIONARY: OnceLock<NameDictionary> = OnceLock::new();
 ///
 /// # Errors
 /// Returns an error if the file cannot be read or if the JSON is invalid.
+///
+/// # Examples
+/// ```no_run
+/// use galactic_market::sim::namegen::init_dictionary;
+///
+/// let result = init_dictionary("data/names.json");
+/// assert!(result.is_ok());
+/// ```
 pub fn init_dictionary(path: &str) -> Result<(), Box<dyn std::error::Error>> {
     let content = std::fs::read_to_string(path)?;
     let dict: NameDictionary = serde_json::from_str(&content)?;
@@ -62,6 +95,17 @@ fn get_dict() -> &'static NameDictionary {
         .expect("Name dictionary not initialized. Call init_dictionary first.")
 }
 
+/// Generate a random star system name based on LocationType.
+///
+/// # Examples
+/// ```no_run
+/// use galactic_market::sim::namegen::{generate_system_name, LocationType};
+/// use rand::thread_rng;
+///
+/// let mut rng = thread_rng();
+/// let name = generate_system_name(LocationType::Core, &mut rng);
+/// println!("System name: {}", name);
+/// ```
 pub fn generate_system_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
     let dict = get_dict();
     if let Some(cat) = dict.system.get(loc_type.as_str()) {
@@ -71,6 +115,17 @@ pub fn generate_system_name(loc_type: LocationType, rng: &mut impl rand::Rng) ->
     }
 }
 
+/// Generate a random planet name based on LocationType.
+///
+/// # Examples
+/// ```no_run
+/// use galactic_market::sim::namegen::{generate_planet_name, LocationType};
+/// use rand::thread_rng;
+///
+/// let mut rng = thread_rng();
+/// let name = generate_planet_name(LocationType::Core, &mut rng);
+/// println!("Planet name: {}", name);
+/// ```
 pub fn generate_planet_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
     let dict = get_dict();
     if let Some(cat) = dict.planet.get(loc_type.as_str()) {
@@ -80,6 +135,17 @@ pub fn generate_planet_name(loc_type: LocationType, rng: &mut impl rand::Rng) ->
     }
 }
 
+/// Generate a random city name based on LocationType.
+///
+/// # Examples
+/// ```no_run
+/// use galactic_market::sim::namegen::{generate_city_name, LocationType};
+/// use rand::thread_rng;
+///
+/// let mut rng = thread_rng();
+/// let name = generate_city_name(LocationType::Core, &mut rng);
+/// println!("City name: {}", name);
+/// ```
 pub fn generate_city_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
     let dict = get_dict();
     if let Some(cat) = dict.city.get(loc_type.as_str()) {
@@ -89,6 +155,17 @@ pub fn generate_city_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> S
     }
 }
 
+/// Generate a random company name based on LocationType.
+///
+/// # Examples
+/// ```no_run
+/// use galactic_market::sim::namegen::{generate_company_name, LocationType};
+/// use rand::thread_rng;
+///
+/// let mut rng = thread_rng();
+/// let name = generate_company_name(LocationType::Core, &mut rng);
+/// println!("Company name: {}", name);
+/// ```
 pub fn generate_company_name(loc_type: LocationType, rng: &mut impl rand::Rng) -> String {
     let dict = get_dict();
     let cat = match dict.company.get(loc_type.as_str()) {

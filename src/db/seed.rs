@@ -1,3 +1,9 @@
+//! Galaxy seeding and world generation logic.
+//!
+//! Generates empires, sectors, star systems, celestial bodies, cities,
+//! initial market orders, resource types, and default recipes to establish
+//! a starting economy.
+
 use crate::sim::namegen::{self, LocationType};
 use anyhow::{Context, Result};
 use rand::{Rng, thread_rng};
@@ -5,14 +11,52 @@ use sqlx::PgPool;
 use tracing::info;
 
 /// The status representing a neutral diplomatic relationship.
+///
+/// # Examples
+/// ```
+/// use galactic_market::db::seed::DIPLOMATIC_STATUS_NEUTRAL;
+/// assert_eq!(DIPLOMATIC_STATUS_NEUTRAL, "neutral");
+/// ```
 pub const DIPLOMATIC_STATUS_NEUTRAL: &str = "neutral";
 
 /// The status representing an alliance diplomatic relationship.
+///
+/// # Examples
+/// ```
+/// use galactic_market::db::seed::DIPLOMATIC_STATUS_ALLIANCE;
+/// assert_eq!(DIPLOMATIC_STATUS_ALLIANCE, "alliance");
+/// ```
 pub const DIPLOMATIC_STATUS_ALLIANCE: &str = "alliance";
 
 /// The status representing a state of war.
+///
+/// # Examples
+/// ```
+/// use galactic_market::db::seed::DIPLOMATIC_STATUS_WAR;
+/// assert_eq!(DIPLOMATIC_STATUS_WAR, "war");
+/// ```
 pub const DIPLOMATIC_STATUS_WAR: &str = "war";
 
+/// Populate the database with the initial simulation world if not already seeded.
+///
+/// Seeds basic resource types, empires, sectors, star systems, celestial bodies,
+/// cities, central banks, facilities, deposits, and initial market orders.
+///
+/// # Errors
+/// Returns an error if any database query or world-generation step fails.
+///
+/// # Examples
+/// ```no_run
+/// use sqlx::PgPool;
+/// use galactic_market::db::seed::run_seed;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), anyhow::Error> {
+///     let pool = PgPool::connect("postgres://postgres:password@localhost:5432/galactic_market").await?;
+///     run_seed(&pool).await?;
+///     Ok(())
+/// }
+/// ```
 pub async fn run_seed(pool: &PgPool) -> Result<()> {
     info!("Seeding universe...");
 

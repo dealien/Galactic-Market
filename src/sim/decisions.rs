@@ -1,3 +1,9 @@
+//! Company AI decision-making, trading, banking, and empire relief workflows.
+//!
+//! Handles strategic audits for all active companies (bankruptcies, loan applications,
+//! facility retooling, mineral/recipe extraction, trade arbitrage, and order postings).
+//! Also implements the empire-wide famine relief safety net.
+
 use rand::Rng;
 use std::collections::HashMap;
 use tracing::debug;
@@ -77,7 +83,21 @@ fn eval_interval_range(company_type: &str) -> (u64, u64) {
     }
 }
 
-/// Phase 6: Company AI decisions.
+/// Phase 5b: Company AI decisions.
+///
+/// Iterates over all active companies due for strategic re-evaluation and issues
+/// appropriate orders, including liquidation, treasury checks, recipe production,
+/// mining, and arbitrage trading routes.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::decisions::run_decisions;
+///
+/// let mut state = SimState::new();
+/// run_decisions(&mut state, 1);
+/// ```
 pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     let mut rng = rand::thread_rng();
 
@@ -1323,11 +1343,21 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     }
 }
 
-/// Phase 5: Empire relief system — stabilize populations during famine via treasury relief.
+/// Phase 6b: Empire relief system — stabilize populations during famine via treasury relief.
 ///
 /// Issue #10: Empire scans for starving cities (fulfillment < 40%) and posts relief food
 /// buy orders funded by the empire treasury. This prevents population collapse until
 /// Phase 2 refactor (merchant routing) can establish natural food trade networks.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::decisions::run_empire_relief;
+///
+/// let mut state = SimState::new();
+/// run_empire_relief(&mut state, 1);
+/// ```
 pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
     // Constants
     const STARVATION_THRESHOLD: f64 = 0.40;
@@ -1505,11 +1535,21 @@ fn last_known_prices(state: &SimState) -> std::collections::HashMap<(i32, i32), 
     state.price_cache.clone()
 }
 
-/// Phase 2: Analyze food balance per city for merchant routing priority.
+/// Phase 5a (precompute): Analyze food balance per city for merchant routing priority.
 /// Computes surplus/deficit and fulfillment ratio, enabling merchants to route food to starving cities.
 ///
 /// Updates SimState.city_food_balance with analysis for each city.
 /// Called once per tick before merchant AI decision loop.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::decisions::analyze_city_food_balance;
+///
+/// let mut state = SimState::new();
+/// analyze_city_food_balance(&mut state);
+/// ```
 pub fn analyze_city_food_balance(state: &mut SimState) {
     use crate::sim::state::CityFoodBalance;
 
@@ -1584,6 +1624,17 @@ pub fn analyze_city_food_balance(state: &mut SimState) {
 /// Called once every 5 ticks per merchant to populate the opportunity cache.
 ///
 /// Returns sorted Vec of opportunities (highest profit first).
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::decisions::compute_merchant_opportunities;
+///
+/// let state = SimState::new();
+/// let opps = compute_merchant_opportunities(&state, 1);
+/// assert!(opps.is_empty());
+/// ```
 pub fn compute_merchant_opportunities(
     state: &SimState,
     merchant_id: i32,

@@ -1,9 +1,14 @@
+//! Industrial production and refining workflows.
+//!
+//! Simulates refinery transformations of raw materials into intermediate/finished goods,
+//! and agricultural plantation food harvests driven by planet fertility modifiers.
+
 use tracing::debug;
 
 use crate::sim::politics;
 use crate::sim::state::{Inventory, Recipe, SimState};
 
-/// Phase 2: Production / refining.
+/// Phase 3: Production / refining.
 ///
 /// Handles two types of production:
 /// 1. Refineries: Transform inputs into outputs (limited by input availability)
