@@ -35,6 +35,9 @@ pub use state::SimState;
 
 /// Flush interval: write dirty state to the database every N ticks.
 ///
+/// Callers should also flush at simulation shutdown if the final tick is not
+/// an exact multiple of the interval to ensure no state is lost.
+///
 /// # Examples
 ///
 /// ```
@@ -49,7 +52,8 @@ impl SimState {
     ///
     /// This method is pure in-memory: it performs no database I/O. Callers are
     /// responsible for invoking [`SimState::flush_with_pulse`] every
-    /// [`FLUSH_INTERVAL`] ticks to persist state to the database.
+    /// [`FLUSH_INTERVAL`] ticks to persist state to the database, as well as on
+    /// shutdown if the final tick was not a multiple of the interval.
     ///
     /// # Examples
     ///
@@ -112,7 +116,9 @@ impl SimState {
     ///
     /// Call this every [`FLUSH_INTERVAL`] ticks, **outside** the tick loop, to
     /// keep all database I/O out of the hot path. All writes are batched inside
-    /// a single transaction so a crash between flushes recovers cleanly.
+    /// a single transaction so a crash between flushes recovers cleanly. Callers
+    /// should also invoke this at shutdown if the last tick was not a multiple
+    /// of [`FLUSH_INTERVAL`].
     ///
     /// # Examples
     ///

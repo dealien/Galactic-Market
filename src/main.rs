@@ -101,6 +101,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Flush any remaining state on shutdown if the last tick was not on a flush boundary
+    if args.ticks > 0 && !state.tick.is_multiple_of(FLUSH_INTERVAL) {
+        state.flush_with_pulse(&pool).await?;
+    }
+
     info!("Simulation complete. Ran {} ticks.", args.ticks);
 
     Ok(())
