@@ -672,6 +672,7 @@ fn make_politics_state(num_empires: usize) -> SimState {
                     empire_b_id: next,
                     tension,
                     status: status.to_string(),
+                    neutral_since_tick: 0,
                 },
             );
 

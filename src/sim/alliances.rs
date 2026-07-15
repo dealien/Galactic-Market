@@ -237,6 +237,7 @@ fn has_conflicting_alliances(state: &SimState, empire_a: i32, empire_b: i32) -> 
 mod tests {
     use super::*;
     use crate::sim::state::{DiplomaticRelation, Empire, SimState, War};
+    use rand::RngCore;
     use rand::SeedableRng;
 
     fn setup_alliance_state() -> SimState {
@@ -392,5 +393,40 @@ mod tests {
         check_alliance_formation(&mut state, &mut rng);
 
         assert!(state.treaties.is_empty());
+    }
+
+    #[test]
+    fn test_alliance_forms_after_neutral_cooldown_per_relation() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+
+        struct AlwaysFormRng;
+        impl RngCore for AlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+
+        let mut rng = AlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1);
     }
 }
