@@ -110,6 +110,79 @@ fn station_participant_units_in_theaters(
     }
 }
 
+// Helper for side-based war resolution: returns the total effective military
+// strength (strength × morale) in a system for all units belonging to the
+// provided side empires.
+fn calculate_side_strength(state: &SimState, side_empire_ids: &[i32], system_id: i32) -> f64 {
+    side_empire_ids
+        .iter()
+        .map(|empire_id| military::calculate_military_strength(state, *empire_id, system_id))
+        .sum()
+}
+
+// Helper for occupation ownership: picks the strongest empire from a side in a
+// system, or returns None when none of the provided empires has positive
+// strength present there.
+fn strongest_empire_in_system(
+    state: &SimState,
+    side_empire_ids: &[i32],
+    system_id: i32,
+) -> Option<i32> {
+    side_empire_ids
+        .iter()
+        .map(|empire_id| {
+            (
+                *empire_id,
+                military::calculate_military_strength(state, *empire_id, system_id),
+            )
+        })
+        .filter(|(_, strength)| *strength > 0.0)
+        .max_by(|(_, a), (_, b)| a.total_cmp(b))
+        .map(|(empire_id, _)| empire_id)
+}
+
+// Helper for side-based combat: iterates all present cross-side empire pairs in
+// the system and calls military::resolve_combat for each pair, allowing allies
+// to directly participate in theater combat.
+fn resolve_side_combat(
+    state: &mut SimState,
+    aggressor_side: &[i32],
+    defender_side: &[i32],
+    system_id: i32,
+    rng: &mut impl Rng,
+) {
+    let aggressors_present: Vec<i32> = aggressor_side
+        .iter()
+        .copied()
+        .filter(|empire_id| {
+            military::calculate_military_strength(state, *empire_id, system_id) > 0.0
+        })
+        .collect();
+    let defenders_present: Vec<i32> = defender_side
+        .iter()
+        .copied()
+        .filter(|empire_id| {
+            military::calculate_military_strength(state, *empire_id, system_id) > 0.0
+        })
+        .collect();
+
+    for attacker_empire_id in aggressors_present {
+        for &defender_empire_id in &defenders_present {
+            if military::calculate_military_strength(state, attacker_empire_id, system_id) > 0.0
+                && military::calculate_military_strength(state, defender_empire_id, system_id) > 0.0
+            {
+                let _ = military::resolve_combat(
+                    state,
+                    attacker_empire_id,
+                    defender_empire_id,
+                    system_id,
+                    rng,
+                );
+            }
+        }
+    }
+}
+
 fn check_war_declarations(state: &mut SimState) {
     let mut new_wars: Vec<(i32, i32)> = Vec::new();
 
@@ -210,14 +283,29 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         .collect();
 
     for (war_id, aggressor_id, defender_id, theaters) in active_wars {
-        let participant_empire_ids: HashSet<i32> = state
+        let (participant_empire_ids, aggressor_side, defender_side): (
+            HashSet<i32>,
+            Vec<i32>,
+            Vec<i32>,
+        ) = state
             .wars
             .get(&war_id)
             .map(|war| {
-                war.participants
+                let participant_empire_ids = war
+                    .participants
                     .iter()
                     .map(|(empire_id, _)| *empire_id)
-                    .collect()
+                    .collect();
+                let mut aggressor_side = Vec::new();
+                let mut defender_side = Vec::new();
+                for (empire_id, role) in &war.participants {
+                    match role.as_str() {
+                        "aggressor" | "aggressor_ally" => aggressor_side.push(*empire_id),
+                        "defender" | "defender_ally" => defender_side.push(*empire_id),
+                        _ => {}
+                    }
+                }
+                (participant_empire_ids, aggressor_side, defender_side)
             })
             .unwrap_or_default();
         let mut aggressor_losses = 0.0_f64;
@@ -225,26 +313,21 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         let mut war_concluded = false;
 
         for &system_id in &theaters {
-            let pre_attacker =
-                military::calculate_military_strength(state, aggressor_id, system_id);
-            let pre_defender = military::calculate_military_strength(state, defender_id, system_id);
+            let pre_attacker = calculate_side_strength(state, &aggressor_side, system_id);
+            let pre_defender = calculate_side_strength(state, &defender_side, system_id);
 
             if pre_attacker > 0.0 && pre_defender > 0.0 {
-                let _winner =
-                    military::resolve_combat(state, aggressor_id, defender_id, system_id, rng);
+                resolve_side_combat(state, &aggressor_side, &defender_side, system_id, rng);
 
-                let post_attacker =
-                    military::calculate_military_strength(state, aggressor_id, system_id);
-                let post_defender =
-                    military::calculate_military_strength(state, defender_id, system_id);
+                let post_attacker = calculate_side_strength(state, &aggressor_side, system_id);
+                let post_defender = calculate_side_strength(state, &defender_side, system_id);
 
                 aggressor_losses += (pre_attacker - post_attacker).max(0.0);
                 defender_losses += (pre_defender - post_defender).max(0.0);
             }
 
-            let attacker_str =
-                military::calculate_military_strength(state, aggressor_id, system_id);
-            let defender_str = military::calculate_military_strength(state, defender_id, system_id);
+            let attacker_str = calculate_side_strength(state, &aggressor_side, system_id);
+            let defender_str = calculate_side_strength(state, &defender_side, system_id);
 
             let system_owner_empire_id = state
                 .star_systems
@@ -255,14 +338,14 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
             if let Some(owner_empire_id) = system_owner_empire_id {
                 let new_occupier_id = if attacker_str > 0.0
                     && defender_str <= 0.0
-                    && owner_empire_id == defender_id
+                    && defender_side.contains(&owner_empire_id)
                 {
-                    Some(aggressor_id)
+                    strongest_empire_in_system(state, &aggressor_side, system_id)
                 } else if defender_str > 0.0
                     && attacker_str <= 0.0
-                    && owner_empire_id == aggressor_id
+                    && aggressor_side.contains(&owner_empire_id)
                 {
-                    Some(defender_id)
+                    strongest_empire_in_system(state, &defender_side, system_id)
                 } else {
                     None
                 };
@@ -307,9 +390,8 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 }
             }
 
-            let system_contested =
-                military::calculate_military_strength(state, aggressor_id, system_id) > 0.0
-                    && military::calculate_military_strength(state, defender_id, system_id) > 0.0;
+            let system_contested = calculate_side_strength(state, &aggressor_side, system_id) > 0.0
+                && calculate_side_strength(state, &defender_side, system_id) > 0.0;
 
             if !system_contested {
                 station_participant_units_in_system(state, &participant_empire_ids, system_id);
@@ -412,8 +494,8 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         }
 
         let still_contested = theaters.iter().any(|&sys_id| {
-            let a = military::calculate_military_strength(state, aggressor_id, sys_id);
-            let b = military::calculate_military_strength(state, defender_id, sys_id);
+            let a = calculate_side_strength(state, &aggressor_side, sys_id);
+            let b = calculate_side_strength(state, &defender_side, sys_id);
             a > 0.0 && b > 0.0
         });
 
@@ -1717,5 +1799,80 @@ mod tests {
             let rel = state.diplomatic_relations.get(&key).unwrap();
             assert_eq!(rel.status, DIPLOMATIC_STATUS_WAR);
         }
+    }
+
+    #[test]
+    fn test_allied_participants_contribute_to_combat_losses() {
+        let mut state = setup_political_state();
+        state.empires.insert(
+            3,
+            Empire {
+                id: 3,
+                name: "AggressorAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+        state.diplomatic_relations.insert(
+            (2, 3),
+            DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: 100.0,
+                status: DIPLOMATIC_STATUS_WAR.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "aggressor_ally".to_string()),
+                ],
+                theaters: vec![3],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 3,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.military_units.insert(
+            2,
+            MilitaryUnit {
+                id: 2,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(42);
+        resolve_active_wars(&mut state, &mut rng);
+
+        assert!(state.wars.get(&1).unwrap().cumulative_losses > 0.0);
+        assert!(state.military_units.get(&1).unwrap().strength < 100.0);
+        assert!(state.military_units.get(&2).unwrap().strength < 100.0);
     }
 }
