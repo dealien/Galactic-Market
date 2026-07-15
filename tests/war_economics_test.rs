@@ -420,6 +420,7 @@ fn test_war_infrastructure_damage_and_repair() {
             empire_b_id: 2,
             tension: 110.0,
             status: "neutral".to_string(),
+            neutral_since_tick: 0,
         },
     );
 

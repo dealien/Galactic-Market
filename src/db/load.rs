@@ -175,13 +175,13 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.empires.len(), "Loaded empires.");
 
     // ── Diplomatic Relations ─────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, f64, String)>(
-        "SELECT empire_a_id, empire_b_id, tension, status FROM diplomatic_relations",
+    let rows = sqlx::query_as::<_, (i32, i32, f64, String, i64)>(
+        "SELECT empire_a_id, empire_b_id, tension, status, neutral_since_tick FROM diplomatic_relations",
     )
     .fetch_all(pool)
     .await?;
 
-    for (a, b, tension, status) in rows {
+    for (a, b, tension, status, neutral_since_tick) in rows {
         state.diplomatic_relations.insert(
             (a, b),
             DiplomaticRelation {
@@ -189,6 +189,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 empire_b_id: b,
                 tension,
                 status,
+                neutral_since_tick: neutral_since_tick as u64,
             },
         );
     }

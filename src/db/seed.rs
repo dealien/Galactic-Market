@@ -333,9 +333,9 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
     for i in 0..empire_ids.len() {
         for j in (i + 1)..empire_ids.len() {
             sqlx::query(
-                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status) VALUES ($1, $2, $3, $4)"
+                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status, neutral_since_tick) VALUES ($1, $2, $3, $4, $5)"
             )
-            .bind(empire_ids[i]).bind(empire_ids[j]).bind(0.0_f64).bind(DIPLOMATIC_STATUS_NEUTRAL)
+            .bind(empire_ids[i]).bind(empire_ids[j]).bind(0.0_f64).bind(DIPLOMATIC_STATUS_NEUTRAL).bind(0_i64)
             .execute(&mut *tx).await?;
         }
     }

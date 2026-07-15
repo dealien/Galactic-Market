@@ -95,6 +95,7 @@ pub struct DiplomaticRelation {
     pub empire_b_id: i32,
     pub tension: f64,
     pub status: String, // neutral, war, alliance
+    pub neutral_since_tick: u64,
 }
 
 /// A military unit (fleet or garrison) belonging to an empire.

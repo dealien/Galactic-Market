@@ -394,15 +394,16 @@ impl SimState {
         // ── Diplomatic Relations ──────────────────────────────────────────────
         for rel in self.diplomatic_relations.values() {
             sqlx::query(
-                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status)
-                 VALUES ($1, $2, $3, $4)
+                "INSERT INTO diplomatic_relations (empire_a_id, empire_b_id, tension, status, neutral_since_tick)
+                 VALUES ($1, $2, $3, $4, $5)
                  ON CONFLICT (empire_a_id, empire_b_id)
-                 DO UPDATE SET tension = EXCLUDED.tension, status = EXCLUDED.status",
+                 DO UPDATE SET tension = EXCLUDED.tension, status = EXCLUDED.status, neutral_since_tick = EXCLUDED.neutral_since_tick",
             )
             .bind(rel.empire_a_id)
             .bind(rel.empire_b_id)
             .bind(rel.tension)
             .bind(&rel.status)
+            .bind(rel.neutral_since_tick as i64)
             .execute(&mut *tx)
             .await?;
         }

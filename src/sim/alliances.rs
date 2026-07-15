@@ -55,9 +55,7 @@ fn check_alliance_formation(state: &mut SimState, rng: &mut impl Rng) {
             continue;
         }
 
-        // Check they've been neutral long enough (approximate: use tick count since we
-        // don't track when they became neutral, require tick > cooldown)
-        if state.tick < ALLIANCE_FORMATION_COOLDOWN {
+        if state.tick.saturating_sub(rel.neutral_since_tick) < ALLIANCE_FORMATION_COOLDOWN {
             continue;
         }
 
@@ -115,6 +113,7 @@ fn check_alliance_formation(state: &mut SimState, rng: &mut impl Rng) {
             };
             if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
                 rel.status = DIPLOMATIC_STATUS_ALLIANCE.to_string();
+                rel.neutral_since_tick = state.tick;
                 rel.tension = 0.0;
             }
 
@@ -181,6 +180,7 @@ fn check_alliance_dissolution(state: &mut SimState) {
                         && rel.status == DIPLOMATIC_STATUS_ALLIANCE
                     {
                         rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
+                        rel.neutral_since_tick = state.tick;
                     }
                 }
             }
@@ -237,6 +237,7 @@ fn has_conflicting_alliances(state: &SimState, empire_a: i32, empire_b: i32) -> 
 mod tests {
     use super::*;
     use crate::sim::state::{DiplomaticRelation, Empire, SimState, War};
+    use rand::SeedableRng;
 
     fn setup_alliance_state() -> SimState {
         let mut state = SimState::new();
@@ -268,6 +269,7 @@ mod tests {
                 empire_b_id: 2,
                 tension: 5.0,
                 status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
             },
         );
 
@@ -377,5 +379,18 @@ mod tests {
         );
 
         assert!(has_conflicting_alliances(&state, 2, 3));
+    }
+
+    #[test]
+    fn test_alliance_requires_neutral_cooldown_per_relation() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN + 1;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = state.tick - 10;
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert!(state.treaties.is_empty());
     }
 }

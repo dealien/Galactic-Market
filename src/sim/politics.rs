@@ -116,6 +116,7 @@ fn check_war_declarations(state: &mut SimState) {
     for rel in state.diplomatic_relations.values_mut() {
         if rel.status == DIPLOMATIC_STATUS_NEUTRAL && rel.tension >= WAR_TENSION_THRESHOLD {
             rel.status = DIPLOMATIC_STATUS_WAR.to_string();
+            rel.neutral_since_tick = state.tick;
             new_wars.push((rel.empire_a_id, rel.empire_b_id));
         }
     }
@@ -479,6 +480,7 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                     && rel.status == DIPLOMATIC_STATUS_WAR
                 {
                     rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
+                    rel.neutral_since_tick = state.tick;
                     rel.tension = 50.0;
                 }
             }
@@ -548,6 +550,7 @@ fn set_war_status(state: &mut SimState, empire_a: i32, empire_b: i32) {
     };
     if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
         rel.status = DIPLOMATIC_STATUS_WAR.to_string();
+        rel.neutral_since_tick = state.tick;
     }
 }
 
@@ -996,6 +999,7 @@ mod tests {
                 empire_b_id: 2,
                 tension: 0.0,
                 status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
             },
         );
 
@@ -1091,6 +1095,7 @@ mod tests {
                 empire_b_id: 3,
                 tension: 5.0,
                 status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
             },
         );
         state.diplomatic_relations.insert(
@@ -1100,6 +1105,7 @@ mod tests {
                 empire_b_id: 3,
                 tension: 7.5,
                 status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
             },
         );
 
@@ -1471,6 +1477,7 @@ mod tests {
                     empire_b_id: key.1,
                     tension: 100.0,
                     status: DIPLOMATIC_STATUS_WAR.to_string(),
+                    neutral_since_tick: 0,
                 },
             );
         }
@@ -1534,6 +1541,7 @@ mod tests {
                     empire_b_id: key.1,
                     tension: 100.0,
                     status: DIPLOMATIC_STATUS_WAR.to_string(),
+                    neutral_since_tick: 0,
                 },
             );
         }
@@ -1664,6 +1672,7 @@ mod tests {
                     empire_b_id: key.1,
                     tension: 0.0,
                     status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                    neutral_since_tick: 0,
                 },
             );
         }

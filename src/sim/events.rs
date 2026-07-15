@@ -138,6 +138,7 @@ fn trigger_random_event(state: &mut SimState, rng: &mut impl Rng) {
                             empire_b_id: key.1,
                             tension: 0.0,
                             status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                            neutral_since_tick: state.tick,
                         }
                     });
                     rel.tension += 10.0 * severity;
