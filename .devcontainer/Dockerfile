@@ -7,3 +7,5 @@ RUN apt-get update \
     && npm install -g lore-protocol \
     && rm -rf /var/lib/apt/lists/*
 RUN cargo install cargo-codspeed --locked
+RUN rustup component add llvm-tools-preview \
+    && cargo install cargo-llvm-cov --locked

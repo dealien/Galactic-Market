@@ -58,6 +58,9 @@ The simulation follows a **Research -> Strategy -> Execution** pattern with a fo
 - **Bench:** `cargo bench`
 - **Lint:** `cargo clippy -- -D warnings`
 - **Format:** `cargo fmt`
+- **Generate coverage:** `cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info`
+- **Generate HTML coverage:** `cargo llvm-cov --all-features --workspace --html`
+- **Generate branch coverage:** `cargo llvm-cov --all-features --workspace --show-branches`
 
 ### Debugging & Performance
 

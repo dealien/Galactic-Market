@@ -13,6 +13,9 @@
 - `cargo fmt` — Format code
 - `cargo bench` or `cargo codspeed run` — Run benchmarks
 - `docker-compose up -d` — Start PostgreSQL database
+- `cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info` — Generate code coverage report
+- `cargo llvm-cov --all-features --workspace --html` — Generate HTML code coverage report
+- `cargo llvm-cov --all-features --workspace --show-branches` — Show branch coverage
 
 ## Project Overview
 
