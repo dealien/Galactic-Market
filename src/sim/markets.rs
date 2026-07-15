@@ -356,6 +356,7 @@ mod tests {
                 body_id: 1,
                 name: "C1".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,

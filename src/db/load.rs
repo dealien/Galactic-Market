@@ -35,13 +35,23 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 
     // ── Cities ────────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, f64, i64)>(
-        "SELECT id, body_id, name, population, port_tier, port_fee_per_unit, port_max_throughput FROM cities",
+    let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, i32, f64, i64)>(
+        "SELECT id, body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput FROM cities",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, body_id, name, population, port_tier, port_fee_per_unit, port_max_throughput) in rows {
+    for (
+        id,
+        body_id,
+        name,
+        population,
+        infrastructure_lvl,
+        port_tier,
+        port_fee_per_unit,
+        port_max_throughput,
+    ) in rows
+    {
         state.cities.insert(
             id,
             City {
@@ -49,6 +59,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 body_id,
                 name,
                 population,
+                infrastructure_lvl,
                 port_tier,
                 port_fee_per_unit,
                 port_max_throughput,

@@ -25,6 +25,7 @@ fn merchant_cache_test_state() -> SimState {
                 body_id: 1,
                 name: format!("City {}", city_id),
                 population: 1000,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,

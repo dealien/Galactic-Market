@@ -13,6 +13,9 @@ pub struct City {
     pub name: String,
     /// Resident population, used to calculate consumption demand.
     pub population: i64,
+    /// Issue #15: Infrastructure level (0–5). Affects production efficiency and port capacity.
+    /// Damaged by war; repaired over time during peacetime.
+    pub infrastructure_lvl: i32,
     pub port_tier: i32,
     pub port_fee_per_unit: f64,
     pub port_max_throughput: i64,
