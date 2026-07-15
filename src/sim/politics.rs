@@ -571,7 +571,10 @@ fn process_occupations(state: &mut SimState) {
             .and_then(|system| state.sectors.get(&system.sector_id))
             .map(|sector| military::calculate_military_strength(state, sector.empire_id, system_id))
             .unwrap_or(0.0);
+        // If the occupying empire has no military presence (strength <= 0.0) in the system,
+        // and the owning empire has returned with positive strength, the system is liberated and removed.
         if occupier_strength <= 0.0 && owner_strength > 0.0 {
+            state.occupied_systems.remove(&system_id);
             info!(
                 "System {} liberated (occupier {} has no garrison).",
                 system_id, occupier_id
@@ -1160,6 +1163,19 @@ mod tests {
                 system_id: 3,
                 occupier_empire_id: 1,
                 since_tick: 50,
+            },
+        );
+        // Owner (empire 2) has forces returned to the system
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 1.0,
             },
         );
         process_occupations(&mut state);
