@@ -228,12 +228,28 @@ pub fn resolve_combat(
 ///
 /// assert!(state.empire_treasuries.get(&1).copied().unwrap() < 100.0);
 /// ```
+/// Maintenance cost multiplier during active wars.
+const WARTIME_MAINTENANCE_MULTIPLIER: f64 = 2.0;
+
 pub fn apply_maintenance_costs(state: &mut SimState) {
+    // Collect which empires are in active wars
+    let empires_at_war: HashSet<i32> = state
+        .wars
+        .values()
+        .filter(|w| w.status == "active")
+        .flat_map(|w| w.participants.iter().map(|(id, _)| *id))
+        .collect();
+
     // Collect per-empire total maintenance
     let mut empire_costs: std::collections::HashMap<i32, f64> = std::collections::HashMap::new();
     for unit in state.military_units.values() {
-        *empire_costs.entry(unit.empire_id).or_insert(0.0) +=
-            unit.strength * MAINTENANCE_COST_PER_STRENGTH;
+        let base_cost = unit.strength * MAINTENANCE_COST_PER_STRENGTH;
+        let multiplier = if empires_at_war.contains(&unit.empire_id) {
+            WARTIME_MAINTENANCE_MULTIPLIER
+        } else {
+            1.0
+        };
+        *empire_costs.entry(unit.empire_id).or_insert(0.0) += base_cost * multiplier;
     }
 
     for (empire_id, cost) in empire_costs {

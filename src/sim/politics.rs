@@ -8,7 +8,7 @@ use tracing::info;
 
 use crate::db::seed::{DIPLOMATIC_STATUS_NEUTRAL, DIPLOMATIC_STATUS_WAR};
 use crate::sim::military;
-use crate::sim::state::{Occupation, SectorControl, SimState, War};
+use crate::sim::state::{ActiveEvent, Occupation, SectorControl, SimState, War};
 
 const ALLIED_TENSION_DECAY_RATE: f64 = 0.1;
 const WAR_TENSION_THRESHOLD: f64 = 100.0;
@@ -42,6 +42,7 @@ pub fn run_politics(state: &mut SimState, rng: &mut impl Rng) {
     compute_sector_control(state);
     military::apply_maintenance_costs(state);
     military::recover_morale(state);
+    repair_infrastructure(state);
 }
 
 fn update_tension(state: &mut SimState) {
@@ -324,6 +325,87 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 info!(
                     "War {} concluded due to exhaustion (cumulative losses: {:.0}).",
                     war_id, war.cumulative_losses
+                );
+            }
+        }
+
+        // Issue #15: Apply infrastructure damage and supply disruptions in war theaters
+        apply_war_infrastructure_damage(state, &theaters, rng);
+        apply_supply_disruption_events(state, &theaters, rng);
+
+        // Issue #15: Check territory-based capitulation (forced peace if >=50% sectors/systems occupied)
+        if !war_concluded {
+            let aggressor_total = state
+                .star_systems
+                .values()
+                .filter(|s| {
+                    state
+                        .sectors
+                        .get(&s.sector_id)
+                        .map(|sec| sec.empire_id == aggressor_id)
+                        .unwrap_or(false)
+                })
+                .count();
+            let aggressor_occupied = state
+                .occupied_systems
+                .values()
+                .filter(|occ| {
+                    state
+                        .star_systems
+                        .get(&occ.system_id)
+                        .and_then(|s| state.sectors.get(&s.sector_id))
+                        .map(|sec| sec.empire_id == aggressor_id)
+                        .unwrap_or(false)
+                })
+                .count();
+
+            let defender_total = state
+                .star_systems
+                .values()
+                .filter(|s| {
+                    state
+                        .sectors
+                        .get(&s.sector_id)
+                        .map(|sec| sec.empire_id == defender_id)
+                        .unwrap_or(false)
+                })
+                .count();
+            let defender_occupied = state
+                .occupied_systems
+                .values()
+                .filter(|occ| {
+                    state
+                        .star_systems
+                        .get(&occ.system_id)
+                        .and_then(|s| state.sectors.get(&s.sector_id))
+                        .map(|sec| sec.empire_id == defender_id)
+                        .unwrap_or(false)
+                })
+                .count();
+
+            let aggressor_loss_ratio = if aggressor_total > 0 {
+                aggressor_occupied as f64 / aggressor_total as f64
+            } else {
+                0.0
+            };
+            let defender_loss_ratio = if defender_total > 0 {
+                defender_occupied as f64 / defender_total as f64
+            } else {
+                0.0
+            };
+
+            if (aggressor_loss_ratio >= CAPITULATION_THRESHOLD
+                || defender_loss_ratio >= CAPITULATION_THRESHOLD)
+                && let Some(war) = state.wars.get_mut(&war_id)
+            {
+                war.status = "concluded".to_string();
+                war.end_tick = Some(state.tick);
+                war_concluded = true;
+                info!(
+                    "War {} concluded via capitulation (agg loss: {:.0}%, def loss: {:.0}%).",
+                    war_id,
+                    aggressor_loss_ratio * 100.0,
+                    defender_loss_ratio * 100.0
                 );
             }
         }
@@ -621,6 +703,155 @@ pub fn compute_sector_control(state: &mut SimState) {
 ///
 /// assert!(is_system_in_war_theater(&state, 10));
 /// ```
+/// Issue #15: Capitulation threshold — fraction of territory lost to trigger forced peace.
+const CAPITULATION_THRESHOLD: f64 = 0.50;
+
+/// Issue #15: How often infrastructure recovers (in ticks).
+const INFRA_REPAIR_INTERVAL: u64 = 100;
+
+/// Issue #15: Apply infrastructure damage to random cities in active war theaters.
+///
+/// Each tick a war is active, one random city in the theater takes infrastructure
+/// damage (-1 infrastructure_lvl, min 0). This raises production costs and
+/// reduces port capacity.
+fn apply_war_infrastructure_damage(state: &mut SimState, theaters: &[i32], rng: &mut impl Rng) {
+    // Collect all cities in theater systems
+    let theater_cities: Vec<i32> = state
+        .cities
+        .values()
+        .filter(|city| {
+            state
+                .celestial_bodies
+                .get(&city.body_id)
+                .map(|body| theaters.contains(&body.system_id))
+                .unwrap_or(false)
+        })
+        .filter(|city| city.infrastructure_lvl > 0)
+        .map(|city| city.id)
+        .collect();
+
+    if theater_cities.is_empty() {
+        return;
+    }
+
+    // Damage one random city per war per tick
+    let target_city_id = theater_cities[rng.gen_range(0..theater_cities.len())];
+
+    if let Some(city) = state.cities.get_mut(&target_city_id) {
+        city.infrastructure_lvl = (city.infrastructure_lvl - 1).max(0);
+        info!(
+            "Infrastructure damaged in city {} ({}): lvl now {}",
+            city.id, city.name, city.infrastructure_lvl
+        );
+
+        // Generate an infrastructure_damage event
+        let event_id = state.next_event_id;
+        state.next_event_id += 1;
+        state.active_events.insert(
+            event_id,
+            ActiveEvent {
+                id: event_id,
+                event_type: "infrastructure_damage".to_string(),
+                target_id: Some((target_city_id, 0)),
+                severity: 0.5,
+                start_tick: state.tick,
+                end_tick: state.tick + 20,
+                flavor_text: Some(format!(
+                    "Bombardment has damaged infrastructure in {}!",
+                    city.name
+                )),
+            },
+        );
+    }
+}
+
+/// Issue #15: Generate supply disruption events in war theater cities.
+///
+/// These events are picked up by the consumption and market phases to
+/// model price spikes in conflict zones.
+fn apply_supply_disruption_events(state: &mut SimState, theaters: &[i32], rng: &mut impl Rng) {
+    // 30% chance per tick per war to generate a supply disruption
+    if !rng.gen_bool(0.30) {
+        return;
+    }
+
+    let theater_cities: Vec<i32> = state
+        .cities
+        .values()
+        .filter(|city| {
+            state
+                .celestial_bodies
+                .get(&city.body_id)
+                .map(|body| theaters.contains(&body.system_id))
+                .unwrap_or(false)
+        })
+        .map(|city| city.id)
+        .collect();
+
+    if theater_cities.is_empty() {
+        return;
+    }
+
+    let target_city_id = theater_cities[rng.gen_range(0..theater_cities.len())];
+    let city_name = state
+        .cities
+        .get(&target_city_id)
+        .map(|c| c.name.clone())
+        .unwrap_or_default();
+
+    let event_id = state.next_event_id;
+    state.next_event_id += 1;
+    state.active_events.insert(
+        event_id,
+        ActiveEvent {
+            id: event_id,
+            event_type: "supply_disruption".to_string(),
+            target_id: Some((target_city_id, 0)),
+            severity: rng.gen_range(0.3..=1.0),
+            start_tick: state.tick,
+            end_tick: state.tick + rng.gen_range(5..=20),
+            flavor_text: Some(format!("Supply lines disrupted in {}!", city_name)),
+        },
+    );
+}
+
+/// Issue #15: Slowly repair infrastructure in cities not in active war theaters.
+///
+/// Cities recover +1 infrastructure_lvl every INFRA_REPAIR_INTERVAL ticks,
+/// up to the maximum of 5, if they are not in an active war theater.
+fn repair_infrastructure(state: &mut SimState) {
+    if !state.tick.is_multiple_of(INFRA_REPAIR_INTERVAL) {
+        return;
+    }
+
+    let war_systems: HashSet<i32> = state
+        .wars
+        .values()
+        .filter(|w| w.status == "active")
+        .flat_map(|w| w.theaters.iter().copied())
+        .collect();
+
+    let updates: Vec<i32> = state
+        .cities
+        .values()
+        .filter(|city| {
+            city.infrastructure_lvl < 5
+                && state
+                    .celestial_bodies
+                    .get(&city.body_id)
+                    .map(|b| !war_systems.contains(&b.system_id))
+                    .unwrap_or(true)
+        })
+        .map(|c| c.id)
+        .collect();
+
+    for city_id in updates {
+        if let Some(city) = state.cities.get_mut(&city_id) {
+            city.infrastructure_lvl = (city.infrastructure_lvl + 1).min(5);
+        }
+    }
+}
+
 pub fn is_system_in_war_theater(state: &SimState, system_id: i32) -> bool {
     state
         .wars

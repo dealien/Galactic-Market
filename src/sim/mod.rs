@@ -282,6 +282,16 @@ impl SimState {
             .await?;
         }
 
+        // ── Cities ────────────────────────────────────────────────────────────
+        for city in self.cities.values() {
+            sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2 WHERE id = $3")
+                .bind(city.population)
+                .bind(city.infrastructure_lvl)
+                .bind(city.id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
         // ── Loans ─────────────────────────────────────────────────────────────
         // Use UPSERT so that loans created in-memory during the tick are also persisted
         // and mutable columns (balance, interest_rate) are kept up to date.
