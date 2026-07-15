@@ -562,8 +562,13 @@ fn process_occupations(state: &mut SimState) {
 
         let occupier_strength =
             military::calculate_military_strength(state, occupier_id, system_id);
-        if occupier_strength <= 0.0 {
-            state.occupied_systems.remove(&system_id);
+        let owner_strength = state
+            .star_systems
+            .get(&system_id)
+            .and_then(|system| state.sectors.get(&system.sector_id))
+            .map(|sector| military::calculate_military_strength(state, sector.empire_id, system_id))
+            .unwrap_or(0.0);
+        if occupier_strength <= 0.0 && owner_strength > 0.0 {
             info!(
                 "System {} liberated (occupier {} has no garrison).",
                 system_id, occupier_id
