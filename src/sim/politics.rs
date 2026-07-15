@@ -143,16 +143,27 @@ fn check_war_declarations(state: &mut SimState) {
         let aggressor_allies = get_allies(state, aggressor_id);
         let defender_allies = get_allies(state, defender_id);
 
+        let mut aggressor_side = vec![aggressor_id];
+        let mut defender_side = vec![defender_id];
+
         for ally_id in &defender_allies {
             if *ally_id != aggressor_id && *ally_id != defender_id {
                 participants.push((*ally_id, "defender_ally".to_string()));
-                set_war_status(state, *ally_id, aggressor_id);
+                defender_side.push(*ally_id);
             }
         }
         for ally_id in &aggressor_allies {
             if *ally_id != aggressor_id && *ally_id != defender_id {
                 participants.push((*ally_id, "aggressor_ally".to_string()));
-                set_war_status(state, *ally_id, defender_id);
+                aggressor_side.push(*ally_id);
+            }
+        }
+
+        for &a in &aggressor_side {
+            for &b in &defender_side {
+                if a != b {
+                    set_war_status(state, a, b);
+                }
             }
         }
 
@@ -336,14 +347,58 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         if war_concluded {
             station_participant_units_in_theaters(state, &participant_empire_ids, &theaters);
 
-            let key = if aggressor_id < defender_id {
-                (aggressor_id, defender_id)
-            } else {
-                (defender_id, aggressor_id)
-            };
-            if let Some(rel) = state.diplomatic_relations.get_mut(&key) {
-                rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
-                rel.tension = 50.0;
+            let mut aggressor_side = Vec::new();
+            let mut defender_side = Vec::new();
+            let mut legacy_allies = Vec::new();
+            let mut participants_list = Vec::new();
+
+            if let Some(war) = state.wars.get(&war_id) {
+                participants_list = war.participants.clone();
+                for (empire_id, role) in &war.participants {
+                    match role.as_str() {
+                        "aggressor" | "aggressor_ally" => aggressor_side.push(*empire_id),
+                        "defender" | "defender_ally" => defender_side.push(*empire_id),
+                        "ally" => legacy_allies.push(*empire_id),
+                        _ => {}
+                    }
+                }
+            }
+
+            let mut reset_pairs = HashSet::new();
+
+            // Cross-side pairs
+            for &a in &aggressor_side {
+                for &b in &defender_side {
+                    let key = if a < b { (a, b) } else { (b, a) };
+                    reset_pairs.insert(key);
+                }
+            }
+
+            // Legacy ally pairs (treated conservatively as unknown side)
+            for &x in &legacy_allies {
+                for &(y, _) in &participants_list {
+                    if x != y {
+                        let key = if x < y { (x, y) } else { (y, x) };
+                        reset_pairs.insert(key);
+                    }
+                }
+            }
+
+            for (a, b) in reset_pairs {
+                let has_other_active_war = state.wars.values().any(|w| {
+                    w.id != war_id
+                        && w.status == "active"
+                        && w.participants.iter().any(|(p_id, _)| *p_id == a)
+                        && w.participants.iter().any(|(p_id, _)| *p_id == b)
+                });
+
+                if !has_other_active_war
+                    && let Some(rel) = state.diplomatic_relations.get_mut(&(a, b))
+                    && rel.status == DIPLOMATIC_STATUS_WAR
+                {
+                    rel.status = DIPLOMATIC_STATUS_NEUTRAL.to_string();
+                    rel.tension = 50.0;
+                }
             }
         }
     }
@@ -1135,5 +1190,271 @@ mod tests {
         let second_tick_losses = state.wars.get(&1).unwrap().cumulative_losses;
 
         assert!(second_tick_losses > first_tick_losses);
+    }
+
+    #[test]
+    fn test_war_conclusion_resets_ally_relations() {
+        let mut state = setup_political_state();
+
+        state.empires.insert(
+            3,
+            Empire {
+                id: 3,
+                name: "AggressorAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+        state.empires.insert(
+            4,
+            Empire {
+                id: 4,
+                name: "DefenderAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+        state.empires.insert(
+            5,
+            Empire {
+                id: 5,
+                name: "LegacyAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+
+        let relations_to_insert = vec![(1, 2), (1, 4), (3, 2), (3, 4), (1, 5), (2, 5), (3, 5)];
+
+        for (a, b) in relations_to_insert {
+            let key = if a < b { (a, b) } else { (b, a) };
+            state.diplomatic_relations.insert(
+                key,
+                DiplomaticRelation {
+                    empire_a_id: key.0,
+                    empire_b_id: key.1,
+                    tension: 100.0,
+                    status: DIPLOMATIC_STATUS_WAR.to_string(),
+                },
+            );
+        }
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "aggressor_ally".to_string()),
+                    (4, "defender_ally".to_string()),
+                    (5, "ally".to_string()),
+                ],
+                theaters: vec![3],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(9);
+        resolve_active_wars(&mut state, &mut rng);
+
+        assert_eq!(state.wars.get(&1).unwrap().status, "concluded");
+
+        let reset_keys = vec![(1, 2), (1, 4), (2, 3), (3, 4), (1, 5), (2, 5)];
+
+        for (a, b) in reset_keys {
+            let key = if a < b { (a, b) } else { (b, a) };
+            let rel = state.diplomatic_relations.get(&key).unwrap();
+            assert_eq!(rel.status, DIPLOMATIC_STATUS_NEUTRAL);
+            assert_eq!(rel.tension, 50.0);
+        }
+    }
+
+    #[test]
+    fn test_war_conclusion_retains_relations_if_other_active_war() {
+        let mut state = setup_political_state();
+
+        state.empires.insert(
+            3,
+            Empire {
+                id: 3,
+                name: "AggressorAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+
+        for (a, b) in vec![(1, 2), (2, 3)] {
+            let key = if a < b { (a, b) } else { (b, a) };
+            state.diplomatic_relations.insert(
+                key,
+                DiplomaticRelation {
+                    empire_a_id: key.0,
+                    empire_b_id: key.1,
+                    tension: 100.0,
+                    status: DIPLOMATIC_STATUS_WAR.to_string(),
+                },
+            );
+        }
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "aggressor_ally".to_string()),
+                ],
+                theaters: vec![3],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        state.wars.insert(
+            2,
+            War {
+                id: 2,
+                aggressor_id: 3,
+                defender_id: 2,
+                participants: vec![(3, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![3],
+                start_tick: 99,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+            },
+        );
+
+        state.military_units.insert(
+            1,
+            MilitaryUnit {
+                id: 1,
+                empire_id: 3,
+                unit_type: "fleet".to_string(),
+                strength: 50.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+        state.military_units.insert(
+            2,
+            MilitaryUnit {
+                id: 2,
+                empire_id: 2,
+                unit_type: "fleet".to_string(),
+                strength: 50.0,
+                system_id: 3,
+                status: "deployed".to_string(),
+                morale: 1.0,
+            },
+        );
+
+        let mut rng = StdRng::seed_from_u64(9);
+        resolve_active_wars(&mut state, &mut rng);
+
+        assert_eq!(state.wars.get(&1).unwrap().status, "concluded");
+        assert_eq!(state.wars.get(&2).unwrap().status, "active");
+
+        let rel_1_2 = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        assert_eq!(rel_1_2.status, DIPLOMATIC_STATUS_NEUTRAL);
+
+        let rel_2_3 = state.diplomatic_relations.get(&(2, 3)).unwrap();
+        assert_eq!(rel_2_3.status, DIPLOMATIC_STATUS_WAR);
+    }
+
+    #[test]
+    fn test_war_declaration_escalates_allies_and_opposing_allies() {
+        let mut state = setup_political_state();
+
+        state.empires.insert(
+            3,
+            Empire {
+                id: 3,
+                name: "AggressorAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+        state.empires.insert(
+            4,
+            Empire {
+                id: 4,
+                name: "DefenderAlly".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+
+        state.treaties.insert(
+            1,
+            Treaty {
+                id: 1,
+                alliance_name: "Aggressor Alliance".to_string(),
+                member_empire_ids: vec![1, 3],
+                formed_tick: 90,
+                dissolved_tick: None,
+            },
+        );
+        state.treaties.insert(
+            2,
+            Treaty {
+                id: 2,
+                alliance_name: "Defender Alliance".to_string(),
+                member_empire_ids: vec![2, 4],
+                formed_tick: 90,
+                dissolved_tick: None,
+            },
+        );
+
+        let pairs = vec![(1, 3), (1, 4), (2, 3), (2, 4), (3, 4)];
+        for (a, b) in pairs {
+            let key = if a < b { (a, b) } else { (b, a) };
+            state.diplomatic_relations.insert(
+                key,
+                DiplomaticRelation {
+                    empire_a_id: key.0,
+                    empire_b_id: key.1,
+                    tension: 0.0,
+                    status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                },
+            );
+        }
+
+        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 100.0;
+
+        check_war_declarations(&mut state);
+
+        assert_eq!(state.wars.len(), 1);
+        let war = state.wars.values().next().unwrap();
+        assert_eq!(war.status, "active");
+
+        let participants: HashSet<_> = war
+            .participants
+            .iter()
+            .map(|(id, role)| (*id, role.clone()))
+            .collect();
+        assert!(participants.contains(&(1, "aggressor".to_string())));
+        assert!(participants.contains(&(2, "defender".to_string())));
+        assert!(participants.contains(&(3, "aggressor_ally".to_string())));
+        assert!(participants.contains(&(4, "defender_ally".to_string())));
+
+        let cross_pairs = vec![(1, 2), (1, 4), (2, 3), (3, 4)];
+        for (a, b) in cross_pairs {
+            let key = if a < b { (a, b) } else { (b, a) };
+            let rel = state.diplomatic_relations.get(&key).unwrap();
+            assert_eq!(rel.status, DIPLOMATIC_STATUS_WAR);
+        }
     }
 }
