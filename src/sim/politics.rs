@@ -35,8 +35,8 @@ const WAR_EXHAUSTION_THRESHOLD: f64 = 500.0;
 /// run_politics(&mut state, &mut rng);
 /// ```
 pub fn run_politics(state: &mut SimState, rng: &mut impl Rng) {
-    update_tension(state);
     check_war_declarations(state);
+    update_tension(state);
     resolve_active_wars(state, rng);
     process_occupations(state);
     compute_sector_control(state);
