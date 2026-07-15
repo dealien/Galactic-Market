@@ -27,10 +27,63 @@ use crate::sim::state::{Inventory, Recipe, SimState};
 /// run_production(&mut state); // no facilities, nothing panics
 /// ```
 pub fn run_production(state: &mut SimState) {
-    // Issue #10: Pre-compute labor availability per city.
-    // Total labor demand = sum of all facility capacities in the city.
-    // labor_ratio = min(1.0, city_population / total_labor_demand)
-    let labor_ratios = compute_labor_ratios(state);
+    // Pre-collect active war theaters into a HashSet for O(1) checks
+    let active_war_theaters: std::collections::HashSet<i32> = state
+        .wars
+        .values()
+        .filter(|w| w.status == "active")
+        .flat_map(|w| w.theaters.iter().copied())
+        .collect();
+
+    // Pre-calculate labor demand per city
+    let mut labor_demands = HashMap::with_capacity(state.cities.len());
+    for facility in state.facilities.values() {
+        if facility.setup_ticks_remaining > 0 {
+            continue;
+        }
+        let labor_needed = facility.capacity as f64 * 100.0;
+        *labor_demands.entry(facility.city_id).or_insert(0.0) += labor_needed;
+    }
+
+    // Pre-calculate the combined multiplier (production * labor) for all cities
+    let mut city_multipliers = HashMap::with_capacity(state.cities.len());
+    for (&city_id, city) in &state.cities {
+        // Labor ratio
+        let demand = labor_demands.get(&city_id).copied().unwrap_or(0.0);
+        let labor_ratio = if demand > 0.0 {
+            (city.population as f64 / demand).min(1.0)
+        } else {
+            1.0
+        };
+
+        // Politics penalty
+        let infra_penalty = (5 - city.infrastructure_lvl).max(0) as f64 * 0.10;
+
+        let system_id = state
+            .celestial_bodies
+            .get(&city.body_id)
+            .map(|b| b.system_id);
+
+        let mut penalty = 0.0;
+        if let Some(sys_id) = system_id {
+            if active_war_theaters.contains(&sys_id) {
+                penalty += politics::WAR_THEATER_PRODUCTION_PENALTY;
+            }
+            if state.occupied_systems.contains_key(&sys_id) {
+                penalty += politics::OCCUPATION_PRODUCTION_PENALTY;
+            }
+            if let Some(system) = state.star_systems.get(&sys_id)
+                && let Some(control) = state.sector_control.get(&system.sector_id)
+                && control.is_split
+            {
+                penalty += politics::SECTOR_SPLIT_PRODUCTION_PENALTY;
+            }
+        }
+        penalty = penalty.min(0.9);
+
+        let production_multiplier = (1.0 - penalty - infra_penalty).clamp(0.0, 1.0);
+        city_multipliers.insert(city_id, production_multiplier * labor_ratio);
+    }
 
     // Collect the recipes by facility_type up front to avoid borrow conflicts
     let recipes: Vec<Recipe> = state.recipes.values().cloned().collect();
@@ -74,9 +127,7 @@ pub fn run_production(state: &mut SimState) {
 
     // Process refineries (original logic)
     for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
-        let production_multiplier = get_city_production_multiplier(state, city_id);
-        let labor_ratio = labor_ratios.get(&city_id).copied().unwrap_or(1.0);
-        let combined_multiplier = production_multiplier * labor_ratio;
+        let combined_multiplier = city_multipliers.get(&city_id).copied().unwrap_or(1.0);
 
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
@@ -110,31 +161,30 @@ pub fn run_production(state: &mut SimState) {
                 continue;
             }
 
-            // Issue #9: Calculate and deduct labor costs
+            // Calculate labor costs for these runs
             let total_labor_cost = recipe.labor_cost_per_run * runs as f64;
             {
-                let company = match state.companies.get_mut(&company_id) {
+                let company_mut = match state.companies.get_mut(&company_id) {
                     Some(c) => c,
                     None => continue,
                 };
 
                 // Only proceed if company has enough cash for labor
-                if company.cash < total_labor_cost {
+                if company_mut.cash < total_labor_cost {
                     continue;
                 }
 
-                company.cash -= total_labor_cost;
+                company_mut.cash -= total_labor_cost;
             }
 
-            // Credit wages to city wage pool (Issue #9)
+            // Credit wages to city wage pool
             state.add_to_wage_pool(city_id, total_labor_cost);
 
-            // Consume inputs
+            // Deduct inputs
             for input in &recipe.inputs {
-                let key = Inventory::key(company_id, city_id, input.resource_type_id);
-                if let Some(inv) = state.inventories.get_mut(&key) {
-                    inv.quantity -= input.quantity as i64 * runs;
-                }
+                let in_key = Inventory::key(company_id, city_id, input.resource_type_id);
+                let entry = state.inventories.get_mut(&in_key).unwrap();
+                entry.quantity -= input.quantity as i64 * runs;
             }
 
             // Produce outputs
@@ -159,9 +209,7 @@ pub fn run_production(state: &mut SimState) {
 
     // Process plantations (fertility-driven food production)
     for (_facility_id, city_id, company_id, capacity) in active_plantations {
-        let production_multiplier = get_city_production_multiplier(state, city_id);
-        let labor_ratio = labor_ratios.get(&city_id).copied().unwrap_or(1.0);
-        let combined_multiplier = production_multiplier * labor_ratio;
+        let combined_multiplier = city_multipliers.get(&city_id).copied().unwrap_or(1.0);
 
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
@@ -206,20 +254,20 @@ pub fn run_production(state: &mut SimState) {
             // Issue #9: Calculate labor costs for plantation runs
             let total_labor_cost = recipe.labor_cost_per_run * adjusted_capacity as f64;
             {
-                let company = match state.companies.get_mut(&company_id) {
+                let company_mut = match state.companies.get_mut(&company_id) {
                     Some(c) => c,
                     None => continue,
                 };
 
                 // Only proceed if company has enough cash for labor
-                if company.cash < total_labor_cost {
+                if company_mut.cash < total_labor_cost {
                     continue;
                 }
 
-                company.cash -= total_labor_cost;
+                company_mut.cash -= total_labor_cost;
             }
 
-            // Credit wages to city wage pool (Issue #9)
+            // Credit wages to city wage pool
             state.add_to_wage_pool(city_id, total_labor_cost);
 
             // Produce outputs
@@ -243,63 +291,6 @@ pub fn run_production(state: &mut SimState) {
             );
         }
     }
-}
-
-/// Issue #10: Compute labor availability ratio per city.
-///
-/// Facilities require labor proportional to their capacity. If a city's
-/// population is lower than the combined demand of its facilities, production
-/// is scaled down proportionally.
-fn compute_labor_ratios(state: &SimState) -> HashMap<i32, f64> {
-    let mut demand_per_city: HashMap<i32, f64> = HashMap::new();
-
-    for facility in state.facilities.values() {
-        if facility.setup_ticks_remaining > 0 {
-            continue;
-        }
-        // Each unit of capacity requires ~100 population as labor
-        let labor_needed = facility.capacity as f64 * 100.0;
-        *demand_per_city.entry(facility.city_id).or_insert(0.0) += labor_needed;
-    }
-
-    let mut ratios = HashMap::new();
-    for (&city_id, &demand) in &demand_per_city {
-        let population = state
-            .cities
-            .get(&city_id)
-            .map(|c| c.population as f64)
-            .unwrap_or(0.0);
-        let ratio = if demand > 0.0 {
-            (population / demand).min(1.0)
-        } else {
-            1.0
-        };
-        ratios.insert(city_id, ratio);
-    }
-    ratios
-}
-
-/// Returns a city-level production multiplier after politics penalties.
-fn get_city_production_multiplier(state: &SimState, city_id: i32) -> f64 {
-    // Issue #15: Infrastructure level reduces production when damaged.
-    // Full infrastructure (lvl 5) = no penalty. Each missing level = -10%.
-    let infra_penalty = state
-        .cities
-        .get(&city_id)
-        .map(|c| (5 - c.infrastructure_lvl).max(0) as f64 * 0.10)
-        .unwrap_or(0.0);
-
-    let system_id = state
-        .cities
-        .get(&city_id)
-        .and_then(|city| state.celestial_bodies.get(&city.body_id))
-        .map(|body| body.system_id);
-
-    let penalty = system_id
-        .map(|system_id| politics::get_system_production_penalty(state, system_id))
-        .unwrap_or(0.0);
-
-    (1.0 - penalty - infra_penalty).clamp(0.0, 1.0)
 }
 
 /// Returns the maximum number of times a recipe can run given current inventory.
