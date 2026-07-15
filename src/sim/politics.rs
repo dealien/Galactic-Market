@@ -1520,7 +1520,7 @@ mod tests {
             },
         );
 
-        for (a, b) in vec![(1, 2), (2, 3)] {
+        for (a, b) in [(1, 2), (2, 3)] {
             let key = if a < b { (a, b) } else { (b, a) };
             state.diplomatic_relations.insert(
                 key,
