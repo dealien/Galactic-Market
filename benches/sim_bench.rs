@@ -3,6 +3,7 @@ use galactic_market::sim::state::{
     CelestialBody, City, Company, Deposit, Facility, Inventory, Loan, MarketOrder, Recipe,
     RecipeInput, ResourceType, Sector, StarSystem, TradeRoute,
 };
+use rand::SeedableRng;
 
 fn main() {
     divan::main();
@@ -577,6 +578,190 @@ fn make_advanced_market_state(num_orders: usize) -> SimState {
     state
 }
 
+fn make_politics_state(num_empires: usize) -> SimState {
+    let mut state = SimState::new();
+    state.tick = 100;
+
+    for i in 1..=(num_empires as i32) {
+        state.empires.insert(
+            i,
+            galactic_market::sim::state::Empire {
+                id: i,
+                name: format!("Empire {i}"),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+            },
+        );
+
+        state.sectors.insert(
+            i,
+            Sector {
+                id: i,
+                empire_id: i,
+                name: format!("Sector {i}"),
+            },
+        );
+
+        state.star_systems.insert(
+            i,
+            StarSystem {
+                id: i,
+                sector_id: i,
+                name: format!("System {i}"),
+            },
+        );
+
+        state.celestial_bodies.insert(
+            i,
+            CelestialBody {
+                id: i,
+                system_id: i,
+                name: format!("Body {i}"),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            i,
+            City {
+                id: i,
+                body_id: i,
+                name: format!("City {i}"),
+                population: 10000,
+                infrastructure_lvl: 4,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        state.military_units.insert(
+            i * 2 - 1,
+            galactic_market::sim::state::MilitaryUnit {
+                id: i * 2 - 1,
+                empire_id: i,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: i,
+                status: "stationed".to_string(),
+                morale: 0.8,
+            },
+        );
+        state.military_units.insert(
+            i * 2,
+            galactic_market::sim::state::MilitaryUnit {
+                id: i * 2,
+                empire_id: i,
+                unit_type: "fleet".to_string(),
+                strength: 100.0,
+                system_id: i,
+                status: "deployed".to_string(),
+                morale: 0.8,
+            },
+        );
+
+        if i < num_empires as i32 {
+            let next = i + 1;
+            let status = if i % 2 == 0 { "war" } else { "neutral" };
+            let tension = if i % 2 == 0 { 110.0 } else { 20.0 };
+
+            state.diplomatic_relations.insert(
+                (i, next),
+                galactic_market::sim::state::DiplomaticRelation {
+                    empire_a_id: i,
+                    empire_b_id: next,
+                    tension,
+                    status: status.to_string(),
+                },
+            );
+
+            if status == "war" {
+                let war_id = state.next_war_id();
+                state.wars.insert(
+                    war_id,
+                    galactic_market::sim::state::War {
+                        id: war_id,
+                        aggressor_id: i,
+                        defender_id: next,
+                        participants: vec![
+                            (i, "aggressor".to_string()),
+                            (next, "defender".to_string()),
+                        ],
+                        theaters: vec![i, next],
+                        start_tick: 50,
+                        end_tick: None,
+                        status: "active".to_string(),
+                        cumulative_losses: 0.0,
+                    },
+                );
+            }
+        }
+    }
+
+    state
+}
+
+fn make_migration_state(num_cities: usize) -> SimState {
+    let mut state = SimState::new();
+    state.tick = 50;
+
+    state.sectors.insert(
+        1,
+        Sector {
+            id: 1,
+            empire_id: 1,
+            name: "Sector 1".into(),
+        },
+    );
+    state.star_systems.insert(
+        1,
+        StarSystem {
+            id: 1,
+            sector_id: 1,
+            name: "System 1".into(),
+        },
+    );
+    state.celestial_bodies.insert(
+        1,
+        CelestialBody {
+            id: 1,
+            system_id: 1,
+            name: "Body 1".into(),
+            fertility: 1.0,
+        },
+    );
+
+    for i in 1..=(num_cities as i32) {
+        state.cities.insert(
+            i,
+            City {
+                id: i,
+                body_id: 1,
+                name: format!("City {i}"),
+                population: 10000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        let fulfillment = if i % 2 == 0 { 0.2 } else { 1.5 };
+        state.city_food_balance.insert(
+            i,
+            galactic_market::sim::state::CityFoodBalance {
+                city_id: i,
+                food_surplus: if i % 2 == 0 { -100 } else { 100 },
+                fulfillment_ratio: fulfillment,
+                needs_relief: i % 2 == 0,
+                has_surplus: i % 2 != 0,
+            },
+        );
+    }
+
+    state
+}
+
 // ─── Benchmarks ────────────────────────────────────────────────────────────────
 
 #[divan::bench(args = [32, 128, 512])]
@@ -669,5 +854,24 @@ fn bench_compute_merchant_opportunities(bencher: divan::Bencher, num_merchants: 
             for i in 1..=(num_merchants as i32) {
                 let _ = galactic_market::sim::decisions::compute_merchant_opportunities(state, i);
             }
+        });
+}
+
+#[divan::bench(args = [32, 128, 512])]
+fn bench_politics_phase(bencher: divan::Bencher, num_empires: usize) {
+    let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+    bencher
+        .with_inputs(|| make_politics_state(num_empires))
+        .bench_local_refs(|state| {
+            galactic_market::sim::politics::run_politics(state, &mut rng);
+        });
+}
+
+#[divan::bench(args = [32, 128, 512])]
+fn bench_migration_phase(bencher: divan::Bencher, num_cities: usize) {
+    bencher
+        .with_inputs(|| make_migration_state(num_cities))
+        .bench_local_refs(|state| {
+            galactic_market::sim::consumption::run_migration(state);
         });
 }
