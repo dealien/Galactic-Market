@@ -2874,4 +2874,49 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    /// Verifies that when a company is bankrupt, it liquidates its inventory by posting limit sell orders at 50% of the market (EMA) price.
+    fn test_company_liquidation_fire_sale() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co".into(),
+                company_type: "small_company".into(),
+                home_city_id: 1,
+                cash: 0.0,
+                debt: 100000.0,
+                next_eval_tick: 0,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 50.0);
+
+        run_decisions(&mut state, 1);
+
+        assert_eq!(state.market_orders.len(), 1);
+        let order = state.market_orders.values().next().unwrap();
+        assert_eq!(order.company_id, 1);
+        assert_eq!(order.city_id, 1);
+        assert_eq!(order.resource_type_id, 1);
+        assert_eq!(order.order_type, "sell");
+        assert_eq!(order.order_kind, "limit");
+        assert_eq!(order.quantity, 100);
+        assert_eq!(order.price, 25.0); // 50.0 * 0.5
+    }
 }
