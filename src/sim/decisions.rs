@@ -2919,4 +2919,183 @@ mod tests {
         assert_eq!(order.quantity, 100);
         assert_eq!(order.price, 25.0); // 50.0 * 0.5
     }
+
+    fn make_state_with_bank() -> SimState {
+        use crate::sim::state::{CelestialBody, City, StarSystem};
+        let mut s = SimState::new();
+
+        s.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Test System".into(),
+            },
+        );
+
+        s.star_systems.insert(
+            2,
+            StarSystem {
+                id: 2,
+                sector_id: 2,
+                name: "Other System".into(),
+            },
+        );
+
+        s.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Test Body".into(),
+                fertility: 1.0,
+            },
+        );
+
+        s.celestial_bodies.insert(
+            2,
+            CelestialBody {
+                id: 2,
+                system_id: 2,
+                name: "Other Body".into(),
+                fertility: 1.0,
+            },
+        );
+
+        s.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 0,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        s.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "Other City".into(),
+                population: 0,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+            },
+        );
+
+        s.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Borrower Co".into(),
+                company_type: "small_company".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        s.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Local Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 50000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        s
+    }
+
+    /// Tests that a loan is successfully approved when a valid bank exists in the same sector,
+    /// the borrowing company has a good debt-to-asset ratio (< 0.8), and the bank has sufficient cash.
+    /// Verifies cash transfers, debt accumulation, and loan record creation.
+    #[test]
+    fn test_request_loan_approved() {
+        let mut state = make_state_with_bank();
+
+        let result = request_loan(&mut state, 1, 5000.0);
+
+        assert!(result, "Loan should be approved");
+        assert_eq!(state.companies[&1].cash, 6000.0);
+        assert_eq!(state.companies[&1].debt, 5000.0);
+        assert_eq!(state.companies[&2].cash, 45000.0);
+        assert_eq!(state.loans.len(), 1);
+        let loan = state.loans.values().next().unwrap();
+        assert_eq!(loan.company_id, 1);
+        assert_eq!(loan.lender_company_id, Some(2));
+        assert_eq!(loan.principal, 5000.0);
+        assert_eq!(loan.balance, 5000.0);
+    }
+
+    /// Tests that a loan request is rejected if there is no commercial bank operating within
+    /// the same sector as the borrowing company.
+    #[test]
+    fn test_request_loan_rejected_no_bank() {
+        let mut state = make_state_with_bank();
+        // Move the bank to a different sector
+        state.companies.get_mut(&2).unwrap().home_city_id = 2;
+
+        let result = request_loan(&mut state, 1, 5000.0);
+
+        assert!(!result, "Loan should be rejected due to no bank in sector");
+        assert_eq!(state.companies[&1].cash, 1000.0);
+        assert_eq!(state.companies[&1].debt, 0.0);
+        assert_eq!(state.loans.len(), 0);
+    }
+
+    /// Tests that a loan request is rejected if the borrowing company's post-loan
+    /// debt-to-asset ratio would exceed or equal the conservative threshold of 0.8.
+    #[test]
+    fn test_request_loan_rejected_high_debt() {
+        let mut state = make_state_with_bank();
+        // Set existing debt high enough so that (debt + 5000) / (cash + 10000) >= 0.8
+        // (8800 + 5000) / 11000 = 13800 / 11000 = 1.25
+        state.companies.get_mut(&1).unwrap().debt = 8800.0;
+
+        let result = request_loan(&mut state, 1, 5000.0);
+
+        assert!(
+            !result,
+            "Loan should be rejected due to high debt-to-asset ratio"
+        );
+        assert_eq!(state.companies[&1].cash, 1000.0);
+        assert_eq!(state.companies[&1].debt, 8800.0);
+        assert_eq!(state.loans.len(), 0);
+    }
+
+    /// Tests that a loan request is rejected if the commercial bank does not have
+    /// sufficient cash on hand to fulfill the principal amount.
+    #[test]
+    fn test_request_loan_rejected_bank_insufficient_cash() {
+        let mut state = make_state_with_bank();
+        // Bank doesn't have enough cash
+        state.companies.get_mut(&2).unwrap().cash = 1000.0;
+
+        let result = request_loan(&mut state, 1, 5000.0);
+
+        assert!(
+            !result,
+            "Loan should be rejected due to bank insufficient cash"
+        );
+        assert_eq!(state.companies[&1].cash, 1000.0);
+        assert_eq!(state.companies[&1].debt, 0.0);
+        assert_eq!(state.loans.len(), 0);
+    }
 }
