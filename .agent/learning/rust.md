@@ -1,3 +1,7 @@
 ## 2023-11-20 - Finance Corporate Tax Coverage
 **Learning:** Found a significant gap in coverage within the core simulation phase `src/sim/finance.rs` specifically for corporate tax deduction (`process_corporate_taxes`). Finance handles both typical operations (interest payments, deposit yields) and edge conditions (bankruptcy, liquidations). Testing boundary conditions like a company with zero or extremely low cash is critical since taxation skips those entities, and verifying the exact flow of funds (deduction from company and addition to empire treasury) is vital.
 **Action:** When testing finance or similar economic/simulation systems, always write an isolated unit test for the happy path (where all constraints are met and funds correctly move from point A to B) and separate tests for the skipping/boundary conditions (bankrupt statuses, low values, disconnected entities).
+
+## 2025-02-13 - Test Structure and Code Review Additions
+**Learning:** Adding new unit tests requires strictly placing them within the existing `#[cfg(test)] mod tests` module at the bottom of the source file, not at the global file scope, to ensure they compile correctly and don't pollute the production namespace. We must also explicitly avoid appending garbage `.patch` files to the repository.
+**Action:** Always parse the structure of the `#[cfg(test)] mod tests { ... }` block properly when appending new test cases to existing files. Always clean up intermediate `.patch` or scratch files before submitting.
