@@ -3099,6 +3099,167 @@ mod tests {
         assert_eq!(state.loans.len(), 0);
     }
 
+    #[test]
+    fn test_central_bank_low_debt() {
+        let mut state = SimState::new();
+
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05);
+
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 1000000.0, // lots of cash, 0 debt -> total_empire_debt < total_empire_cash * 0.1
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        run_decisions(&mut state, 1);
+
+        // Rate should decrease by 0.005 from 0.05
+        assert!((state.prime_rates[&empire_id] - 0.045).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_commercial_bank_utilization() {
+        let mut state = SimState::new();
+
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05);
+
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+            },
+        );
+
+        let bank_id = 1;
+        state.companies.insert(
+            bank_id,
+            Company {
+                id: bank_id,
+                name: "Test Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        run_decisions(&mut state, 1);
+
+        state.companies.get_mut(&bank_id).unwrap().next_eval_tick = 2; // trigger again
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 2,
+                bank_company_id: bank_id,
+                balance: 1000.0,
+                interest_rate: 0.0,
+            },
+        );
+        state.loans.insert(
+            1,
+            crate::sim::state::Loan {
+                id: 1,
+                company_id: 3,
+                lender_company_id: Some(bank_id),
+                principal: 1000.0,
+                balance: 1000.0,
+                interest_rate: 0.0,
+            },
+        );
+
+        run_decisions(&mut state, 2);
+
+        assert!((state.loans[&1].interest_rate - 0.07).abs() < f64::EPSILON);
+        assert!((state.bank_accounts[&1].interest_rate - 0.035).abs() < f64::EPSILON);
+    }
+
     /// Tests that during corporate treasury AI decision, if a company is eligible to withdraw
     /// cash from its bank account (company_cash < buffer * 0.5 and bank_balance > 0.0), but
     /// the bank company itself is missing from the state, the withdrawal is gracefully skipped

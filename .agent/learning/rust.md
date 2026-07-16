@@ -15,3 +15,7 @@
 ## $(date +%Y-%m-%d) - Testing Finance Deposit Interest & Bankrupt Liquidation
 **Learning:** In `src/sim/finance.rs`, edge cases such as a bank lacking sufficient cash to pay deposit interest (`test_deposit_interest_bank_insufficient_cash`) and a bankrupt company paying off its debt with no remaining inventory (`test_bankrupt_company_liquidation`) represent significant logic branches that are vital to test. These situations trigger distinct status changes (e.g. "liquidated") and non-standard mathematical results (e.g., partial interest yields) that must be verified against state.
 **Action:** When working on simulation economic systems, ensure tests specifically construct minimal states forcing out-of-bounds or zero-cash edge cases to trigger and verify failure/fallback pathways.
+
+## 2024-07-16 - Handling Nested Optional Relationships in Tests
+**Learning:** When testing high-level simulation logic (like banking AI) that navigates deep relational chains in the in-memory state (e.g., Company -> City -> CelestialBody -> StarSystem -> Sector -> Empire), the test setup must populate the entire chain of entities. Missing even one link (like `StarSystem` or `Sector`) will cause the test logic to skip or panic depending on whether it uses `get()` or indexing `[]`.
+**Action:** When mocking dependencies for a specific module, ensure all dependent sub-structures required for conditional branches (like evaluating prime rates tied to an empire) are initialized and inserted into `SimState`.
