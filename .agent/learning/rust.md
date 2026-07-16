@@ -8,3 +8,7 @@
 ## $(date +%Y-%m-%d) - Testing Private Core Simulation Functions
 **Learning:** Private utility functions like `request_loan` in core simulation modules (e.g. `sim/decisions.rs`) are best tested by adding direct unit tests inside the same file's `mod tests` block. This allows bypassing privacy boundaries to thoroughly test edge cases (like debt ratio limits or missing banks) without having to construct the massive simulation context required by the public `run_decisions` entry point.
 **Action:** When targeting uncovered private helpers in simulation modules, inject tests directly into the inline `#[cfg(test)] mod tests` block, utilizing localized mock states (e.g., `make_state_with_bank()`) tailored to the specific helper rather than full system integration tests.
+
+## 2026-07-16 - SimState Component Coverage
+**Learning:** Functions related to overall simulation state management (`sim/state.rs`) such as treasury components or summary calculation functions are important and easily testable without requiring complex mock setup of the database. Since state acts as the central datastore for the simulation phase, it's very important to thoroughly test components like `SimState::generate_summary` which combines multiple values.
+**Action:** When working on generic components in the simulation state, write isolated unit tests that explicitly construct a targeted simulation state and assert changes directly.
