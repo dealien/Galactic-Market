@@ -1,16 +1,31 @@
+//! Market order matching and price discovery mechanisms.
+//!
+//! Handles clearing limit and market orders across all cities, manages port fee
+//! collections, updates moving price averages (EMA), and tracks OHLCV price histories.
+
 use std::collections::HashMap;
 
 use tracing::{debug, warn};
 
 use crate::sim::state::{Inventory, MarketHistory, SimState};
 
-/// Phase 4: Sophisticated market clearing.
+/// Phase 7: Sophisticated market clearing.
 ///
 /// For each city and resource, match buy and sell orders.
 /// Supports:
 /// - **Market Orders:** Execute immediately at the best available price.
 /// - **Limit Orders:** Execute only at or better than the specified price.
 /// - **Priority:** Market orders clear first, then Limit orders (sorted by price).
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::markets::clear_orders;
+///
+/// let mut state = SimState::new();
+/// clear_orders(&mut state, 1);
+/// ```
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     let mut orders_by_market: HashMap<(i32, i32), Vec<i32>> = HashMap::new();
 
@@ -341,6 +356,7 @@ mod tests {
                 body_id: 1,
                 name: "C1".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,

@@ -4,6 +4,7 @@ use std::env;
 use tracing::info;
 
 use galactic_market::db;
+use galactic_market::sim::FLUSH_INTERVAL;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -94,7 +95,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run tick loop
     for _ in 0..args.ticks {
-        state.run_tick(&pool, &mut rng).await?;
+        state.run_tick(&mut rng); // pure in-memory: no DB I/O
+        if state.tick.is_multiple_of(FLUSH_INTERVAL) {
+            state.flush_with_pulse(&pool).await?; // persistence step outside hot path
+        }
+    }
+
+    // Flush any remaining state on shutdown if the last tick was not on a flush boundary
+    if args.ticks > 0 && !state.tick.is_multiple_of(FLUSH_INTERVAL) {
+        state.flush_with_pulse(&pool).await?;
     }
 
     info!("Simulation complete. Ran {} ticks.", args.ticks);

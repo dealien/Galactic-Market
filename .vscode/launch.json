@@ -8,7 +8,10 @@
             "name": "Debug (CodeLLDB)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/galactic-market.exe",
+            "program": "${workspaceFolder}/target/debug/galactic-market",
+            "windows": {
+                "program": "${workspaceFolder}/target/debug/galactic-market.exe"
+            },
             "args": [],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "Prepare for Debugging"
@@ -17,7 +20,10 @@
             "name": "Reset & Seed (CodeLLDB)",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceFolder}/target/debug/galactic-market.exe",
+            "program": "${workspaceFolder}/target/debug/galactic-market",
+            "windows": {
+                "program": "${workspaceFolder}/target/debug/galactic-market.exe"
+            },
             "args": [
                 "--clear",
                 "--seed"

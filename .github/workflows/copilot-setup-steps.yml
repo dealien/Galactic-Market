@@ -34,6 +34,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,6 +47,12 @@ jobs:
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-binstall
+        uses: cargo-bins/cargo-binstall@main
+
+      - name: Install cargo-codspeed
+        run: cargo binstall cargo-codspeed -y
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

@@ -1,11 +1,26 @@
+//! Financial accounting, taxation, interest payments, and bankruptcy simulation.
+//!
+//! Handles loan interest compilation, deposit yields, corporate taxation, and
+//! company bankruptcy audits.
+
 use crate::sim::state::SimState;
 use tracing::debug;
 
-/// Phase 5: Finance.
+/// Phase 8: Finance.
 ///
 /// Process interest payments on outstanding loans. Interest is calculated
 /// based on the current balance and added to the balance each tick.
 /// Companies must pay down the interest from their cash if possible.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::finance::run_finance;
+///
+/// let mut state = SimState::new();
+/// run_finance(&mut state);
+/// ```
 pub fn run_finance(state: &mut SimState) {
     // 1. Process Loan Interest (Borrower -> Lender)
     // Interest flows from borrower cash to lender cash (if lender is a company).

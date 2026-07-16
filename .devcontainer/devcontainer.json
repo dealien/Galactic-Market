@@ -1,9 +1,10 @@
 {
   "name": "Galactic Market Simulator",
-  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
   "features": {
-    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/devcontainers/features/node:1": {}
+    "ghcr.io/devcontainers/features/docker-in-docker:4.0.0": {}
   },
   "forwardPorts": [
     5432
@@ -13,10 +14,11 @@
       "extensions": [
         "rust-lang.rust-analyzer",
         "tamasfe.even-better-toml",
-        "serayuzgur.crates",
         "mtxr.sqltools",
         "mtxr.sqltools-driver-pg",
-        "vadimcn.vscode-lldb"
+        "vadimcn.vscode-lldb",
+        "fill-labs.dependi",
+        "fogio.coverlens"
       ],
       "settings": {
         "rust-analyzer.check.command": "clippy",
@@ -24,7 +26,9 @@
           "--",
           "-D",
           "warnings"
-        ]
+        ],
+        "coverlens.testRunner.mode": "custom",
+        "coverlens.testRunner.customCommand": "cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info"
       }
     }
   },
@@ -32,5 +36,6 @@
     "DATABASE_URL": "postgres://postgres:password@localhost:5432/galactic_market"
   },
   "postCreateCommand": "docker compose up -d --wait && cargo build",
+  // Ensure postCreateCommand is run as the vscode user, not root
   "remoteUser": "vscode"
 }

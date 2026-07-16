@@ -1,11 +1,26 @@
+//! Interstellar cargo transport and jump lane pathfinding routing.
+//!
+//! Tracks in-transit shipments, manages system distance networks dynamically,
+//! and computes shortest routes between worlds using Dijkstra pathfinding.
+
 use crate::sim::state::{Inventory, SimState};
 use petgraph::algo::dijkstra;
 use petgraph::graphmap::UnGraphMap;
 use tracing::{debug, info, warn};
 
-/// Phase 3: Logistics.
+/// Phase 4: Logistics.
 ///
 /// Advance in-transit shipments and deliver cargo at destination.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::logistics::run_logistics;
+///
+/// let mut state = SimState::new();
+/// run_logistics(&mut state, 1);
+/// ```
 pub fn run_logistics(state: &mut SimState, current_tick: u64) {
     // Refresh distance cache to account for blockades
     build_system_distances(state);
@@ -50,6 +65,16 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
 /// This is a potentially expensive operation (Dijkstra from every node), so it
 /// is skipped when the set of active `blockade_lane` events has not changed
 /// since the last rebuild (tracked via `state.blockade_version`).
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::logistics::build_system_distances;
+///
+/// let mut state = SimState::new();
+/// build_system_distances(&mut state);
+/// ```
 pub fn build_system_distances(state: &mut SimState) {
     // Only recompute when the blockade set has changed.
     if state.distances_blockade_version == state.blockade_version {
@@ -113,6 +138,19 @@ pub struct TransportInfo {
 }
 
 /// Calculate time and cost for moving goods between two cities.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::SimState;
+/// use galactic_market::sim::logistics::get_transport_info;
+///
+/// // Create a default state with no systems/cities
+/// let state = SimState::new();
+/// // Calling with identical IDs returns zero cost and zero ticks
+/// let info = get_transport_info(&state, 1, 1);
+/// assert_eq!(info.ticks, 0);
+/// ```
 pub fn get_transport_info(
     state: &SimState,
     origin_city_id: i32,
@@ -264,6 +302,7 @@ mod tests {
                 body_id: 1,
                 name: "City 1".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,
@@ -276,6 +315,7 @@ mod tests {
                 body_id: 1,
                 name: "City 2".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,
@@ -288,6 +328,7 @@ mod tests {
                 body_id: 2,
                 name: "City 3".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,
@@ -300,6 +341,7 @@ mod tests {
                 body_id: 2,
                 name: "City 4".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,
@@ -330,6 +372,7 @@ mod tests {
                 body_id: 3,
                 name: "City 5".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,
@@ -352,6 +395,7 @@ mod tests {
                 body_id: 4,
                 name: "City 6".into(),
                 population: 0,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: fee,
                 port_max_throughput: 1000,

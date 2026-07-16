@@ -1,3 +1,8 @@
+//! In-memory state structures for the simulation.
+//!
+//! Defines the core entities (cities, star systems, empires, companies, etc.)
+//! and the primary `SimState` struct that aggregates the full state of the galaxy.
+
 use std::collections::HashMap;
 
 /// A city in the simulation.
@@ -8,6 +13,9 @@ pub struct City {
     pub name: String,
     /// Resident population, used to calculate consumption demand.
     pub population: i64,
+    /// Issue #15: Infrastructure level (0–5). Affects production efficiency and port capacity.
+    /// Damaged by war; repaired over time during peacetime.
+    pub infrastructure_lvl: i32,
     pub port_tier: i32,
     pub port_fee_per_unit: f64,
     pub port_max_throughput: i64,
@@ -87,6 +95,176 @@ pub struct DiplomaticRelation {
     pub empire_b_id: i32,
     pub tension: f64,
     pub status: String, // neutral, war, alliance
+    pub neutral_since_tick: u64,
+}
+
+/// A military unit (fleet or garrison) belonging to an empire.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::MilitaryUnit;
+///
+/// let unit = MilitaryUnit {
+///     id: 7,
+///     empire_id: 3,
+///     unit_type: "fleet".to_string(),
+///     strength: 120.0,
+///     system_id: 42,
+///     status: "stationed".to_string(),
+///     morale: 0.95,
+/// };
+///
+/// assert_eq!(unit.empire_id, 3);
+/// ```
+#[derive(Debug, Clone)]
+pub struct MilitaryUnit {
+    pub id: i32,
+    pub empire_id: i32,
+    /// "fleet" (mobile offense/defense) or "garrison" (stationary defense).
+    pub unit_type: String,
+    /// Numeric combat power.
+    pub strength: f64,
+    /// Star system where the unit is located.
+    pub system_id: i32,
+    /// "stationed", "deployed", or "in_combat".
+    pub status: String,
+    /// Morale multiplier (0.0–1.0); affects combat effectiveness.
+    pub morale: f64,
+}
+
+/// An alliance/treaty between N empires.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::Treaty;
+///
+/// let treaty = Treaty {
+///     id: 11,
+///     alliance_name: "Core Pact".to_string(),
+///     member_empire_ids: vec![1, 2],
+///     formed_tick: 100,
+///     dissolved_tick: None,
+/// };
+///
+/// assert!(treaty.dissolved_tick.is_none());
+/// ```
+#[derive(Debug, Clone)]
+pub struct Treaty {
+    pub id: i32,
+    pub alliance_name: String,
+    pub member_empire_ids: Vec<i32>,
+    pub formed_tick: u64,
+    /// None if still active.
+    pub dissolved_tick: Option<u64>,
+}
+
+/// An active or concluded war between empires.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::War;
+///
+/// let war = War {
+///     id: 21,
+///     aggressor_id: 1,
+///     defender_id: 2,
+///     participants: vec![
+///         (1, "aggressor".to_string()),
+///         (2, "defender".to_string()),
+///     ],
+///     theaters: vec![10, 11],
+///     start_tick: 250,
+///     end_tick: None,
+///     status: "active".to_string(),
+///     cumulative_losses: 0.0,
+///     aggressor_exhaustion: 0.0,
+///     defender_exhaustion: 0.0,
+/// };
+///
+/// assert_eq!(war.status, "active");
+/// ```
+#[derive(Debug, Clone)]
+pub struct War {
+    pub id: i32,
+    pub aggressor_id: i32,
+    pub defender_id: i32,
+    /// (empire_id, role) tuples.
+    ///
+    /// Role values:
+    /// - "aggressor"
+    /// - "defender"
+    /// - "aggressor_ally"
+    /// - "defender_ally"
+    /// - "ally" (legacy/ambiguous persisted data)
+    pub participants: Vec<(i32, String)>,
+    /// System IDs that are contested theaters of war.
+    pub theaters: Vec<i32>,
+    pub start_tick: u64,
+    /// None if still active.
+    pub end_tick: Option<u64>,
+    /// "active", "ceasefire", or "concluded".
+    pub status: String,
+    /// Total military-strength losses accumulated across all ticks of this war.
+    /// Compared against `WAR_EXHAUSTION_THRESHOLD` to trigger a war-exhaustion ending.
+    pub cumulative_losses: f64,
+    /// Cumulative war exhaustion for the aggressor side (0.0 to 100.0).
+    pub aggressor_exhaustion: f64,
+    /// Cumulative war exhaustion for the defender side (0.0 to 100.0).
+    pub defender_exhaustion: f64,
+}
+
+/// A system occupied by a foreign empire.
+///
+/// # Examples
+///
+/// ```rust
+/// use galactic_market::sim::state::Occupation;
+///
+/// let occupation = Occupation {
+///     system_id: 5,
+///     occupier_empire_id: 2,
+///     since_tick: 300,
+/// };
+///
+/// assert_eq!(occupation.occupier_empire_id, 2);
+/// ```
+#[derive(Debug, Clone)]
+pub struct Occupation {
+    pub system_id: i32,
+    pub occupier_empire_id: i32,
+    pub since_tick: u64,
+}
+
+/// Tracks empire control within a sector.
+///
+/// # Examples
+///
+/// ```rust
+/// use std::collections::HashMap;
+///
+/// use galactic_market::sim::state::SectorControl;
+///
+/// let control = SectorControl {
+///     sector_id: 9,
+///     empire_system_counts: HashMap::from([(1, 3_usize), (2, 1_usize)]),
+///     total_systems: 4,
+///     is_split: true,
+/// };
+///
+/// assert!(control.is_split);
+/// ```
+#[derive(Debug, Clone)]
+pub struct SectorControl {
+    pub sector_id: i32,
+    /// Maps empire_id → count of systems controlled in this sector.
+    pub empire_system_counts: HashMap<i32, usize>,
+    /// Total systems in the sector.
+    pub total_systems: usize,
+    /// Whether this sector is split between multiple empires.
+    pub is_split: bool,
 }
 
 /// An active event affecting the simulation.
@@ -192,6 +370,15 @@ pub struct Inventory {
 
 impl Inventory {
     /// Canonical composite key for the inventory HashMap.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::Inventory;
+    ///
+    /// let key = Inventory::key(1, 2, 3);
+    /// assert_eq!(key, (1, 2, 3));
+    /// ```
     pub fn key(company_id: i32, city_id: i32, resource_type_id: i32) -> (i32, i32, i32) {
         (company_id, city_id, resource_type_id)
     }
@@ -365,6 +552,30 @@ pub struct SimState {
     /// Diplomatic relations keyed by (emp_a, emp_b) tuple.
     pub diplomatic_relations: HashMap<(i32, i32), DiplomaticRelation>,
 
+    /// Military units keyed by unit ID.
+    pub military_units: HashMap<i32, MilitaryUnit>,
+
+    /// Active and dissolved treaties keyed by treaty ID.
+    pub treaties: HashMap<i32, Treaty>,
+
+    /// Active and concluded wars keyed by war ID.
+    pub wars: HashMap<i32, War>,
+
+    /// Occupied systems keyed by system_id.
+    pub occupied_systems: HashMap<i32, Occupation>,
+
+    /// Sector control status keyed by sector_id.
+    pub sector_control: HashMap<i32, SectorControl>,
+
+    /// Monotonic counter for generating military unit IDs.
+    pub next_military_unit_id: i32,
+
+    /// Monotonic counter for generating treaty IDs.
+    pub next_treaty_id: i32,
+
+    /// Monotonic counter for generating war IDs.
+    pub next_war_id: i32,
+
     /// Active events keyed by event ID.
     pub active_events: HashMap<i32, ActiveEvent>,
 
@@ -415,6 +626,15 @@ impl Default for SimState {
 
 impl SimState {
     /// Create a new, empty simulation state at tick 0.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert_eq!(state.tick, 0);
+    /// ```
     pub fn new() -> Self {
         Self {
             tick: 0,
@@ -447,6 +667,14 @@ impl SimState {
             next_loan_id: 1,
             empires: HashMap::new(),
             diplomatic_relations: HashMap::new(),
+            military_units: HashMap::new(),
+            treaties: HashMap::new(),
+            wars: HashMap::new(),
+            occupied_systems: HashMap::new(),
+            sector_control: HashMap::new(),
+            next_military_unit_id: 1,
+            next_treaty_id: 1,
+            next_war_id: 1,
             active_events: HashMap::new(),
             event_definitions: Vec::new(),
             next_event_id: 1,
@@ -462,6 +690,16 @@ impl SimState {
     }
 
     /// Generate a unique order ID for this tick.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_order_id();
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_order_id(&mut self) -> i32 {
         let id = self.next_order_id;
         self.next_order_id += 1;
@@ -469,6 +707,16 @@ impl SimState {
     }
 
     /// Generate a unique trade route ID for this tick.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_trade_route_id();
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_trade_route_id(&mut self) -> i32 {
         let id = self.next_trade_route_id;
         self.next_trade_route_id += 1;
@@ -476,6 +724,17 @@ impl SimState {
     }
 
     /// Generate a unique facility ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_facility_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_facility_id(&mut self) -> i32 {
         let id = self.next_facility_id;
         self.next_facility_id += 1;
@@ -483,13 +742,97 @@ impl SimState {
     }
 
     /// Generate a unique loan ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_loan_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
     pub fn next_loan_id(&mut self) -> i32 {
         let id = self.next_loan_id;
         self.next_loan_id += 1;
         id
     }
 
+    /// Generate a unique military unit ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_military_unit_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
+    pub fn next_military_unit_id(&mut self) -> i32 {
+        let id = self.next_military_unit_id;
+        self.next_military_unit_id += 1;
+        id
+    }
+
+    /// Generate a unique treaty ID.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let id = state.next_treaty_id();
+    ///
+    /// assert_eq!(id, 1);
+    /// ```
+    pub fn next_treaty_id(&mut self) -> i32 {
+        let id = self.next_treaty_id;
+        self.next_treaty_id += 1;
+        id
+    }
+
+    /// Generate a unique war ID.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use galactic_market::sim::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// let war_id_1 = state.next_war_id();
+    /// let war_id_2 = state.next_war_id();
+    ///
+    /// assert_eq!(war_id_1, 1);
+    /// assert_eq!(war_id_2, 2);
+    /// ```
+    pub fn next_war_id(&mut self) -> i32 {
+        let id = self.next_war_id;
+        self.next_war_id += 1;
+        id
+    }
+
     /// Add a loan and update the company_to_loans reverse index.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::{SimState, Loan};
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_loan(Loan {
+    ///     id: 1,
+    ///     company_id: 2,
+    ///     lender_company_id: None,
+    ///     principal: 1000.0,
+    ///     interest_rate: 0.05,
+    ///     balance: 1000.0,
+    /// });
+    /// assert_eq!(state.get_company_loans(2), &[1]);
+    /// ```
     pub fn add_loan(&mut self, loan: crate::sim::state::Loan) {
         let company_id = loan.company_id;
         let loan_id = loan.id;
@@ -501,6 +844,24 @@ impl SimState {
     }
 
     /// Remove a loan and update the company_to_loans reverse index.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::{SimState, Loan};
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_loan(Loan {
+    ///     id: 1,
+    ///     company_id: 2,
+    ///     lender_company_id: None,
+    ///     principal: 1000.0,
+    ///     interest_rate: 0.05,
+    ///     balance: 1000.0,
+    /// });
+    /// state.remove_loan(1);
+    /// assert!(state.get_company_loans(2).is_empty());
+    /// ```
     pub fn remove_loan(&mut self, loan_id: i32) -> Option<crate::sim::state::Loan> {
         if let Some(loan) = self.loans.remove(&loan_id) {
             if let Some(loans) = self.company_to_loans.get_mut(&loan.company_id) {
@@ -512,6 +873,15 @@ impl SimState {
     }
 
     /// Get all loan IDs for a company efficiently (O(1) lookup) without cloning.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert!(state.get_company_loans(1).is_empty());
+    /// ```
     pub fn get_company_loans(&self, company_id: i32) -> &[i32] {
         self.company_to_loans
             .get(&company_id)
@@ -522,16 +892,47 @@ impl SimState {
     // === Issue #9: Wage Pool & Taxation Helpers ===
 
     /// Get the current wage pool for a city.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert_eq!(state.get_wage_pool(1), 0.0);
+    /// ```
     pub fn get_wage_pool(&self, city_id: i32) -> f64 {
         self.city_wage_pools.get(&city_id).copied().unwrap_or(0.0)
     }
 
     /// Add wages to a city's wage pool.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_to_wage_pool(1, 100.0);
+    /// assert_eq!(state.get_wage_pool(1), 100.0);
+    /// ```
     pub fn add_to_wage_pool(&mut self, city_id: i32, amount: f64) {
         *self.city_wage_pools.entry(city_id).or_insert(0.0) += amount;
     }
 
     /// Withdraw wages from a city's wage pool (e.g., for consumption).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_to_wage_pool(1, 100.0);
+    /// let withdrawn = state.withdraw_from_wage_pool(1, 40.0);
+    /// assert_eq!(withdrawn, 40.0);
+    /// assert_eq!(state.get_wage_pool(1), 60.0);
+    /// ```
     pub fn withdraw_from_wage_pool(&mut self, city_id: i32, amount: f64) -> f64 {
         let pool = self.city_wage_pools.entry(city_id).or_insert(0.0);
         let available = *pool;
@@ -545,6 +946,17 @@ impl SimState {
     }
 
     /// Reset all wage pools to zero (called at start of each tick after loading state).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_to_wage_pool(1, 100.0);
+    /// state.reset_wage_pools();
+    /// assert_eq!(state.get_wage_pool(1), 0.0);
+    /// ```
     pub fn reset_wage_pools(&mut self) {
         for pool in self.city_wage_pools.values_mut() {
             *pool = 0.0;
@@ -554,6 +966,16 @@ impl SimState {
     /// Issue #9: Accumulate port fees and local taxes for a city (flows to empire treasury later).
     /// For now, we track this separate from wage pools to maintain accounting clarity.
     /// Cities have a separate tax_collected_this_tick field in the database.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_city_tax(1, 50.0);
+    /// assert_eq!(state.get_wage_pool(1), 50.0);
+    /// ```
     pub fn add_city_tax(&mut self, city_id: i32, amount: f64) {
         // In Phase 7 (Finance), these accumulated taxes are transferred to empire treasury.
         // For now, we'll add to wage pools as a temporary holding area.
@@ -562,6 +984,15 @@ impl SimState {
     }
 
     /// Get the current treasury balance for an empire.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert_eq!(state.get_empire_treasury(1), 0.0);
+    /// ```
     pub fn get_empire_treasury(&self, empire_id: i32) -> f64 {
         self.empire_treasuries
             .get(&empire_id)
@@ -570,11 +1001,33 @@ impl SimState {
     }
 
     /// Add tax revenue to an empire's treasury.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_to_empire_treasury(1, 500.0);
+    /// assert_eq!(state.get_empire_treasury(1), 500.0);
+    /// ```
     pub fn add_to_empire_treasury(&mut self, empire_id: i32, amount: f64) {
         *self.empire_treasuries.entry(empire_id).or_insert(0.0) += amount;
     }
 
     /// Withdraw treasury funds (e.g., for empire relief spending).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_to_empire_treasury(1, 500.0);
+    /// let withdrawn = state.withdraw_from_empire_treasury(1, 200.0);
+    /// assert_eq!(withdrawn, 200.0);
+    /// assert_eq!(state.get_empire_treasury(1), 300.0);
+    /// ```
     pub fn withdraw_from_empire_treasury(&mut self, empire_id: i32, amount: f64) -> f64 {
         let treasury = self.empire_treasuries.entry(empire_id).or_insert(0.0);
         let available = *treasury;
@@ -588,11 +1041,30 @@ impl SimState {
     }
 
     /// Calculate the empire_id for a company (via sector → empire mapping).
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert!(state.get_company_empire(1).is_none());
+    /// ```
     pub fn get_company_empire(&self, company_id: i32) -> Option<i32> {
         self.company_to_empire.get(&company_id).copied()
     }
 
     /// Calculate and calculate summary of the current simulation state.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// let summary = state.generate_summary();
+    /// assert_eq!(summary.tick, 0);
+    /// ```
     pub fn generate_summary(&self) -> TickSummary {
         let mut summary = TickSummary {
             tick: self.tick,

@@ -1,2 +1,5 @@
 /target
 *.log
+
+# Coverage files (added by CoverLens)
+lcov.info

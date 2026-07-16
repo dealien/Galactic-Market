@@ -11,5 +11,24 @@
             "database": "galactic_market",
             "username": "postgres"
         }
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "cargo test": true,
+        "lore context": true,
+        "lore constraints": true,
+        "lore rejected": true,
+        "lore directives": true,
+        "lore tested": true,
+        "lore coverage": true,
+        "lore why": true,
+        "lore search": true,
+        "lore log": true,
+        "lore stale": true,
+        "lore trace": true,
+        "lore validate": true,
+        "lore doctor": true,
+        "lore help": true
+    },
+    "coverlens.testRunner.customCommand": "cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info",
+    "coverlens.testRunner.mode": "custom"
 }

@@ -1,8 +1,15 @@
+//! Industrial production and refining workflows.
+//!
+//! Simulates refinery transformations of raw materials into intermediate/finished goods,
+//! and agricultural plantation food harvests driven by planet fertility modifiers.
+
+use std::collections::HashMap;
 use tracing::debug;
 
+use crate::sim::politics;
 use crate::sim::state::{Inventory, Recipe, SimState};
 
-/// Phase 2: Production / refining.
+/// Phase 3: Production / refining.
 ///
 /// Handles two types of production:
 /// 1. Refineries: Transform inputs into outputs (limited by input availability)
@@ -20,6 +27,64 @@ use crate::sim::state::{Inventory, Recipe, SimState};
 /// run_production(&mut state); // no facilities, nothing panics
 /// ```
 pub fn run_production(state: &mut SimState) {
+    // Pre-collect active war theaters into a HashSet for O(1) checks
+    let active_war_theaters: std::collections::HashSet<i32> = state
+        .wars
+        .values()
+        .filter(|w| w.status == "active")
+        .flat_map(|w| w.theaters.iter().copied())
+        .collect();
+
+    // Pre-calculate labor demand per city
+    let mut labor_demands = HashMap::with_capacity(state.cities.len());
+    for facility in state.facilities.values() {
+        if facility.setup_ticks_remaining > 0 {
+            continue;
+        }
+        let labor_needed = facility.capacity as f64 * 100.0;
+        *labor_demands.entry(facility.city_id).or_insert(0.0) += labor_needed;
+    }
+
+    // Pre-calculate the combined multiplier (production * labor) for all cities
+    let mut city_multipliers = HashMap::with_capacity(state.cities.len());
+    for (&city_id, city) in &state.cities {
+        // Labor ratio
+        let demand = labor_demands.get(&city_id).copied().unwrap_or(0.0);
+        let labor_ratio = if demand > 0.0 {
+            (city.population as f64 / demand).min(1.0)
+        } else {
+            1.0
+        };
+
+        // Politics penalty
+        let infra_penalty = (5 - city.infrastructure_lvl).max(0) as f64 * 0.10;
+
+        let system_id = state
+            .celestial_bodies
+            .get(&city.body_id)
+            .map(|b| b.system_id);
+
+        let mut penalty = 0.0;
+        if let Some(sys_id) = system_id {
+            if active_war_theaters.contains(&sys_id) {
+                penalty += politics::WAR_THEATER_PRODUCTION_PENALTY;
+            }
+            if state.occupied_systems.contains_key(&sys_id) {
+                penalty += politics::OCCUPATION_PRODUCTION_PENALTY;
+            }
+            if let Some(system) = state.star_systems.get(&sys_id)
+                && let Some(control) = state.sector_control.get(&system.sector_id)
+                && control.is_split
+            {
+                penalty += politics::SECTOR_SPLIT_PRODUCTION_PENALTY;
+            }
+        }
+        penalty = penalty.min(0.9);
+
+        let production_multiplier = (1.0 - penalty - infra_penalty).clamp(0.0, 1.0);
+        city_multipliers.insert(city_id, production_multiplier * labor_ratio);
+    }
+
     // Collect the recipes by facility_type up front to avoid borrow conflicts
     let recipes: Vec<Recipe> = state.recipes.values().cloned().collect();
 
@@ -62,6 +127,8 @@ pub fn run_production(state: &mut SimState) {
 
     // Process refineries (original logic)
     for (_facility_id, city_id, company_id, capacity, ratios) in active_refineries {
+        let combined_multiplier = city_multipliers.get(&city_id).copied().unwrap_or(1.0);
+
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
             None => continue,
@@ -82,7 +149,7 @@ pub fn run_production(state: &mut SimState) {
                 None => continue,
             };
 
-            let allocated_capacity = (capacity as f64 * ratio).round() as i64;
+            let allocated_capacity = (capacity as f64 * ratio * combined_multiplier).round() as i64;
             if allocated_capacity <= 0 {
                 continue;
             }
@@ -94,31 +161,30 @@ pub fn run_production(state: &mut SimState) {
                 continue;
             }
 
-            // Issue #9: Calculate and deduct labor costs
+            // Calculate labor costs for these runs
             let total_labor_cost = recipe.labor_cost_per_run * runs as f64;
             {
-                let company = match state.companies.get_mut(&company_id) {
+                let company_mut = match state.companies.get_mut(&company_id) {
                     Some(c) => c,
                     None => continue,
                 };
 
                 // Only proceed if company has enough cash for labor
-                if company.cash < total_labor_cost {
+                if company_mut.cash < total_labor_cost {
                     continue;
                 }
 
-                company.cash -= total_labor_cost;
+                company_mut.cash -= total_labor_cost;
             }
 
-            // Credit wages to city wage pool (Issue #9)
+            // Credit wages to city wage pool
             state.add_to_wage_pool(city_id, total_labor_cost);
 
-            // Consume inputs
+            // Deduct inputs
             for input in &recipe.inputs {
-                let key = Inventory::key(company_id, city_id, input.resource_type_id);
-                if let Some(inv) = state.inventories.get_mut(&key) {
-                    inv.quantity -= input.quantity as i64 * runs;
-                }
+                let in_key = Inventory::key(company_id, city_id, input.resource_type_id);
+                let entry = state.inventories.get_mut(&in_key).unwrap();
+                entry.quantity -= input.quantity as i64 * runs;
             }
 
             // Produce outputs
@@ -143,6 +209,8 @@ pub fn run_production(state: &mut SimState) {
 
     // Process plantations (fertility-driven food production)
     for (_facility_id, city_id, company_id, capacity) in active_plantations {
+        let combined_multiplier = city_multipliers.get(&city_id).copied().unwrap_or(1.0);
+
         let company = match state.companies.get(&company_id) {
             Some(c) => c,
             None => continue,
@@ -176,25 +244,30 @@ pub fn run_production(state: &mut SimState) {
             // Production is: capacity * (1.0 + fertility_bonus)
             // fertility_bonus ranges from 0.0 (0.0x) to 3.0 (3.0x)
             let fertility_multiplier = fertility;
-            let adjusted_capacity = (capacity as f64 * (1.0 + fertility_multiplier)).round() as i64;
+            let adjusted_capacity =
+                (capacity as f64 * (1.0 + fertility_multiplier) * combined_multiplier).round()
+                    as i64;
+            if adjusted_capacity <= 0 {
+                continue;
+            }
 
             // Issue #9: Calculate labor costs for plantation runs
             let total_labor_cost = recipe.labor_cost_per_run * adjusted_capacity as f64;
             {
-                let company = match state.companies.get_mut(&company_id) {
+                let company_mut = match state.companies.get_mut(&company_id) {
                     Some(c) => c,
                     None => continue,
                 };
 
                 // Only proceed if company has enough cash for labor
-                if company.cash < total_labor_cost {
+                if company_mut.cash < total_labor_cost {
                     continue;
                 }
 
-                company.cash -= total_labor_cost;
+                company_mut.cash -= total_labor_cost;
             }
 
-            // Credit wages to city wage pool (Issue #9)
+            // Credit wages to city wage pool
             state.add_to_wage_pool(city_id, total_labor_cost);
 
             // Produce outputs
@@ -239,10 +312,41 @@ fn compute_max_runs(state: &SimState, company_id: i32, city_id: i32, recipe: &Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{City, Company, Facility, Inventory, Recipe, RecipeInput, SimState};
+    use crate::sim::state::{
+        CelestialBody, City, Company, Facility, Inventory, Occupation, Recipe, RecipeInput, Sector,
+        SimState, StarSystem,
+    };
 
     fn make_state() -> SimState {
         let mut s = SimState::new();
+
+        s.sectors.insert(
+            1,
+            Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Test Sector".into(),
+            },
+        );
+
+        s.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Test System".into(),
+            },
+        );
+
+        s.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Test Planet".into(),
+                fertility: 1.0,
+            },
+        );
 
         s.cities.insert(
             1,
@@ -250,7 +354,8 @@ mod tests {
                 id: 1,
                 body_id: 1,
                 name: "Test City".into(),
-                population: 0,
+                population: 10000,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
@@ -347,9 +452,26 @@ mod tests {
     }
 
     #[test]
-    fn plantation_produces_food_at_base_fertility() {
-        use crate::sim::state::CelestialBody;
+    fn refinery_output_reduced_by_occupation_penalty() {
+        let mut state = make_state();
 
+        state.occupied_systems.insert(
+            1,
+            Occupation {
+                system_id: 1,
+                occupier_empire_id: 2,
+                since_tick: 0,
+            },
+        );
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert_eq!(state.inventories[&ingot_key].quantity, 4);
+    }
+
+    #[test]
+    fn plantation_produces_food_at_base_fertility() {
         let mut state = SimState::new();
 
         // Set up city and planet with 1.0x fertility
@@ -369,7 +491,8 @@ mod tests {
                 id: 1,
                 body_id: 1,
                 name: "Test City".into(),
-                population: 0,
+                population: 10000,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
@@ -437,8 +560,6 @@ mod tests {
 
     #[test]
     fn plantation_produces_more_on_high_fertility() {
-        use crate::sim::state::CelestialBody;
-
         let mut state = SimState::new();
 
         // Set up city and planet with 2.0x fertility (double production)
@@ -458,7 +579,8 @@ mod tests {
                 id: 1,
                 body_id: 1,
                 name: "Test City".into(),
-                population: 0,
+                population: 10000,
+                infrastructure_lvl: 5,
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
