@@ -263,7 +263,7 @@ fn process_corporate_taxes(state: &mut SimState) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sim::state::{Company, Loan, SimState};
+    use crate::sim::state::{BankAccount, Company, Loan, SimState};
 
     #[test]
     fn finance_charges_interest_and_deducts_cash() {
@@ -418,5 +418,113 @@ mod tests {
         // Neither should be taxed.
         assert_eq!(state.get_empire_treasury(10), 0.0);
         assert_eq!(state.companies[&2].cash, 0.5);
+    }
+
+    #[test]
+    fn test_bankrupt_company_liquidation() {
+        let mut state = SimState::new();
+
+        // Bankrupt company with enough cash to pay off debt and no inventory
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 50.0, // Enough to cover the debt
+                debt: 50.0,
+                next_eval_tick: 1,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        run_finance(&mut state);
+
+        // Debt is paid off, cash drops to 0.0, status changes to "liquidated"
+        assert_eq!(state.companies[&1].cash, 0.0);
+        assert_eq!(state.companies[&1].debt, 0.0);
+        assert_eq!(state.companies[&1].status, "liquidated");
+    }
+
+    #[test]
+    fn test_deposit_interest_bank_insufficient_cash() {
+        let mut state = SimState::new();
+
+        // Bank company with very low cash
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Poor Bank Co".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 5.0, // Only 5.0 cash, less than the 10.4 interest owed
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Depositor account
+        state.bank_accounts.insert(
+            1,
+            BankAccount {
+                id: 1,
+                company_id: 2,
+                bank_company_id: 1,
+                balance: 1040.0, // Should earn 1040.0 * 0.52 / 52.0 = 10.4 interest
+                interest_rate: 0.52,
+            },
+        );
+
+        run_finance(&mut state);
+
+        // Bank cash should decrease to 0.0
+        assert_eq!(state.companies[&1].cash, 0.0);
+        // Account balance should only increase by the 5.0 cash the bank had
+        assert_eq!(state.bank_accounts[&1].balance, 1045.0);
+    }
+
+    #[test]
+    fn test_deposit_interest_paid_to_account() {
+        let mut state = SimState::new();
+
+        // Bank company
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bank Co".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Depositor account
+        state.bank_accounts.insert(
+            1,
+            BankAccount {
+                id: 1,
+                company_id: 2,
+                bank_company_id: 1,
+                balance: 1040.0, // Should earn 1040.0 * 0.52 / 52.0 = 10.4 interest
+                interest_rate: 0.52,
+            },
+        );
+
+        run_finance(&mut state);
+
+        // Bank cash should decrease by 10.4
+        assert_eq!(state.companies[&1].cash, 989.6);
+        // Account balance should increase by 10.4
+        assert_eq!(state.bank_accounts[&1].balance, 1050.4);
     }
 }
