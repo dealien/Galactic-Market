@@ -352,4 +352,71 @@ mod tests {
 
         assert_eq!(state.companies[&1].status, "bankrupt");
     }
+
+    #[test]
+    fn test_process_corporate_taxes_deducts_and_adds_to_treasury() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Taxpayer Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(1, 10);
+
+        run_finance(&mut state);
+
+        // 5% of 1000.0 is 50.0
+        assert_eq!(state.companies[&1].cash, 950.0);
+        assert_eq!(state.get_empire_treasury(10), 50.0);
+    }
+
+    #[test]
+    fn test_process_corporate_taxes_skips_bankrupt_or_poor_companies() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0, // High cash but bankrupt
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Poor Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 0.5, // Less than 1.0 cash
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(1, 10);
+        state.company_to_empire.insert(2, 10);
+
+        run_finance(&mut state);
+
+        // Neither should be taxed.
+        assert_eq!(state.get_empire_treasury(10), 0.0);
+        assert_eq!(state.companies[&2].cash, 0.5);
+    }
 }
