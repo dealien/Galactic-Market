@@ -1182,3 +1182,267 @@ pub struct TickSummary {
     pub buy_orders: usize,
     pub sell_orders: usize,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_wage_pool_operations() {
+        let mut state = SimState::new();
+        let city_id = 1;
+
+        // Initially zero
+        assert_eq!(state.get_wage_pool(city_id), 0.0);
+
+        // Add to wage pool
+        state.add_to_wage_pool(city_id, 100.0);
+        assert_eq!(state.get_wage_pool(city_id), 100.0);
+
+        // Add more
+        state.add_to_wage_pool(city_id, 50.0);
+        assert_eq!(state.get_wage_pool(city_id), 150.0);
+
+        // Withdraw partial amount
+        let withdrawn = state.withdraw_from_wage_pool(city_id, 60.0);
+        assert_eq!(withdrawn, 60.0);
+        assert_eq!(state.get_wage_pool(city_id), 90.0);
+
+        // Withdraw more than available (should return only what's available)
+        let withdrawn = state.withdraw_from_wage_pool(city_id, 100.0);
+        assert_eq!(withdrawn, 90.0);
+        assert_eq!(state.get_wage_pool(city_id), 0.0);
+    }
+
+    #[test]
+    fn test_reset_wage_pools() {
+        let mut state = SimState::new();
+        state.add_to_wage_pool(1, 100.0);
+        state.add_to_wage_pool(2, 200.0);
+
+        state.reset_wage_pools();
+
+        assert_eq!(state.get_wage_pool(1), 0.0);
+        assert_eq!(state.get_wage_pool(2), 0.0);
+    }
+
+    #[test]
+    fn test_add_city_tax() {
+        let mut state = SimState::new();
+        let city_id = 1;
+
+        state.add_city_tax(city_id, 50.0);
+
+        // Currently, add_city_tax just adds to the wage pool
+        assert_eq!(state.get_wage_pool(city_id), 50.0);
+    }
+
+    #[test]
+    fn test_loan_management() {
+        let mut state = SimState::new();
+        let company_id = 10;
+
+        let loan1 = Loan {
+            id: state.next_loan_id(),
+            company_id,
+            lender_company_id: Some(1),
+            principal: 1000.0,
+            interest_rate: 0.05,
+            balance: 1000.0,
+        };
+
+        let loan2 = Loan {
+            id: state.next_loan_id(),
+            company_id,
+            lender_company_id: Some(1),
+            principal: 2000.0,
+            interest_rate: 0.05,
+            balance: 2000.0,
+        };
+
+        let l1_id = loan1.id;
+        let l2_id = loan2.id;
+
+        state.add_loan(loan1);
+        state.add_loan(loan2);
+
+        // Verify both loans are returned
+        let company_loans = state.get_company_loans(company_id);
+        assert_eq!(company_loans.len(), 2);
+        assert!(company_loans.contains(&l1_id));
+        assert!(company_loans.contains(&l2_id));
+
+        // Remove one loan
+        let removed = state.remove_loan(l1_id);
+        assert!(removed.is_some());
+        assert_eq!(removed.unwrap().id, l1_id);
+
+        // Verify company loans updated
+        let company_loans_after = state.get_company_loans(company_id);
+        assert_eq!(company_loans_after.len(), 1);
+        assert!(company_loans_after.contains(&l2_id));
+
+        // Remove non-existent loan
+        let missing = state.remove_loan(999);
+        assert!(missing.is_none());
+
+        // Test get_company_loans on non-existent company
+        assert!(state.get_company_loans(999).is_empty());
+    }
+
+    #[test]
+    fn test_generate_summary() {
+        let mut state = SimState::new();
+        state.tick = 42;
+
+        // Add resources
+        let res_food = ResourceType {
+            id: 1,
+            name: "Food".to_string(),
+            category: "Agricultural".to_string(),
+            is_vital: true,
+        };
+        let res_ore = ResourceType {
+            id: 2,
+            name: "Iron Ore".to_string(),
+            category: "Raw Material".to_string(),
+            is_vital: false,
+        };
+        let res_ingot = ResourceType {
+            id: 3,
+            name: "Iron Ingot".to_string(),
+            category: "Refined Material".to_string(),
+            is_vital: false,
+        };
+        state.resource_types.insert(1, res_food);
+        state.resource_types.insert(2, res_ore);
+        state.resource_types.insert(3, res_ingot);
+
+        // Add inventories
+        state.inventories.insert(
+            (1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1, // Food
+                quantity: 500,
+            },
+        );
+        state.inventories.insert(
+            (1, 1, 2),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 2, // Ore
+                quantity: 200,
+            },
+        );
+
+        // Add prices
+        state.price_cache.insert((1, 2), 25.0); // Ore price in city 1
+        state.price_cache.insert((2, 2), 35.0); // Ore price in city 2
+        state.price_cache.insert((1, 3), 150.0); // Ingot price in city 1
+
+        // Add market history
+        state.market_history_buffer.push(MarketHistory {
+            city_id: 1,
+            resource_type_id: 1,
+            tick: 41,
+            open: 10.0,
+            high: 10.0,
+            low: 10.0,
+            close: 10.0,
+            volume: 100,
+        });
+        state.market_history_buffer.push(MarketHistory {
+            city_id: 1,
+            resource_type_id: 1,
+            tick: 41,
+            open: 10.0,
+            high: 10.0,
+            low: 10.0,
+            close: 10.0,
+            volume: 50,
+        });
+
+        // Add companies
+        let c1 = Company {
+            id: 1,
+            name: "C1".to_string(),
+            company_type: "miner".to_string(),
+            home_city_id: 1,
+            cash: 1000.0,
+            debt: 500.0,
+            next_eval_tick: 0,
+            status: "active".to_string(),
+            last_trade_tick: 0,
+        };
+        let c2 = Company {
+            id: 2,
+            name: "C2".to_string(),
+            company_type: "refinery".to_string(),
+            home_city_id: 1,
+            cash: 2000.0,
+            debt: 0.0,
+            next_eval_tick: 0,
+            status: "active".to_string(),
+            last_trade_tick: 0,
+        };
+        state.companies.insert(1, c1);
+        state.companies.insert(2, c2);
+
+        let summary = state.generate_summary();
+
+        assert_eq!(summary.tick, 42);
+        assert_eq!(summary.total_cash, 3000.0);
+        assert_eq!(summary.total_debt, 500.0);
+        assert_eq!(summary.avg_debt_to_cash, 250.0); // 500.0 total debt / 2 companies
+
+        assert_eq!(summary.total_inventory, 700);
+        assert_eq!(summary.total_food_inventory, 500);
+
+        assert_eq!(summary.avg_ore_price, 30.0); // (25 + 35) / 2
+        assert_eq!(summary.ingot_prices.get("Iron Ingot"), Some(&150.0));
+
+        assert_eq!(summary.trade_volume, 150);
+
+        assert_eq!(summary.company_breakdown.get("miner"), Some(&1));
+        assert_eq!(summary.company_breakdown.get("refinery"), Some(&1));
+        assert_eq!(summary.total_companies, 2);
+    }
+
+    #[test]
+    fn test_empire_treasury_operations() {
+        let mut state = SimState::new();
+        let empire_id = 1;
+
+        // Initially zero
+        assert_eq!(state.get_empire_treasury(empire_id), 0.0);
+
+        // Add funds
+        state.add_to_empire_treasury(empire_id, 1000.0);
+        assert_eq!(state.get_empire_treasury(empire_id), 1000.0);
+
+        // Withdraw partial amount
+        let withdrawn = state.withdraw_from_empire_treasury(empire_id, 400.0);
+        assert_eq!(withdrawn, 400.0);
+        assert_eq!(state.get_empire_treasury(empire_id), 600.0);
+
+        // Withdraw more than available
+        let withdrawn = state.withdraw_from_empire_treasury(empire_id, 1000.0);
+        assert_eq!(withdrawn, 600.0);
+        assert_eq!(state.get_empire_treasury(empire_id), 0.0);
+    }
+
+    #[test]
+    fn test_get_company_empire() {
+        let mut state = SimState::new();
+
+        // Should be None if no mapping exists
+        assert!(state.get_company_empire(1).is_none());
+
+        // Add mapping and verify
+        state.company_to_empire.insert(1, 42);
+        assert_eq!(state.get_company_empire(1), Some(42));
+    }
+}
