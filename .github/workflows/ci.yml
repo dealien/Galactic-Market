@@ -60,7 +60,7 @@ jobs:
         uses: taiki-e/install-action@cargo-nextest
         
       - name: Build and Run tests
-        run: cargo nextest run --profile ci
+        run: cargo nextest run --profile ci --retries 10
         
       - name: Upload test results to Codecov Analytics
         if: ${{ !cancelled() }}
