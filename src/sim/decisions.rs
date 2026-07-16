@@ -3108,10 +3108,32 @@ mod tests {
         let mut state = SimState::new();
 
         // Setup a company with low cash
-        state.companies.insert(1, Company { id: 1, name: "Needy Corp".into(), company_type: "freelancer".into(), home_city_id: 1, cash: 1000.0, debt: 0.0, next_eval_tick: 1, status: "active".into(), last_trade_tick: 0 });
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Needy Corp".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
 
         // Setup a bank account for the company, pointing to a non-existent bank
-        state.bank_accounts.insert(1, crate::sim::state::BankAccount { id: 1, company_id: 1, bank_company_id: 999, balance: 5000.0, interest_rate: 0.05 });
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 1,
+                bank_company_id: 999,
+                balance: 5000.0,
+                interest_rate: 0.05,
+            },
+        );
 
         // Run decisions
         run_decisions(&mut state, 1);
