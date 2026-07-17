@@ -284,9 +284,11 @@ impl SimState {
 
         // ── Cities ────────────────────────────────────────────────────────────
         for city in self.cities.values() {
-            sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2 WHERE id = $3")
+            let wage_pool = self.get_wage_pool(city.id);
+            sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2, wage_pool = $3 WHERE id = $4")
                 .bind(city.population)
                 .bind(city.infrastructure_lvl)
+                .bind(wage_pool)
                 .bind(city.id)
                 .execute(&mut *tx)
                 .await?;

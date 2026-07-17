@@ -188,7 +188,8 @@ fn update_population_dynamics(state: &mut SimState) {
         }
 
         // Calculate food fulfillment: actual food consumed / required for full population
-        let food_required = city.population as f64;
+        let food_required =
+            (city.population as f64 / 1000.0).max(1.0) * DEMAND_PER_1K_POPULATION as f64;
         let mut food_consumed = 0.0;
 
         // Find food resource ID
@@ -201,10 +202,14 @@ fn update_population_dynamics(state: &mut SimState) {
         if let Some(food_id) = food_resource_id {
             // Count food in consumer company inventory for this city
             // Inventories are keyed by (company_id, city_id, resource_type_id)
-            if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id)
-                && let Some(inv) = state.inventories.get(&(*consumer_co_id, *city_id, food_id))
-            {
-                food_consumed = inv.quantity as f64;
+            if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id) {
+                let inv_key = (*consumer_co_id, *city_id, food_id);
+                if let Some(inv) = state.inventories.get_mut(&inv_key) {
+                    food_consumed = inv.quantity as f64;
+                    // Population consumes up to what is required
+                    let consumed_qty = (inv.quantity).min(food_required as i64);
+                    inv.quantity -= consumed_qty;
+                }
             }
         }
 

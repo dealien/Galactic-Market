@@ -701,9 +701,14 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
 
     // === Issue #9 & #10: Initialize closed-loop economy structures ===
 
-    // Initialize wage pools for all cities (start at 0 each tick)
-    for &city_id in state.cities.keys() {
-        state.city_wage_pools.insert(city_id, 0.0);
+    // Initialize wage pools for all cities from database
+    let wage_pool_rows =
+        sqlx::query_as::<_, (i32, f64)>("SELECT id, COALESCE(wage_pool::FLOAT8, 0.0) FROM cities")
+            .fetch_all(pool)
+            .await?;
+
+    for (city_id, wage_pool) in wage_pool_rows {
+        state.city_wage_pools.insert(city_id, wage_pool);
     }
 
     // Initialize empire treasuries from database

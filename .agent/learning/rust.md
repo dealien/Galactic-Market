@@ -19,3 +19,15 @@
 ## 2024-07-16 - Handling Nested Optional Relationships in Tests
 **Learning:** When testing high-level simulation logic (like banking AI) that navigates deep relational chains in the in-memory state (e.g., Company -> City -> CelestialBody -> StarSystem -> Sector -> Empire), the test setup must populate the entire chain of entities. Missing even one link (like `StarSystem` or `Sector`) will cause the test logic to skip or panic depending on whether it uses `get()` or indexing `[]`.
 **Action:** When mocking dependencies for a specific module, ensure all dependent sub-structures required for conditional branches (like evaluating prime rates tied to an empire) are initialized and inserted into `SimState`.
+
+## 2026-07-17 - Mismatched Scale in Simulation Consumption and Fulfillment
+**Learning:** In multi-phased economic simulations, different phases might use scaled values for performance or balancing. We discovered a 1000x mismatch where `run_consumption` posted buy orders scaled by `population / 1000`, but `update_population_dynamics` evaluated food fulfillment against the raw `population`. This created a perpetual starvation loop.
+**Action:** When designing or refactoring multi-phase simulations, always verify that the mathematical scales, dimensions, and denominators are consistent across all phases.
+
+## 2026-07-17 - Closed-Loop Cash and Production Debt Mechanisms
+**Learning:** Under a closed-loop economy model, blocking production/refining when cash drops below labor costs (while allowing mining to run on debt) creates a deadlock. Because refineries/plantations cannot produce, miners cannot sell raw materials, leaving the entire economy permanently frozen at zero cash.
+**Action:** Ensure that all productive actors in a closed-loop economy can run on similar debt/shortfall mechanisms (or credit facilities) to prevent permanent freezes.
+
+## 2026-07-17 - Redirecting Sentinel Entity Transactions
+**Learning:** Sentinel company IDs (negative integers) are useful for bypassing standard limits in simulation logic, but they trigger database foreign-key constraints if persisted to shared tables (like inventories). Moreover, relief goods purchased by sentinels must be redirected directly to local consumer company inventories so they can be consumed by citizens.
+**Action:** For all sentinel-initiated transactions, resolve their destination to a valid positive actor (e.g., local consumer company) at the boundary of order matching to maintain database and simulation integrity.
