@@ -1,0 +1,170 @@
+info: cargo-llvm-cov currently setting cfg(coverage); you can opt-out it by passing --no-cfg-coverage
+   Compiling galactic-market v0.1.0 (/app)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.90s
+warning: the following packages contain code that will be rejected by a future version of Rust: sqlx-postgres v0.7.4
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/llvm-cov-target/debug/deps/galactic_market-f92f9c04dfe7a672)
+
+running 88 tests
+test sim::alliances::tests::test_alliance_dissolution_on_high_tension ... ok
+test sim::alliances::tests::test_alliance_not_dissolved_when_tension_low ... ok
+test sim::alliances::tests::test_alliance_forms_after_neutral_cooldown_per_relation ... ok
+test sim::alliances::tests::test_conflicting_alliances_detect_opposite_war_sides ... ok
+test sim::alliances::tests::test_conflicting_alliances_treat_legacy_ally_role_as_conflict ... ok
+test sim::consumption::tests::consumer_posts_buy_orders ... ok
+test sim::consumption::tests::consumer_draws_from_wage_pool ... ok
+test sim::alliances::tests::test_alliance_requires_neutral_cooldown_per_relation ... ok
+test sim::decisions::tests::company_skips_when_not_due ... ok
+test sim::decisions::tests::company_reschedules_next_eval ... ok
+test sim::decisions::tests::test_cache_invalidation_every_5_ticks ... ok
+test sim::decisions::tests::miner_posts_sell_order_when_inventory_available ... ok
+test sim::decisions::tests::test_cache_matches_uncached_scan ... ok
+test sim::decisions::tests::test_central_bank_low_debt ... ok
+test sim::decisions::tests::test_commercial_bank_utilization ... ok
+test sim::decisions::tests::test_company_bank_deposit_excess_cash ... ok
+test sim::decisions::tests::test_company_bank_missing_during_withdrawal ... ok
+test sim::decisions::tests::test_company_liquidation_fire_sale ... ok
+test sim::decisions::tests::test_company_bank_withdraw_cash_for_operations ... ok
+test sim::decisions::tests::test_compute_merchant_opportunities_empty ... ok
+test sim::decisions::tests::test_compute_merchant_opportunities_finds_profitable_routes ... ok
+test sim::decisions::tests::test_compute_merchant_opportunities_sorted_by_profit ... ok
+test sim::decisions::tests::test_deficit_detection ... ok
+test sim::decisions::tests::test_fulfillment_calculation ... ok
+test sim::decisions::tests::test_famine_routing_activates_when_starving ... ok
+test sim::decisions::tests::test_request_loan_approved ... ok
+test sim::decisions::tests::test_request_loan_rejected_bank_insufficient_cash ... ok
+test sim::decisions::tests::test_request_loan_rejected_high_debt ... ok
+test sim::decisions::tests::test_surplus_detection ... ok
+test sim::decisions::tests::test_request_loan_rejected_no_bank ... ok
+test sim::events::tests::test_expire_events ... ok
+test sim::events::tests::test_lane_blockade_no_collision ... ok
+test sim::finance::tests::finance_charges_interest_and_deducts_cash ... ok
+test sim::events::tests::test_trigger_infrastructure_damage_event ... ok
+test sim::events::tests::test_trigger_tension_increase_event ... ok
+test sim::finance::tests::finance_compounds_interest_if_cash_insufficient ... ok
+test sim::finance::tests::test_bankrupt_company_liquidation ... ok
+test sim::finance::tests::finance_triggers_bankruptcy_on_high_debt ... ok
+test sim::finance::tests::test_deposit_interest_bank_insufficient_cash ... ok
+test sim::finance::tests::test_deposit_interest_paid_to_account ... ok
+test sim::finance::tests::test_process_corporate_taxes_deducts_and_adds_to_treasury ... ok
+test sim::finance::tests::test_process_corporate_taxes_skips_bankrupt_or_poor_companies ... ok
+test sim::markets::tests::limit_order_midpoint_clearing ... ok
+test sim::markets::tests::market_order_matches_limit_order ... ok
+test sim::logistics::tests::transport_info_calculates_correctly ... ok
+test sim::markets::tests::market_order_to_market_order_uses_ema ... ok
+test sim::military::tests::test_maintenance_costs ... ok
+test sim::military::tests::test_combat_produces_winner ... ok
+test sim::military::tests::test_military_strength_calculation ... ok
+test sim::military::tests::test_spawn_initial_units ... ok
+test sim::military::tests::test_recover_morale_for_stationed_and_idle_deployed_units ... ok
+test sim::politics::tests::test_border_systems_found ... ok
+test sim::politics::tests::test_allied_participants_contribute_to_combat_losses ... ok
+test sim::politics::tests::test_defender_can_occupy_aggressor_system ... ok
+test sim::politics::tests::test_occupation_liberation ... ok
+test sim::politics::tests::test_fleet_deployment_to_nearest_theater ... ok
+test sim::politics::tests::test_occupation_maintained_with_garrison ... ok
+test sim::politics::tests::test_owner_reclaims_occupied_system_when_occupier_absent ... ok
+test sim::politics::tests::test_sector_split_tension_skips_active_treaty_pairs ... ok
+test sim::politics::tests::test_sector_control_computation ... ok
+test sim::politics::tests::test_sector_split_with_occupation ... ok
+test sim::politics::tests::test_tension_decay ... ok
+test sim::politics::tests::test_uncontested_theater_resets_participant_units_to_stationed ... ok
+test sim::politics::tests::test_war_conclusion_resets_ally_relations ... ok
+test sim::politics::tests::test_war_conclusion_resets_participant_units_in_theaters ... ok
+test sim::politics::tests::test_war_conclusion_retains_relations_if_other_active_war ... ok
+test sim::politics::tests::test_war_declaration_at_threshold ... ok
+test sim::politics::tests::test_war_declaration_escalates_allies_and_opposing_allies ... ok
+test sim::production::tests::plantation_produces_food_at_base_fertility ... ok
+test sim::politics::tests::test_war_exhaustion_accumulation_and_peace ... ok
+test sim::politics::tests::test_war_exhaustion_accumulates_across_ticks ... ok
+test sim::politics::tests::test_war_exhaustion_ceasefire ... ok
+test sim::production::tests::plantation_produces_more_on_high_fertility ... ok
+test sim::production::tests::refinery_consumes_ore_and_produces_ingots ... ok
+test sim::production::tests::refinery_limited_by_inventory ... ok
+test sim::production::tests::refinery_output_reduced_by_occupation_penalty ... ok
+test sim::resources::tests::extraction_debits_cash ... ok
+test sim::resources::tests::extraction_adds_to_inventory ... ok
+test sim::resources::tests::extraction_depletes_deposit ... ok
+test sim::resources::tests::extraction_skips_if_inventory_too_high ... ok
+test sim::resources::tests::extraction_skips_if_status_not_active ... ok
+test sim::state::tests::test_add_city_tax ... ok
+test sim::state::tests::test_empire_treasury_operations ... ok
+test sim::state::tests::test_generate_summary ... ok
+test sim::state::tests::test_get_company_empire ... ok
+test sim::state::tests::test_loan_management ... ok
+test sim::state::tests::test_reset_wage_pools ... ok
+test sim::state::tests::test_wage_pool_operations ... ok
+
+test result: ok. 88 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/main.rs (target/llvm-cov-target/debug/deps/galactic_market-c1b0bfc702e6f881)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/banking_events_test.rs (target/llvm-cov-target/debug/deps/banking_events_test-0519e04a32e96259)
+
+running 5 tests
+test test_debt_reconciliation_after_interest_shortfall ... ok
+test test_central_bank_monetary_policy ... ok
+test test_famine_relief_buy_orders ... ok
+test test_consumer_borrows_during_liquidity_crisis ... ok
+test test_merchant_takes_loan_for_arbitrage ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/phase2_refactor_integration_test.rs (target/llvm-cov-target/debug/deps/phase2_refactor_integration_test-ac866c31f6436186)
+
+running 6 tests
+test test_five_tick_cache_invalidation_boundary ... ok
+test test_merchant_cache_invalidation_sentinel ... ok
+test test_merchant_cache_structure_exists ... ok
+test test_merchant_companies_created ... ok
+test test_merchant_opportunity_cache_fields ... ok
+test test_multiple_merchants_have_independent_caches ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/sim_integration_test.rs (target/llvm-cov-target/debug/deps/sim_integration_test-a95736ad05559aa6)
+
+running 3 tests
+test test_market_clearing_balances ... ok
+test test_refinery_consumes_ore_and_produces_ingots ... ok
+test test_extraction_depletes_deposit ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/war_economics_test.rs (target/llvm-cov-target/debug/deps/war_economics_test-b189b60ad1b15879)
+
+running 5 tests
+test test_population_migration ... ok
+test test_labor_scaling_production ... ok
+test test_wartime_maintenance_multiplier ... ok
+test test_war_capitulation_threshold ... ok
+test test_war_infrastructure_damage_and_repair ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Filename                      Regions    Missed Regions     Cover   Functions  Missed Functions  Executed       Lines      Missed Lines     Cover    Branches   Missed Branches     Cover
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+db/load.rs                        713               713     0.00%          10                10     0.00%         546               546     0.00%           0                 0         -
+db/seed.rs                        867               867     0.00%           3                 3     0.00%         420               420     0.00%           0                 0         -
+db/utils.rs                        16                16     0.00%           2                 2     0.00%          10                10     0.00%           0                 0         -
+main.rs                            93                93     0.00%           2                 2     0.00%          48                48     0.00%           0                 0         -
+sim/alliances.rs                  393                47    88.04%          25                 5    80.00%         287                34    88.15%           0                 0         -
+sim/consumption.rs                367                52    85.83%          17                 4    76.47%         244                32    86.89%           0                 0         -
+sim/decisions.rs                 2798              1053    62.37%          69                12    82.61%        2483               690    72.21%           0                 0         -
+sim/events.rs                     417                48    88.49%          13                 1    92.31%         325                31    90.46%           0                 0         -
+sim/finance.rs                    421                46    89.07%          14                 2    85.71%         351                27    92.31%           0                 0         -
+sim/logistics.rs                  253                41    83.79%           5                 1    80.00%         283                28    90.11%           0                 0         -
+sim/markets.rs                    410                89    78.29%          10                 2    80.00%         350                62    82.29%           0                 0         -
+sim/military.rs                   332                10    96.99%          19                 0   100.00%         290                 5    98.28%           0                 0         -
+sim/mod.rs                        583               583     0.00%           8                 8     0.00%         337               337     0.00%           0                 0         -
+sim/namegen.rs                    184               184     0.00%          14                14     0.00%         104               104     0.00%           0                 0         -
+sim/politics.rs                  1959                78    96.02%          85                 5    94.12%        1553                47    96.97%           0                 0         -
+sim/production.rs                 484                34    92.98%          13                 2    84.62%         420                32    92.38%           0                 0         -
+sim/resources.rs                  216                26    87.96%          10                 2    80.00%         184                25    86.41%           0                 0         -
+sim/state.rs                      561                34    93.94%          31                 3    90.32%         410                24    94.15%           0                 0         -
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+TOTAL                           11067              4014    63.73%         350                78    77.71%        8645              2502    71.06%           0                 0         -

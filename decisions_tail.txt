@@ -1,0 +1,70 @@
+   171	        // --- Corporate Treasury AI (Deposit/Withdraw) ───────────────────────
+   172	        let account_id = state
+   173	            .bank_accounts
+   174	            .values()
+   175	            .find(|a| a.company_id == company_id)
+   176	            .map(|a| a.id);
+   177
+   178	        if let Some(acc_id) = account_id {
+   179	            let (bank_company_id, bank_balance) = {
+   180	                let a = &state.bank_accounts[&acc_id];
+   181	                (a.bank_company_id, a.balance)
+   182	            };
+   183	            let company_cash = state.companies[&company_id].cash;
+   184
+   185	            let buffer = 5000.0;
+   186	            if company_cash > buffer * 1.5 {
+   187	                let deposit = company_cash - buffer;
+   188	                if let Some(c) = state.companies.get_mut(&company_id) {
+   189	                    c.cash -= deposit;
+   190	                }
+   191	                if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
+   192	                    a.balance += deposit;
+   193	                }
+   194	                // Credit bank's cash so it has liquidity for lending
+   195	                if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+   196	                    bank.cash += deposit;
+   197	                }
+   198	                debug!(company_id, deposit, "Company deposited excess cash to bank");
+   199	            } else if company_cash < buffer * 0.5 && bank_balance > 0.0 {
+   200	                let bank_available = match state.companies.get(&bank_company_id) {
+   201	                    Some(b) => b.cash,
+   202	                    None => {
+   203	                        // Bank company missing despite a valid account — log the anomaly
+   204	                        // and skip withdrawal to avoid corrupting other state.
+   205	                        tracing::warn!(
+   206	                            company_id,
+   207	                            bank_company_id,
+   208	                            "Bank company not found during withdrawal; skipping"
+   209	                        );
+   210	                        0.0
+   211	                    }
+   212	                };
+   213	                // Limit withdrawal to what both the account and the bank actually hold
+   214	                let withdraw = (buffer - company_cash)
+   215	                    .min(bank_balance)
+   216	                    .min(bank_available)
+   217	                    .max(0.0);
+   218	                if withdraw > 0.0 {
+   219	                    if let Some(c) = state.companies.get_mut(&company_id) {
+   220	                        c.cash += withdraw;
+   221	                    }
+   222	                    if let Some(a) = state.bank_accounts.get_mut(&acc_id) {
+   223	                        a.balance -= withdraw;
+   224	                    }
+   225	                    if let Some(bank) = state.companies.get_mut(&bank_company_id) {
+   226	                        bank.cash -= withdraw;
+   227	                    }
+   228	                    debug!(
+   229	                        company_id,
+   230	                        withdraw, "Company withdrew cash from bank for operations"
+   231	                    );
+   232	                }
+   233	            }
+   234	        }
+   235
+   236	        let company_type = {
+   237	            let company = state.companies.get_mut(&company_id).unwrap();
+   238
+   239	            // --- Promotion Logic ---
+   240	            if company.company_type == "freelancer" && company.cash >= 10000.0 {
