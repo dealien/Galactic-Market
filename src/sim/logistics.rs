@@ -462,4 +462,119 @@ mod tests {
         assert_eq!(info.ticks, 8); // 3 + ceil(10.0/2.0) = 8
         assert!((info.cost_per_unit - 2.6).abs() < 0.001); // 0.5 + (10.0*0.2) + 0.05 + 0.05
     }
+
+    /// Verifies `get_transport_info` falls back to 999 ticks when no path exists
+    #[test]
+    fn test_transport_info_no_path_fallback() {
+        let mut state = SimState::new();
+        setup_hierarchy(&mut state);
+
+        // Remove the lane from 1 to 3, so system 3 is disconnected from 1
+        state.system_lanes.remove(&(1, 3));
+        state.system_lanes.remove(&(2, 3));
+
+        // Force a rebuild of distances
+        state.blockade_version += 1;
+        build_system_distances(&mut state);
+
+        // Query info between disconnected systems
+        let info = get_transport_info(&state, 1, 5); // 1 is in system 1, 5 is in system 3
+
+        assert_eq!(info.ticks, 999);
+        assert!((info.cost_per_unit - 9999.0).abs() < 0.001);
+    }
+
+    /// Verifies that `build_system_distances` skips blockaded lanes and updates paths
+    #[test]
+    fn test_build_system_distances_with_blockade() {
+        let mut state = SimState::new();
+        setup_hierarchy(&mut state);
+
+        // System 1 to System 2 is distance 4.0
+        // System 2 to System 3 is distance 6.0
+        // System 1 to System 3 is distance 10.0
+
+        // Ensure distance is cached
+        assert_eq!(state.system_distances.get(&(1, 2)), Some(&4.0));
+
+        // Add a blockade event for the lane between 1 and 2
+        let event = crate::sim::state::ActiveEvent {
+            id: 1,
+            event_type: "blockade_lane".into(),
+            target_id: Some((1, 2)),
+            severity: 1.0,
+            start_tick: 0,
+            end_tick: 10,
+            flavor_text: None,
+        };
+        state.active_events.insert(1, event);
+        state.blockade_version += 1;
+
+        // Rebuild distances with the blockade active
+        build_system_distances(&mut state);
+
+        // Now, path from 1 to 2 must go through 3 (1 -> 3 -> 2), if bidirectional, but lanes in setup are one-way?
+        // Wait, UnGraphMap adds edges undirected! So 1-3 is 10.0, 3-2 is 6.0.
+        // The shortest path from 1 to 2 should now be 16.0
+        assert_eq!(state.system_distances.get(&(1, 2)), Some(&16.0));
+    }
+
+    /// Verifies `run_logistics` delivers trade routes that reach their arrival tick
+    #[test]
+    fn test_run_logistics_delivery() {
+        use crate::sim::state::{Inventory, TradeRoute};
+        let mut state = SimState::new();
+
+        state.trade_routes.insert(
+            1,
+            TradeRoute {
+                id: 1,
+                company_id: 100,
+                origin_city_id: 10,
+                dest_city_id: 20,
+                resource_type_id: 5,
+                quantity: 50,
+                arrival_tick: 10,
+            },
+        );
+
+        // Run logistics on tick 9, shouldn't arrive yet
+        run_logistics(&mut state, 9);
+        assert_eq!(state.trade_routes.len(), 1);
+
+        // Check that inventory wasn't created yet
+        let key = Inventory::key(100, 20, 5);
+        assert!(state.inventories.get(&key).is_none());
+
+        // Run logistics on tick 10, should arrive
+        run_logistics(&mut state, 10);
+        assert_eq!(state.trade_routes.len(), 0);
+
+        // Check that inventory was created and incremented
+        let inv = state
+            .inventories
+            .get(&key)
+            .expect("Inventory should be created");
+        assert_eq!(inv.quantity, 50);
+
+        // Add another trade route arriving to the same inventory
+        state.trade_routes.insert(
+            2,
+            TradeRoute {
+                id: 2,
+                company_id: 100,
+                origin_city_id: 10,
+                dest_city_id: 20,
+                resource_type_id: 5,
+                quantity: 25,
+                arrival_tick: 12,
+            },
+        );
+
+        run_logistics(&mut state, 12);
+
+        // Inventory quantity should increase by 25
+        let inv = state.inventories.get(&key).unwrap();
+        assert_eq!(inv.quantity, 75);
+    }
 }
