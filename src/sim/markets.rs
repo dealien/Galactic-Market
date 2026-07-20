@@ -508,4 +508,68 @@ mod tests {
         assert_eq!(state.companies[&1].cash, 1249.0); // 1000 + 250 - 1 (port fee)
         assert_eq!(state.companies[&2].cash, 750.0); // 1000 - 250
     }
+
+    #[test]
+    fn test_void_order_lack_of_cash() {
+        let mut state = setup_test_state();
+
+        // Give company 2 zero cash so they can't afford the purchase
+        state.companies.get_mut(&2).unwrap().cash = 0.0;
+
+        // Seller: Limit Sell 10 @ 5.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Limit Buy 10 @ 5.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // The buy order should have been voided, so there should only be 1 order left (the sell order)
+        assert_eq!(state.market_orders.len(), 1);
+
+        // Ensure the remaining order is the sell order
+        assert!(state.market_orders.contains_key(&1));
+
+        // Seller's cash should remain unchanged since trade was voided
+        assert_eq!(state.companies[&1].cash, 1000.0);
+
+        // Buyer's cash should remain at 0.0
+        assert_eq!(state.companies[&2].cash, 0.0);
+
+        // Inventory of seller should remain unchanged
+        assert_eq!(
+            state
+                .inventories
+                .get(&Inventory::key(1, 1, 1))
+                .unwrap()
+                .quantity,
+            100
+        );
+    }
 }
