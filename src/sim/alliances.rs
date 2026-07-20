@@ -433,4 +433,134 @@ mod tests {
 
         assert_eq!(state.treaties.len(), 1);
     }
+
+    #[test]
+    fn test_alliance_formation_skips_non_neutral() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+        rel.status = "war".to_string(); // Not neutral
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert!(
+            state.treaties.is_empty(),
+            "Should not form alliance if not neutral"
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_skips_high_tension() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+        rel.tension = ALLIANCE_MAX_TENSION + 5.0; // High tension
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert!(
+            state.treaties.is_empty(),
+            "Should not form alliance if tension is too high"
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_skips_already_allied() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+
+        // Add an active treaty for the pair
+        state.treaties.insert(
+            1,
+            Treaty {
+                id: 1,
+                alliance_name: "Existing Alliance".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 0,
+                dissolved_tick: None,
+            },
+        );
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(
+            state.treaties.len(),
+            1,
+            "Should not form a second alliance if already allied"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_ignores_inactive_wars() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "aggressor_ally".to_string()),
+                    (4, "defender_ally".to_string()),
+                ],
+                theaters: vec![],
+                start_tick: 1,
+                end_tick: Some(10), // War has ended
+                status: "concluded".to_string(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        assert!(
+            !has_conflicting_alliances(&state, 3, 4),
+            "Should ignore concluded wars"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_unrecognized_role() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![
+                    (1, "aggressor".to_string()),
+                    (2, "defender".to_string()),
+                    (3, "unknown_role".to_string()), // Should match `_` and return None
+                    (4, "unknown_role_2".to_string()),
+                ],
+                theaters: vec![],
+                start_tick: 1,
+                end_tick: None,
+                status: "active".to_string(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        // Since both have unknown roles, `participant_side` returns None.
+        // It falls through to the legacy conservative check. Since both 3 and 4 are in the war,
+        // it rejects the alliance conservatively.
+        assert!(
+            has_conflicting_alliances(&state, 3, 4),
+            "Should conservatively reject alliance for unknown roles in same war"
+        );
+    }
 }
