@@ -1740,6 +1740,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         s.companies.insert(
@@ -1835,6 +1837,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -1903,6 +1907,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -1971,6 +1977,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2046,6 +2054,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2059,6 +2069,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2104,6 +2116,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2250,6 +2263,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2264,6 +2278,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2277,6 +2293,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2357,6 +2375,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2371,6 +2390,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2384,6 +2405,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2486,6 +2509,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2500,6 +2524,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2513,6 +2539,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2526,6 +2554,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2616,6 +2646,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2630,6 +2661,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2643,6 +2676,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2763,6 +2798,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2777,6 +2813,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2790,6 +2828,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2803,6 +2843,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2973,6 +3015,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2987,6 +3031,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3142,6 +3188,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 1.0,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3210,6 +3258,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 1.0,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 

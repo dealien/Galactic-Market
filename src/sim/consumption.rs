@@ -180,7 +180,7 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 /// - fulfillment 40-70%: decline -0.1% per tick
 /// - fulfillment < 40%: starvation -0.5% per tick
 fn update_population_dynamics(state: &mut SimState) {
-    let mut city_updates: Vec<(i32, i64)> = Vec::new();
+    let mut city_updates: Vec<(i32, i64, f64)> = Vec::new();
 
     for (city_id, city) in state.cities.iter() {
         if city.population <= 0 {
@@ -239,14 +239,15 @@ fn update_population_dynamics(state: &mut SimState) {
                 growth_rate,
                 "Population updated"
             );
-            city_updates.push((*city_id, new_population));
         }
+        city_updates.push((*city_id, new_population, growth_rate));
     }
 
     // Apply population updates
-    for (city_id, new_pop) in city_updates {
+    for (city_id, new_pop, growth_rate) in city_updates {
         if let Some(city) = state.cities.get_mut(&city_id) {
             city.population = new_pop;
+            city.population_growth_rate = growth_rate;
         }
     }
 }
@@ -372,6 +373,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 

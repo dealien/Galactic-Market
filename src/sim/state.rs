@@ -19,6 +19,8 @@ pub struct City {
     pub port_tier: i32,
     pub port_fee_per_unit: f64,
     pub port_max_throughput: i64,
+    pub tax_collected_this_tick: f64,
+    pub population_growth_rate: f64,
 }
 
 /// Food balance analysis for a city (updated each tick).
@@ -86,6 +88,7 @@ pub struct Empire {
     pub name: String,
     pub government_type: String,
     pub tax_rate_base: f64,
+    pub tax_rate: f64,
 }
 
 /// Diplomatic standing between two empires.
@@ -973,14 +976,25 @@ impl SimState {
     /// use galactic_market::sim::state::SimState;
     ///
     /// let mut state = SimState::new();
+    /// // Example needs a city to update its tax_collected_this_tick
+    /// state.cities.insert(1, galactic_market::sim::state::City {
+    ///     id: 1, body_id: 1, name: "City".into(), population: 100, infrastructure_lvl: 1,
+    ///     port_tier: 1, port_fee_per_unit: 1.0, port_max_throughput: 10,
+    ///     tax_collected_this_tick: 0.0, population_growth_rate: 0.0
+    /// });
     /// state.add_city_tax(1, 50.0);
     /// assert_eq!(state.get_wage_pool(1), 50.0);
+    /// assert_eq!(state.cities.get(&1).unwrap().tax_collected_this_tick, 50.0);
     /// ```
     pub fn add_city_tax(&mut self, city_id: i32, amount: f64) {
         // In Phase 7 (Finance), these accumulated taxes are transferred to empire treasury.
         // For now, we'll add to wage pools as a temporary holding area.
         // TODO: In a future iteration, maintain separate city_tax_pools HashMap
         *self.city_wage_pools.entry(city_id).or_insert(0.0) += amount;
+
+        if let Some(city) = self.cities.get_mut(&city_id) {
+            city.tax_collected_this_tick += amount;
+        }
     }
 
     /// Get the current treasury balance for an empire.
@@ -1231,10 +1245,30 @@ mod tests {
         let mut state = SimState::new();
         let city_id = 1;
 
+        state.cities.insert(
+            city_id,
+            City {
+                id: city_id,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 10,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
         state.add_city_tax(city_id, 50.0);
 
-        // Currently, add_city_tax just adds to the wage pool
+        // add_city_tax adds to the wage pool and updates tax_collected_this_tick
         assert_eq!(state.get_wage_pool(city_id), 50.0);
+        assert_eq!(
+            state.cities.get(&city_id).unwrap().tax_collected_this_tick,
+            50.0
+        );
     }
 
     #[test]
