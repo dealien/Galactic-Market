@@ -427,4 +427,204 @@ mod tests {
         assert!(!orders.is_empty(), "Should have posted buy orders");
         assert_eq!(orders[0].order_type, "buy");
     }
+
+    fn setup_population_dynamics_state(population: i64, food_amount: i64) -> SimState {
+        let mut state = SimState::new();
+
+        state.resource_types.insert(
+            1,
+            ResourceType {
+                id: 1,
+                name: "Food Ration".into(),
+                category: "Consumer Good".into(),
+                is_vital: true,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Consumer Co".into(),
+                company_type: "consumer".into(),
+                home_city_id: 1,
+                cash: 0.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.city_consumer_ids.insert(1, 1);
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(1, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: food_amount,
+            },
+        );
+
+        state
+    }
+
+    #[test]
+    fn test_update_population_dynamics_growth() {
+        // High food fulfillment (1.0 -> 100% -> growth)
+        let pop = 1_000_000;
+        let mut state = setup_population_dynamics_state(pop, pop);
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        let expected_growth = pop as f64 * POPULATION_GROWTH_RATE;
+        assert_eq!(city.population, pop + expected_growth as i64);
+    }
+
+    #[test]
+    fn test_update_population_dynamics_decline() {
+        // 50% fulfillment, between 40% (decline) and 70% (stable)
+        let pop = 1_000_000;
+        let food = 500_000;
+        let mut state = setup_population_dynamics_state(pop, food);
+        update_population_dynamics(&mut state);
+
+        let t = (0.5 - FOOD_FULFILLMENT_DECLINE_MIN)
+            / (FOOD_FULFILLMENT_STABLE_MIN - FOOD_FULFILLMENT_DECLINE_MIN);
+        let expected_rate = POPULATION_STABLE_RATE * t + POPULATION_DECLINE_RATE * (1.0 - t);
+
+        let city = state.cities.get(&1).unwrap();
+        let expected_population = (pop as f64 * (1.0 + expected_rate)).max(1.0) as i64;
+        assert_eq!(city.population, expected_population);
+        assert!(city.population < pop); // Should decline
+    }
+
+    #[test]
+    fn test_update_population_dynamics_starvation() {
+        // 10% fulfillment -> starvation
+        let pop = 1_000_000;
+        let food = 100_000;
+        let mut state = setup_population_dynamics_state(pop, food);
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        let expected_population = pop + (pop as f64 * POPULATION_STARVATION_RATE) as i64;
+        assert_eq!(city.population, expected_population);
+    }
+
+    #[test]
+    fn test_run_migration_between_cities() {
+        let mut state = SimState::new();
+        state.tick = MIGRATION_INTERVAL;
+
+        // Empire hierarchy
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Sys1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        let pop1 = 100_000;
+        let pop2 = 100_000;
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City 1".into(),
+                population: pop1,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 1,
+                name: "City 2".into(),
+                population: pop2,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.city_food_balance.insert(
+            1,
+            crate::sim::state::CityFoodBalance {
+                city_id: 1,
+                food_surplus: 0,
+                fulfillment_ratio: 0.1,
+                needs_relief: true,
+                has_surplus: false,
+            },
+        );
+        state.city_food_balance.insert(
+            2,
+            crate::sim::state::CityFoodBalance {
+                city_id: 2,
+                food_surplus: 0,
+                fulfillment_ratio: 0.9,
+                needs_relief: false,
+                has_surplus: false,
+            },
+        );
+
+        run_migration(&mut state);
+
+        let c1 = state.cities.get(&1).unwrap();
+        let c2 = state.cities.get(&2).unwrap();
+
+        let expected_migration = (pop1 as f64 * MIGRATION_RATE).max(1.0) as i64;
+
+        assert_eq!(c1.population, pop1 - expected_migration);
+        assert_eq!(c2.population, pop2 + expected_migration);
+    }
 }
