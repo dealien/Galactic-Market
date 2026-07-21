@@ -35,8 +35,8 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 
     // ── Cities ────────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, i32, f64, i64)>(
-        "SELECT id, body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput FROM cities",
+    let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, i32, f64, i64, f64, f64, f64)>(
+        "SELECT id, body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput, COALESCE(wage_pool::FLOAT8, 0.0), COALESCE(tax_collected_this_tick::FLOAT8, 0.0), COALESCE(population_growth_rate::FLOAT8, 0.0) FROM cities",
     )
     .fetch_all(pool)
     .await?;
@@ -50,6 +50,9 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
         port_tier,
         port_fee_per_unit,
         port_max_throughput,
+        wage_pool,
+        tax_collected_this_tick,
+        population_growth_rate,
     ) in rows
     {
         state.cities.insert(
@@ -63,8 +66,11 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 port_tier,
                 port_fee_per_unit,
                 port_max_throughput,
+                tax_collected_this_tick,
+                population_growth_rate,
             },
         );
+        state.city_wage_pools.insert(id, wage_pool);
     }
 
     info!(count = state.cities.len(), "Loaded cities.");
@@ -154,13 +160,13 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     info!(count = state.sectors.len(), "Loaded sectors.");
 
     // ── Empires ──────────────────────────────────────────────────────────────
-    let rows = sqlx::query_as::<_, (i32, String, String, f64)>(
-        "SELECT id, name, government_type, tax_rate_base FROM empires",
+    let rows = sqlx::query_as::<_, (i32, String, String, f64, f64)>(
+        "SELECT id, name, government_type, tax_rate_base, COALESCE(tax_rate::FLOAT8, 0.05) FROM empires",
     )
     .fetch_all(pool)
     .await?;
 
-    for (id, name, government_type, tax_rate_base) in rows {
+    for (id, name, government_type, tax_rate_base, tax_rate) in rows {
         state.empires.insert(
             id,
             Empire {
@@ -168,6 +174,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
                 name,
                 government_type,
                 tax_rate_base,
+                tax_rate,
             },
         );
     }
@@ -700,11 +707,6 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     );
 
     // === Issue #9 & #10: Initialize closed-loop economy structures ===
-
-    // Initialize wage pools for all cities (start at 0 each tick)
-    for &city_id in state.cities.keys() {
-        state.city_wage_pools.insert(city_id, 0.0);
-    }
 
     // Initialize empire treasuries from database
     let treasury_rows = sqlx::query_as::<_, (i32, f64)>(

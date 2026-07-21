@@ -1102,6 +1102,7 @@ mod tests {
                 name: "Republic".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.15,
+                tax_rate: 0.05,
             },
         );
         state.empires.insert(
@@ -1111,6 +1112,7 @@ mod tests {
                 name: "Syndicate".to_string(),
                 government_type: "Corporate".to_string(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -1249,6 +1251,7 @@ mod tests {
                 name: "Consortium".to_string(),
                 government_type: "Corporate".to_string(),
                 tax_rate_base: 0.08,
+                tax_rate: 0.05,
             },
         );
 
@@ -1650,6 +1653,7 @@ mod tests {
                 name: "AggressorAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
         state.empires.insert(
@@ -1659,6 +1663,7 @@ mod tests {
                 name: "DefenderAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
         state.empires.insert(
@@ -1668,6 +1673,7 @@ mod tests {
                 name: "LegacyAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
 
@@ -1736,6 +1742,7 @@ mod tests {
                 name: "AggressorAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
 
@@ -1840,6 +1847,7 @@ mod tests {
                 name: "AggressorAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
         state.empires.insert(
@@ -1849,6 +1857,7 @@ mod tests {
                 name: "DefenderAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
 
@@ -1924,6 +1933,7 @@ mod tests {
                 name: "AggressorAlly".to_string(),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
         state.diplomatic_relations.insert(

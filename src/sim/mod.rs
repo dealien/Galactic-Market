@@ -284,10 +284,23 @@ impl SimState {
 
         // ── Cities ────────────────────────────────────────────────────────────
         for city in self.cities.values() {
-            sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2 WHERE id = $3")
+            sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2, wage_pool = $3, tax_collected_this_tick = $4, population_growth_rate = $5 WHERE id = $6")
                 .bind(city.population)
                 .bind(city.infrastructure_lvl)
+                .bind(self.get_wage_pool(city.id))
+                .bind(city.tax_collected_this_tick)
+                .bind(city.population_growth_rate)
                 .bind(city.id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        // ── Empires ───────────────────────────────────────────────────────────
+        for empire in self.empires.values() {
+            sqlx::query("UPDATE empires SET treasury_balance = $1, tax_rate = $2 WHERE id = $3")
+                .bind(self.get_empire_treasury(empire.id))
+                .bind(empire.tax_rate)
+                .bind(empire.id)
                 .execute(&mut *tx)
                 .await?;
         }
