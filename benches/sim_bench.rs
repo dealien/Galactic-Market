@@ -67,6 +67,8 @@ fn make_extraction_state(num_companies: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -130,6 +132,8 @@ fn make_market_state(num_orders: usize) -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -239,6 +243,8 @@ fn make_production_state(num_refineries: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.companies.insert(
@@ -299,6 +305,8 @@ fn make_decisions_state(num_companies: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.companies.insert(
@@ -427,6 +435,8 @@ fn make_spatial_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
     state.cities.insert(
@@ -440,6 +450,8 @@ fn make_spatial_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
     state
@@ -462,6 +474,8 @@ fn make_merchant_state(num_merchants: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 10000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
     }
@@ -515,6 +529,8 @@ fn make_advanced_market_state(num_orders: usize) -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -590,6 +606,7 @@ fn make_politics_state(num_empires: usize) -> SimState {
                 name: format!("Empire {i}"),
                 government_type: "Democracy".to_string(),
                 tax_rate_base: 0.1,
+                tax_rate: 0.05,
             },
         );
 
@@ -632,6 +649,8 @@ fn make_politics_state(num_empires: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -746,6 +765,8 @@ fn make_migration_state(num_cities: usize) -> SimState {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 

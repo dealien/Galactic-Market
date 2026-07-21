@@ -18,6 +18,8 @@ fn full_economy_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -160,6 +162,8 @@ fn test_market_clearing_balances() {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -241,4 +245,51 @@ fn test_market_clearing_balances() {
         (total_before - total_after).abs() < 0.001,
         "Total cash must be conserved through market clearing"
     );
+}
+
+#[tokio::test]
+async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyhow::Error> {
+    let _ = dotenvy::dotenv().ok();
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await?;
+
+    galactic_market::db::utils::clear_database(&pool).await?;
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
+    galactic_market::db::seed::run_seed(&pool).await?;
+
+    let mut state = galactic_market::db::load::load(&pool).await?;
+
+    state.add_to_wage_pool(1, 123.45);
+    state.add_city_tax(1, 56.78);
+
+    if let Some(city) = state.cities.get_mut(&1) {
+        city.population_growth_rate = 0.042;
+    }
+
+    state.add_to_empire_treasury(1, 999.99);
+
+    if let Some(emp) = state.empires.get_mut(&1) {
+        emp.tax_rate = 0.08;
+    }
+
+    state.flush_with_pulse(&pool).await?;
+
+    let reloaded_state = galactic_market::db::load::load(&pool).await?;
+
+    assert!((reloaded_state.get_wage_pool(1) - 180.23).abs() < 0.001); // add_city_tax added to wage_pool in memory
+
+    let city = reloaded_state.cities.get(&1).unwrap();
+    assert_eq!(city.tax_collected_this_tick, 56.78);
+    assert_eq!(city.population_growth_rate, 0.042);
+
+    assert_eq!(reloaded_state.get_empire_treasury(1), 999.99);
+
+    let emp = reloaded_state.empires.get(&1).unwrap();
+    assert_eq!(emp.tax_rate, 0.08);
+
+    Ok(())
 }

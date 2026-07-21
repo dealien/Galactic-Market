@@ -23,6 +23,7 @@ fn setup_test_state() -> SimState {
             name: "Empire 1".to_string(),
             government_type: "Democracy".to_string(),
             tax_rate_base: 0.1,
+            tax_rate: 0.05,
         },
     );
     state.empires.insert(
@@ -32,6 +33,7 @@ fn setup_test_state() -> SimState {
             name: "Empire 2".to_string(),
             government_type: "Democracy".to_string(),
             tax_rate_base: 0.1,
+            tax_rate: 0.05,
         },
     );
 
@@ -114,6 +116,8 @@ fn setup_test_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
     state.cities.insert(
@@ -127,6 +131,8 @@ fn setup_test_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -270,6 +276,8 @@ fn test_population_migration() {
             port_tier: 1,
             port_fee_per_unit: 0.0,
             port_max_throughput: 0,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
     state.cities.insert(
@@ -283,6 +291,8 @@ fn test_population_migration() {
             port_tier: 1,
             port_fee_per_unit: 0.0,
             port_max_throughput: 0,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 

@@ -2003,6 +2003,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         s.companies.insert(
@@ -2098,6 +2100,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2166,6 +2170,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2234,6 +2240,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2309,6 +2317,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2322,6 +2332,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2367,6 +2379,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2513,6 +2526,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2527,6 +2541,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2540,6 +2556,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2620,6 +2638,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2634,6 +2653,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2647,6 +2668,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2749,6 +2772,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2763,6 +2787,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2776,6 +2802,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2789,6 +2817,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -2879,6 +2909,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -2893,6 +2924,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -2906,6 +2939,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3026,6 +3061,7 @@ mod tests {
                 name: "Empire".into(),
                 government_type: "republic".into(),
                 tax_rate_base: 0.05,
+                tax_rate: 0.05,
             },
         );
 
@@ -3040,6 +3076,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -3053,6 +3091,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
         state.cities.insert(
@@ -3066,6 +3106,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.05,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3236,6 +3278,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3250,6 +3294,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 0.1,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3405,6 +3451,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 1.0,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3473,6 +3521,8 @@ mod tests {
                 port_tier: 1,
                 port_fee_per_unit: 1.0,
                 port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
             },
         );
 
@@ -3565,5 +3615,120 @@ mod tests {
         // The company's cash should remain unchanged since the bank is missing
         assert_eq!(state.companies[&1].cash, 1000.0);
         assert_eq!(state.bank_accounts[&1].balance, 5000.0);
+    }
+
+    #[test]
+    fn test_company_bank_deposit_excess_cash() {
+        let mut state = SimState::new();
+
+        // Setup a bank company
+        state.companies.insert(
+            999,
+            Company {
+                id: 999,
+                name: "Bank".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup a company with high cash (10000.0 > buffer * 1.5 where buffer is 5000)
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Rich Corp".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 10000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup a bank account for the company
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 1,
+                bank_company_id: 999,
+                balance: 0.0,
+                interest_rate: 0.05,
+            },
+        );
+
+        // Run decisions
+        run_decisions(&mut state, 1);
+
+        // Expected deposit is 10000.0 - 5000.0 = 5000.0
+        assert_eq!(state.companies[&1].cash, 5000.0);
+        assert_eq!(state.bank_accounts[&1].balance, 5000.0);
+        assert_eq!(state.companies[&999].cash, 6000.0);
+    }
+
+    #[test]
+    fn test_company_bank_withdraw_cash_for_operations() {
+        let mut state = SimState::new();
+
+        // Setup a bank company
+        state.companies.insert(
+            999,
+            Company {
+                id: 999,
+                name: "Bank".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 10000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup a company with low cash (1000.0 < buffer * 0.5 where buffer is 5000)
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Struggling Corp".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Setup a bank account for the company with some balance
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 1,
+                bank_company_id: 999,
+                balance: 4000.0,
+                interest_rate: 0.05,
+            },
+        );
+
+        // Run decisions
+        run_decisions(&mut state, 1);
+
+        // Expected withdraw is (5000.0 - 1000.0) = 4000.0
+        // Min of 4000.0 (needed), 4000.0 (account balance), 10000.0 (bank cash) -> 4000.0
+        assert_eq!(state.companies[&1].cash, 5000.0);
+        assert_eq!(state.bank_accounts[&1].balance, 0.0);
+        assert_eq!(state.companies[&999].cash, 6000.0);
     }
 }

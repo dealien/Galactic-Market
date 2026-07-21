@@ -14,6 +14,7 @@ fn setup_empire_state() -> SimState {
             name: "Test Empire".into(),
             government_type: "Republic".into(),
             tax_rate_base: 0.05,
+            tax_rate: 0.05,
         },
     );
 
@@ -60,6 +61,8 @@ fn setup_empire_state() -> SimState {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 
@@ -214,6 +217,8 @@ fn test_merchant_takes_loan_for_arbitrage() {
             port_tier: 1,
             port_fee_per_unit: 0.1,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         },
     );
 

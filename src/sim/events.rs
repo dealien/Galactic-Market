@@ -371,6 +371,8 @@ mod tests {
             port_tier: 1,
             port_fee_per_unit: 1.0,
             port_max_throughput: 1000,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
         };
         state.cities.insert(1, city);
 
@@ -411,12 +413,14 @@ mod tests {
             name: "Empire Alpha".to_string(),
             government_type: "Democracy".to_string(),
             tax_rate_base: 0.1,
+            tax_rate: 0.05,
         };
         let emp2 = crate::sim::state::Empire {
             id: 2,
             name: "Empire Beta".to_string(),
             government_type: "Dictatorship".to_string(),
             tax_rate_base: 0.1,
+            tax_rate: 0.05,
         };
         state.empires.insert(1, emp1);
         state.empires.insert(2, emp2);
