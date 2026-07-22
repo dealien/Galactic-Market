@@ -169,12 +169,13 @@ pub fn run_production(state: &mut SimState) {
                     None => continue,
                 };
 
-                // Only proceed if company has enough cash for labor
-                if company_mut.cash < total_labor_cost {
-                    continue;
+                if company_mut.cash >= total_labor_cost {
+                    company_mut.cash -= total_labor_cost;
+                } else {
+                    let shortfall = total_labor_cost - company_mut.cash;
+                    company_mut.cash = 0.0;
+                    company_mut.debt += shortfall;
                 }
-
-                company_mut.cash -= total_labor_cost;
             }
 
             // Credit wages to city wage pool
@@ -259,12 +260,13 @@ pub fn run_production(state: &mut SimState) {
                     None => continue,
                 };
 
-                // Only proceed if company has enough cash for labor
-                if company_mut.cash < total_labor_cost {
-                    continue;
+                if company_mut.cash >= total_labor_cost {
+                    company_mut.cash -= total_labor_cost;
+                } else {
+                    let shortfall = total_labor_cost - company_mut.cash;
+                    company_mut.cash = 0.0;
+                    company_mut.debt += shortfall;
                 }
-
-                company_mut.cash -= total_labor_cost;
             }
 
             // Credit wages to city wage pool

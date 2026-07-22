@@ -155,6 +155,9 @@ pub fn run_extraction(state: &mut SimState) {
 
         // Deplete the deposit
         deposit.size_remaining -= extract_qty;
+
+        // Pay wages to city wage pool
+        state.add_to_wage_pool(city_id, cost);
         extraction_count += 1;
 
         debug!(
@@ -165,11 +168,11 @@ pub fn run_extraction(state: &mut SimState) {
         );
 
         // Add to company inventory at its home city
-        let key = Inventory::key(company_id, city_id, deposit.resource_type_id);
+        let key = Inventory::key(company_id, city_id, target_resource_id);
         let entry = state.inventories.entry(key).or_insert(Inventory {
             company_id,
             city_id,
-            resource_type_id: deposit.resource_type_id,
+            resource_type_id: target_resource_id,
             quantity: 0,
         });
         entry.quantity += extract_qty;

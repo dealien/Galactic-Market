@@ -81,21 +81,19 @@ pub fn run_finance(state: &mut SimState) {
     }
 
     for (acc_id, _depositor_id, bank_id, yield_amt) in deposit_yields {
-        let mut actual_yield = 0.0;
-        if let Some(bank) = state.companies.get_mut(&bank_id) {
-            if bank.cash >= yield_amt {
-                bank.cash -= yield_amt;
-                actual_yield = yield_amt;
-            } else {
-                actual_yield = bank.cash;
-                bank.cash = 0.0;
-            }
-        }
+        // Accruing deposit interest is a ledger-only event (liability increase).
+        // It must not reduce bank.cash, which is only transferred upon withdrawal.
+        let bank_active = state
+            .companies
+            .get(&bank_id)
+            .map(|c| c.status == "active")
+            .unwrap_or(false);
 
-        if actual_yield > 0.0
+        if bank_active
+            && yield_amt > 0.0
             && let Some(account) = state.bank_accounts.get_mut(&acc_id)
         {
-            account.balance += actual_yield;
+            account.balance += yield_amt;
         }
     }
 
@@ -449,7 +447,7 @@ mod tests {
     }
 
     #[test]
-    fn test_deposit_interest_bank_insufficient_cash() {
+    fn test_deposit_interest_accrual_does_not_drain_bank_cash() {
         let mut state = SimState::new();
 
         // Bank company with very low cash
@@ -482,10 +480,10 @@ mod tests {
 
         run_finance(&mut state);
 
-        // Bank cash should decrease to 0.0
-        assert_eq!(state.companies[&1].cash, 0.0);
-        // Account balance should only increase by the 5.0 cash the bank had
-        assert_eq!(state.bank_accounts[&1].balance, 1045.0);
+        // Bank cash should be unaffected by accrual
+        assert_eq!(state.companies[&1].cash, 5.0);
+        // Account balance should increase by the full 10.4 interest
+        assert_eq!(state.bank_accounts[&1].balance, 1050.4);
     }
 
     #[test]
@@ -522,8 +520,8 @@ mod tests {
 
         run_finance(&mut state);
 
-        // Bank cash should decrease by 10.4
-        assert_eq!(state.companies[&1].cash, 989.6);
+        // Bank cash should be unaffected by accrual
+        assert_eq!(state.companies[&1].cash, 1000.0);
         // Account balance should increase by 10.4
         assert_eq!(state.bank_accounts[&1].balance, 1050.4);
     }

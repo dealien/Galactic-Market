@@ -124,7 +124,17 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 _ => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
             };
 
-            let actual_buyer_cash = state.companies[&buy_company_id].cash;
+            let actual_buyer_cash = if buy_company_id < 0 {
+                // Sentinels (e.g. Empire Relief) are fully paid up front.
+                // We treat their available cash as sufficient for the order.
+                buy_qty as f64 * clearing_price
+            } else {
+                state
+                    .companies
+                    .get(&buy_company_id)
+                    .map(|c| c.cash)
+                    .unwrap_or(0.0)
+            };
             let affordable_by_buyer = if clearing_price > 0.0 {
                 (actual_buyer_cash / clearing_price) as i64
             } else {
@@ -173,11 +183,27 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     seller_inv.quantity -= qty;
                 }
 
+                let target_buyer_company_id = if buy_company_id < 0 {
+                    // Sentinels (e.g. Empire Relief) deposit the purchased goods directly
+                    // into the city's consumer company inventory to feed the population.
+                    state
+                        .city_consumer_ids
+                        .get(&city_id)
+                        .copied()
+                        .unwrap_or(buy_company_id)
+                } else {
+                    buy_company_id
+                };
+
                 let buyer_inv = state
                     .inventories
-                    .entry(Inventory::key(buy_company_id, city_id, resource_type_id))
+                    .entry(Inventory::key(
+                        target_buyer_company_id,
+                        city_id,
+                        resource_type_id,
+                    ))
                     .or_insert(Inventory {
-                        company_id: buy_company_id,
+                        company_id: target_buyer_company_id,
                         city_id,
                         resource_type_id,
                         quantity: 0,
@@ -509,6 +535,50 @@ mod tests {
         // Port fee: 10 * 0.1 = 1.0, so seller gets 250 - 1 = 249
         assert_eq!(state.companies[&1].cash, 1249.0); // 1000 + 250 - 1 (port fee)
         assert_eq!(state.companies[&2].cash, 750.0); // 1000 - 250
+    }
+
+    #[test]
+    fn test_clear_orders_negative_company_id_does_not_panic() {
+        let mut state = setup_test_state();
+
+        // Seller: limit sell 10 at 5.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Empire Relief (company_id -1), limit buy 10 at 5.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: -1, // Negative ID
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders, this should not panic!
+        clear_orders(&mut state, 1);
+
+        // Seller should be paid
+        assert_eq!(state.companies[&1].cash, 1049.0); // 1000 + 50 - 1 (port fee)
+        // Buyer is negative ID, not in companies, so they are ignored in cash subtraction
     }
 
     #[test]

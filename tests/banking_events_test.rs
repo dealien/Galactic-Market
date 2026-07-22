@@ -341,3 +341,98 @@ fn test_debt_reconciliation_after_interest_shortfall() {
         loan_balance
     );
 }
+
+#[test]
+fn test_llr_emergency_lending_and_repayment() {
+    let mut state = setup_empire_state();
+    state.company_to_empire.insert(100, 1);
+    state.company_to_empire.insert(200, 1);
+    state.prime_rates.insert(1, 0.05);
+
+    // Bank 200 has 100k cash and 0 deposits. So reserve is fine.
+    // Let's create depositor accounts at bank 200 with total balance 500k.
+    state.bank_accounts.insert(
+        1,
+        galactic_market::sim::state::BankAccount {
+            id: 1,
+            company_id: 1,
+            bank_company_id: 200,
+            balance: 500000.0,
+            interest_rate: 0.02,
+        },
+    );
+
+    // Minimum reserve is 10% of 500k = 50k.
+    // Currently, bank cash is 100k. So no bailout is needed.
+    // Set bank cash to 10k (below 50k min reserve).
+    state.companies.get_mut(&200).unwrap().cash = 10000.0;
+    state.companies.get_mut(&200).unwrap().next_eval_tick = 1;
+
+    // Run decisions phase to trigger LLR loan
+    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+
+    // Bank cash should now be restored to 50k (min_reserve).
+    // So 40k cash was lent by Central Bank.
+    assert_eq!(state.companies[&200].cash, 50000.0);
+
+    // There should be a loan record from Central Bank 100 to Commercial Bank 200
+    let llr_loan_id = {
+        let llr_loans: Vec<_> = state
+            .loans
+            .values()
+            .filter(|l| l.company_id == 200 && l.lender_company_id == Some(100))
+            .collect();
+        assert_eq!(llr_loans.len(), 1);
+        assert_eq!(llr_loans[0].balance, 40000.0);
+        llr_loans[0].id
+    };
+
+    // Let's test repayment.
+    // Abundant cash threshold is 2 * min_reserve = 100k.
+    // Set bank cash to 120k.
+    // Excess cash is 120k - 1.5 * 50k = 45k.
+    // So bank should repay the full 40k loan principal.
+    state.companies.get_mut(&200).unwrap().cash = 120000.0;
+    state.companies.get_mut(&200).unwrap().next_eval_tick = 2;
+
+    // Run decisions again
+    galactic_market::sim::decisions::run_decisions(&mut state, 2);
+
+    // Loan should be fully repaid
+    let loan = state.loans.get(&llr_loan_id).unwrap();
+    assert_eq!(loan.balance, 0.0);
+    // Bank cash should decrease by 40k to 80k
+    assert_eq!(state.companies[&200].cash, 80000.0);
+    // Central Bank cash should increase by 40k
+    assert_eq!(state.companies[&100].cash, 41000.0); // 1000 + 40000
+}
+
+#[test]
+fn test_empire_relief_refund_mechanism() {
+    let mut state = setup_empire_state();
+    state.empire_treasuries.insert(1, 10000.0);
+
+    // Post a relief order with negative company ID (-1) for 10 units at price 15.0 (total 150.0)
+    state.market_orders.insert(
+        1,
+        galactic_market::sim::state::MarketOrder {
+            id: 1,
+            city_id: 1,
+            company_id: -1, // Empire 1 relief
+            resource_type_id: 5,
+            order_type: "buy".into(),
+            order_kind: "limit".into(),
+            price: 15.0,
+            quantity: 10,
+            created_tick: 1,
+        },
+    );
+
+    // Run run_empire_relief
+    // This should clean up the old relief order and refund the 150.0 to empire treasury 1.
+    // Since treasury was 10000.0, it should become 10150.0.
+    galactic_market::sim::decisions::run_empire_relief(&mut state, 1);
+
+    assert_eq!(state.get_empire_treasury(1), 10150.0);
+    assert!(state.market_orders.is_empty());
+}

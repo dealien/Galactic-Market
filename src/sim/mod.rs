@@ -284,10 +284,11 @@ impl SimState {
 
         // ── Cities ────────────────────────────────────────────────────────────
         for city in self.cities.values() {
+            let wage_pool = self.get_wage_pool(city.id);
             sqlx::query("UPDATE cities SET population = $1, infrastructure_lvl = $2, wage_pool = $3, tax_collected_this_tick = $4, population_growth_rate = $5 WHERE id = $6")
                 .bind(city.population)
                 .bind(city.infrastructure_lvl)
-                .bind(self.get_wage_pool(city.id))
+                .bind(wage_pool)
                 .bind(city.tax_collected_this_tick)
                 .bind(city.population_growth_rate)
                 .bind(city.id)

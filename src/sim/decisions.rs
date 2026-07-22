@@ -369,6 +369,90 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 .map(|a| a.balance)
                 .sum();
 
+            // Lender of Last Resort (LLR) Emergency Injection
+            let bank_cash = state.companies[&company_id].cash;
+            let min_reserve = total_deposits * 0.10;
+            if bank_cash < min_reserve {
+                let borrow_amount = min_reserve - bank_cash;
+                // Find central bank in the same empire
+                if let Some(&central_bank_id) = state.companies.keys().find(|&&id| {
+                    state.companies[&id].company_type == "central_bank" && {
+                        state.company_to_empire.get(&id) == state.company_to_empire.get(&company_id)
+                    }
+                }) {
+                    // Credit cash to the commercial bank (emergency liquidity)
+                    state.companies.get_mut(&company_id).unwrap().cash += borrow_amount;
+
+                    // Create emergency loan record
+                    let loan_id = state.next_loan_id();
+                    state.add_loan(crate::sim::state::Loan {
+                        id: loan_id,
+                        company_id,
+                        lender_company_id: Some(central_bank_id),
+                        principal: borrow_amount,
+                        interest_rate: prime_rate * 1.5, // Penalty interest rate
+                        balance: borrow_amount,
+                    });
+
+                    tracing::info!(
+                        bank_id = company_id,
+                        central_bank_id,
+                        amount = borrow_amount,
+                        "LLR Alert: Commercial Bank received emergency liquidity loan from Central Bank"
+                    );
+                }
+            }
+
+            // Repay Central Bank loan if cash is abundant
+            let bank_cash_updated = state.companies[&company_id].cash;
+            if bank_cash_updated > min_reserve * 2.0 {
+                // Find Central Bank loans for this bank
+                let mut emergency_loans = Vec::new();
+                for loan in state.loans.values() {
+                    if loan.company_id == company_id
+                        && let Some(lender_id) = loan.lender_company_id
+                    {
+                        let is_cb = state
+                            .companies
+                            .get(&lender_id)
+                            .map(|c| c.company_type == "central_bank")
+                            .unwrap_or(false);
+                        if is_cb && loan.balance > 0.0 {
+                            emergency_loans.push(loan.id);
+                        }
+                    }
+                }
+
+                let mut excess_cash = bank_cash_updated - min_reserve * 1.5;
+                for loan_id in emergency_loans {
+                    if excess_cash <= 0.0 {
+                        break;
+                    }
+                    let (repay_amt, cb_id) = {
+                        let loan = state.loans.get(&loan_id).unwrap();
+                        (
+                            excess_cash.min(loan.balance),
+                            loan.lender_company_id.unwrap(),
+                        )
+                    };
+
+                    if repay_amt > 0.0 {
+                        // Repay loan
+                        state.loans.get_mut(&loan_id).unwrap().balance -= repay_amt;
+                        state.companies.get_mut(&company_id).unwrap().cash -= repay_amt;
+                        state.companies.get_mut(&cb_id).unwrap().cash += repay_amt;
+                        excess_cash -= repay_amt;
+
+                        tracing::info!(
+                            bank_id = company_id,
+                            central_bank_id = cb_id,
+                            amount = repay_amt,
+                            "LLR Alert: Commercial Bank repaid emergency liquidity loan to Central Bank"
+                        );
+                    }
+                }
+            }
+
             let total_loans: f64 = state
                 .loans
                 .values()
@@ -913,16 +997,28 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 let facility = state.facilities.get_mut(&facility_id).unwrap();
                 if facility.target_resource_id != Some(best_id) {
                     let old_target = facility.target_resource_id;
-                    facility.target_resource_id = Some(best_id);
-                    if old_target.is_some() {
-                        facility.setup_ticks_remaining = 2;
-                        state.companies.get_mut(&company_id).unwrap().cash -= 50.0;
+
+                    // Evaluate if the switch is financially viable
+                    let retooling_fee = 50.0;
+                    let cycle_cost = facility.capacity as f64 * selected_ore_cost;
+                    let required_cash = retooling_fee + 3.0 * cycle_cost;
+                    let company_cash = state.companies[&company_id].cash;
+
+                    // Switch if first target initialization (free) or if cash is sufficient for 3 cycles and margin is positive
+                    if old_target.is_none()
+                        || (best_overall_margin > 0.0 && company_cash >= required_cash)
+                    {
+                        facility.target_resource_id = Some(best_id);
+                        if old_target.is_some() {
+                            facility.setup_ticks_remaining = 2;
+                            state.companies.get_mut(&company_id).unwrap().cash -= retooling_fee;
+                        }
+                        debug!(
+                            company_id,
+                            new_target = best_id,
+                            "Miner switched target resource"
+                        );
                     }
-                    debug!(
-                        company_id,
-                        new_target = best_id,
-                        "Miner switched target resource"
-                    );
                 }
             }
 
@@ -1075,6 +1171,141 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
             }
         }
 
+        // ─── Plantation AI ───────────────────────────────────────────────────
+        let plantation_info = state
+            .facilities
+            .values()
+            .find(|f| {
+                f.company_id == company_id
+                    && f.city_id == home_city_id
+                    && f.facility_type == "plantation"
+            })
+            .map(|f| f.capacity);
+
+        if let Some(facility_capacity) = plantation_info {
+            let food_id = state
+                .resource_types
+                .values()
+                .find(|r| r.name.contains("Food") || r.name.contains("Ration"))
+                .map(|r| r.id)
+                .unwrap_or(7); // Default fallback
+
+            let key = Inventory::key(company_id, home_city_id, food_id);
+            let inv_opt = state.inventories.get(&key).cloned();
+            if let Some(inv) = inv_opt
+                && inv.quantity > 0
+            {
+                // Try to ship food to other starving cities if there is a higher price
+                let mut best_target_city = None;
+                let mut best_target_profit = 0.0;
+                let mut best_target_info = None;
+                let base_cost = 2.0; // labor cost per run
+                let local_price = state
+                    .ema_prices
+                    .get(&(home_city_id, food_id))
+                    .copied()
+                    .unwrap_or(base_cost * 1.5);
+
+                for &target_city_id in state.cities.keys() {
+                    if target_city_id == home_city_id {
+                        continue;
+                    }
+                    let transport = get_transport_info(state, home_city_id, target_city_id);
+                    let dest_price = state
+                        .ema_prices
+                        .get(&(target_city_id, food_id))
+                        .copied()
+                        .unwrap_or(base_cost * 2.0);
+                    let margin = dest_price - local_price - transport.cost_per_unit;
+                    if margin > best_target_profit {
+                        best_target_profit = margin;
+                        best_target_city = Some(target_city_id);
+                        best_target_info = Some(transport);
+                    }
+                }
+
+                let should_ship = if best_target_city.is_some() {
+                    best_target_profit > (base_cost * 0.05)
+                } else {
+                    false
+                };
+
+                let mut shipped = false;
+                if should_ship {
+                    let target_city = best_target_city.unwrap();
+                    let transport = best_target_info.unwrap();
+                    let move_qty = inv.quantity;
+                    let total_cost = transport.cost_per_unit * move_qty as f64;
+                    let company_cash = state.companies.get(&company_id).unwrap().cash;
+
+                    if company_cash >= total_cost {
+                        state.companies.get_mut(&company_id).unwrap().cash -= total_cost;
+                        if let Some(mut_inv) = state.inventories.get_mut(&key) {
+                            mut_inv.quantity -= move_qty;
+                        }
+                        let route_id = state.next_trade_route_id();
+                        state.trade_routes.insert(
+                            route_id,
+                            TradeRoute {
+                                id: route_id,
+                                company_id,
+                                origin_city_id: home_city_id,
+                                dest_city_id: target_city,
+                                resource_type_id: food_id,
+                                quantity: move_qty,
+                                arrival_tick: current_tick + transport.ticks,
+                            },
+                        );
+                        debug!(
+                            company_id,
+                            move_qty,
+                            from = home_city_id,
+                            to = target_city,
+                            "Plantation shipped food"
+                        );
+                        shipped = true;
+                    }
+                }
+
+                if !shipped {
+                    let base_ask = base_cost * 1.15;
+                    let market_price = state
+                        .ema_prices
+                        .get(&(home_city_id, food_id))
+                        .copied()
+                        .unwrap_or(base_ask * 1.5);
+                    let ticks_since_trade = current_tick.saturating_sub(last_trade_tick);
+                    let ask_price = if inv.quantity > (facility_capacity * 10) as i64
+                        || ticks_since_trade > 100
+                    {
+                        base_cost * 0.95 // Liquidation!
+                    } else if inv.quantity > (facility_capacity * 5) as i64
+                        || ticks_since_trade > 50
+                    {
+                        base_cost * 1.01
+                    } else if inv.quantity > (facility_capacity * 2) as i64
+                        || ticks_since_trade > 20
+                    {
+                        base_ask.min(market_price * 0.85)
+                    } else {
+                        base_ask.max(market_price * 0.98)
+                    };
+
+                    orders_to_post.push(MarketOrder {
+                        id: 0,
+                        city_id: home_city_id,
+                        company_id,
+                        resource_type_id: food_id,
+                        order_type: "sell".into(),
+                        order_kind: "limit".into(),
+                        price: ask_price,
+                        quantity: inv.quantity,
+                        created_tick: current_tick,
+                    });
+                }
+            }
+        }
+
         // ─── Refinery AI ──────────────────────────────────────────────────────
         let refineries: Vec<(i32, i32)> = state
             .facilities
@@ -1140,10 +1371,24 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
                 }
 
                 if significant_change {
-                    facility.production_ratios = Some(new_ratios.clone());
-                    facility.setup_ticks_remaining = 3;
-                    state.companies.get_mut(&company_id).unwrap().cash -= 200.0;
-                    debug!(company_id, "Refinery switched production ratios");
+                    // Compute expected cycle cost for 1 full capacity production run
+                    let mut cycle_cost = 0.0;
+                    for (_id, margin, cost_basis, _, recipe) in &recipes_evaluated {
+                        let ratio = margin / total_positive_margin;
+                        let runs = (facility.capacity as f64 * ratio).round();
+                        cycle_cost += (cost_basis + recipe.labor_cost_per_run) * runs;
+                    }
+                    let retooling_fee = 200.0;
+                    let required_cash = retooling_fee + 3.0 * cycle_cost;
+                    let company_cash = state.companies[&company_id].cash;
+
+                    // Only retool if first initialization (no existing ratios) or if cash is sufficient
+                    if current_ratios.is_empty() || company_cash >= required_cash {
+                        facility.production_ratios = Some(new_ratios.clone());
+                        facility.setup_ticks_remaining = 3;
+                        state.companies.get_mut(&company_id).unwrap().cash -= retooling_fee;
+                        debug!(company_id, "Refinery switched production ratios");
+                    }
                 }
 
                 for (_r_id, _margin, cost_basis, out_price, recipe) in recipes_evaluated {
@@ -1359,6 +1604,27 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
 /// run_empire_relief(&mut state, 1);
 /// ```
 pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
+    // Refund unmatched relief orders back to empire treasuries before clearing them
+    let mut refunds = std::collections::HashMap::new();
+    for order in state.market_orders.values() {
+        if order.company_id < 0 {
+            let empire_id = -order.company_id;
+            let refund_amount = order.quantity as f64 * order.price;
+            *refunds.entry(empire_id).or_insert(0.0) += refund_amount;
+        }
+    }
+    for (empire_id, refund) in refunds {
+        if refund > 0.0 {
+            state.add_to_empire_treasury(empire_id, refund);
+            tracing::info!(
+                empire_id,
+                refund,
+                "Empire Relief Alert: Refunded unused relief budget to treasury"
+            );
+        }
+    }
+    state.market_orders.retain(|_, order| order.company_id >= 0);
+
     // Constants
     const STARVATION_THRESHOLD: f64 = 0.40;
     const RELIEF_PRICE_PER_UNIT: f64 = 15.0;
@@ -1431,11 +1697,8 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
         return;
     }
 
-    // Type for storing relief orders: (city_id, relief_units, relief_cost) per empire
-    type EmpireReliefData = (Vec<(i32, i64, f64)>, f64);
-
     // Check if empire can afford relief (up to max % of treasury)
-    let mut empire_relief_map: HashMap<i32, EmpireReliefData> = HashMap::new();
+    let mut empire_relief_map = std::collections::HashMap::new();
     for (city_id, empire_id, relief_units, relief_cost, _fulfillment) in relief_orders {
         empire_relief_map
             .entry(empire_id)
@@ -1507,12 +1770,12 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
             relief_posted_count += 1;
             relief_posted_units += scaled_units;
 
-            debug!(
-                empire_id,
-                city_id,
+            tracing::info!(
+                empire_id = *empire_id,
+                city_id = *city_id,
                 relief_units = scaled_units,
                 cost = scaled_cost,
-                "Empire relief order posted"
+                "Empire Relief Alert: Posted emergency food relief order for starving city"
             );
         }
 
