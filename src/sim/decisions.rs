@@ -2084,6 +2084,37 @@ mod tests {
     // Phase 2: Food Balance Analysis Tests
     // ──────────────────────────────────────────────────────────────────────────────
 
+    /// Verifies that if no food resource exists in the simulation, cities correctly
+    /// calculate a food deficit, 0 fulfillment ratio, and trigger the needs_relief flag.
+    #[test]
+    fn test_analyze_city_food_balance_no_food_resource() {
+        let mut state = SimState::new();
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City A".into(),
+                population: 100,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.05,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        // Analyze when no food resource exists
+        analyze_city_food_balance(&mut state);
+
+        let balance = &state.city_food_balance[&1];
+        assert_eq!(balance.food_surplus, -100); // 0 inventory - 100 population
+        assert_eq!(balance.fulfillment_ratio, 0.0);
+        assert!(balance.needs_relief); // 0.0 < 0.4
+        assert!(!balance.has_surplus);
+    }
+
     #[test]
     fn test_surplus_detection() {
         let mut state = SimState::new();
