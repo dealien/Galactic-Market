@@ -8,6 +8,8 @@ pub mod decisions;
 pub mod events;
 /// Financial accounting, profitability, and bankruptcy logic.
 pub mod finance;
+/// Centralized logging configuration and deduplication manager.
+pub mod logger;
 /// Cargo routing, transit, and logistics execution.
 pub mod logistics;
 /// Market clearing, price discovery, and order matching.
@@ -30,7 +32,8 @@ use comfy_table::presets::UTF8_FULL_CONDENSED;
 use sqlx::PgPool;
 use tracing::info;
 
-// Re-export the primary state type for ergonomic use by callers
+// Re-export the primary state and logger types for ergonomic use by callers
+pub use logger::{LogCategory, LogCategoryConfig, SimLogger};
 pub use state::SimState;
 
 /// Flush interval: write dirty state to the database every N ticks.

@@ -8,6 +8,7 @@ use rand::Rng;
 use std::collections::HashMap;
 use tracing::debug;
 
+use crate::sim::logger::LogCategory;
 use crate::sim::logistics::get_transport_info;
 use crate::sim::state::{Facility, Inventory, MarketOrder, SimState, TradeRoute};
 
@@ -1616,11 +1617,13 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
     for (empire_id, refund) in refunds {
         if refund > 0.0 {
             state.add_to_empire_treasury(empire_id, refund);
-            tracing::info!(
-                empire_id,
-                refund,
-                "Empire Relief Alert: Refunded unused relief budget to treasury"
-            );
+            if state.should_log(LogCategory::EmpireRelief, &format!("refund:{empire_id}")) {
+                tracing::info!(
+                    empire_id,
+                    refund,
+                    "Empire Relief Alert: Refunded unused relief budget to treasury"
+                );
+            }
         }
     }
     state.market_orders.retain(|_, order| order.company_id >= 0);
@@ -1770,13 +1773,18 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
             relief_posted_count += 1;
             relief_posted_units += scaled_units;
 
-            tracing::info!(
-                empire_id = *empire_id,
-                city_id = *city_id,
-                relief_units = scaled_units,
-                cost = scaled_cost,
-                "Empire Relief Alert: Posted emergency food relief order for starving city"
-            );
+            if state.should_log(
+                LogCategory::EmpireRelief,
+                &format!("relief:{empire_id}:{city_id}"),
+            ) {
+                tracing::info!(
+                    empire_id = *empire_id,
+                    city_id = *city_id,
+                    relief_units = scaled_units,
+                    cost = scaled_cost,
+                    "Empire Relief Alert: Posted emergency food relief order for starving city"
+                );
+            }
         }
 
         // Deduct from empire treasury
@@ -3730,5 +3738,26 @@ mod tests {
         assert_eq!(state.companies[&1].cash, 5000.0);
         assert_eq!(state.bank_accounts[&1].balance, 0.0);
         assert_eq!(state.companies[&999].cash, 6000.0);
+    }
+
+    #[test]
+    fn test_empire_relief_logger_deduplication() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        // Initial log check returns true
+        assert!(state.should_log(LogCategory::EmpireRelief, "refund:1"));
+        // Immediate duplicate returns false
+        assert!(!state.should_log(LogCategory::EmpireRelief, "refund:1"));
+
+        // Initial log check for city relief returns true
+        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
+        // Immediate duplicate returns false
+        assert!(!state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
+
+        // Advance 100 ticks to 101 -> allowed again
+        state.tick = 101;
+        assert!(state.should_log(LogCategory::EmpireRelief, "refund:1"));
+        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
     }
 }
