@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use crate::sim::logger::{LogCategory, SimLogger};
+
 /// A city in the simulation.
 #[derive(Debug, Clone)]
 pub struct City {
@@ -619,6 +621,9 @@ pub struct SimState {
     /// Phase 2d: Last tick when opportunities were computed for each merchant.
     /// Used to control cache invalidation (recompute every 5 ticks).
     pub merchant_last_scan: HashMap<i32, u64>,
+
+    /// Centralized simulation logger managing log rate-limiting and deduplication.
+    pub logger: SimLogger,
 }
 
 impl Default for SimState {
@@ -689,7 +694,25 @@ impl SimState {
             city_food_balance: HashMap::new(),
             merchant_opportunities: HashMap::new(),
             merchant_last_scan: HashMap::new(),
+            logger: SimLogger::new(),
         }
+    }
+
+    /// Evaluates whether a log entry for `(category, key)` should be emitted at the current tick.
+    ///
+    /// Delegates to internal [`SimLogger::should_log`] using `self.tick`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::SimState;
+    /// use galactic_market::sim::logger::LogCategory;
+    ///
+    /// let mut state = SimState::new();
+    /// assert!(state.should_log(LogCategory::EmpireRelief, "emp_1_refund"));
+    /// ```
+    pub fn should_log(&mut self, category: LogCategory, key: &str) -> bool {
+        self.logger.should_log(category, key, self.tick)
     }
 
     /// Generate a unique order ID for this tick.
