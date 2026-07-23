@@ -3762,4 +3762,389 @@ mod tests {
         assert_eq!(state.bank_accounts[&1].balance, 0.0);
         assert_eq!(state.companies[&999].cash, 6000.0);
     }
+    #[test]
+    fn test_central_bank_high_debt() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05);
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 100.0,
+                debt: 50.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // debt (50) > cash (100) * 0.4 (40) -> Rate should increase by 0.005 from 0.05
+        assert!((state.prime_rates[&empire_id] - 0.055).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_central_bank_buys_food_during_famine() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05);
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        // Add famine event
+        state.active_events.insert(
+            1,
+            crate::sim::state::ActiveEvent {
+                id: 1,
+                event_type: "famine".into(),
+                target_id: Some((1, 0)),
+                start_tick: 1,
+                end_tick: 10,
+                severity: 1.0,
+                flavor_text: None,
+            },
+        );
+
+        // Add a food resource
+        let food_id = 100;
+        state.resource_types.insert(
+            food_id,
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Basic Food".into(),
+                category: "food".into(),
+                is_vital: true,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 200000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // Central bank should have posted a buy order for food
+        let buy_orders: Vec<_> = state
+            .market_orders
+            .values()
+            .filter(|o| {
+                o.company_id == central_bank_id
+                    && o.resource_type_id == food_id
+                    && o.order_type == "buy"
+            })
+            .collect();
+        assert_eq!(buy_orders.len(), 1);
+
+        // price should be 1.5 * ema_price (50.0 default if missing = 75.0)
+        assert!((buy_orders[0].price - 75.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_central_bank_famine_relief_insufficient_cash() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05);
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        // Add famine event
+        state.active_events.insert(
+            1,
+            crate::sim::state::ActiveEvent {
+                id: 1,
+                event_type: "famine".into(),
+                target_id: Some((1, 0)),
+                start_tick: 1,
+                end_tick: 10,
+                severity: 1.0,
+                flavor_text: None,
+            },
+        );
+
+        // Add a food resource
+        let food_id = 100;
+        state.resource_types.insert(
+            food_id,
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Basic Food".into(),
+                category: "food".into(),
+                is_vital: true,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 50000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        ); // cash < 100_000.0
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // Central bank should NOT have posted a buy order for food because cash < 100,000
+        let buy_orders: Vec<_> = state
+            .market_orders
+            .values()
+            .filter(|o| {
+                o.company_id == central_bank_id
+                    && o.resource_type_id == food_id
+                    && o.order_type == "buy"
+            })
+            .collect();
+        assert_eq!(buy_orders.len(), 0);
+    }
+
+    #[test]
+    fn test_commercial_bank_emergency_injection_and_repayment() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05); // initial prime rate
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 1000000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(central_bank_id, empire_id);
+
+        let comm_bank_id = 2;
+        // This time, bank has MORE cash than min_reserve * 2 (100 * 2 = 200)
+        // Cash = 500, min_reserve = 100, excess_cash = 500 - 150 = 350
+        state.companies.insert(
+            comm_bank_id,
+            crate::sim::state::Company {
+                id: comm_bank_id,
+                name: "Commercial Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 500.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(comm_bank_id, empire_id);
+
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 99,
+                bank_company_id: comm_bank_id,
+                balance: 1000.0, // min reserve is 100.0
+                interest_rate: 0.02,
+            },
+        );
+
+        let loan_id = 1;
+        state.add_loan(crate::sim::state::Loan {
+            id: loan_id,
+            company_id: comm_bank_id,
+            lender_company_id: Some(central_bank_id),
+            principal: 90.0,
+            interest_rate: 0.0675,
+            balance: 90.0,
+        });
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // the loan balance should be paid off. (350 > 90)
+        let loan = state.loans.get(&loan_id).unwrap();
+        assert_eq!(loan.balance, 0.0);
+    }
 }

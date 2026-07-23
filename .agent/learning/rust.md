@@ -57,3 +57,7 @@
 ## $(date +%Y-%m-%d) - SimState Setup and Missing Entity Handling
 **Learning:** Functions that iterate over multiple cross-referenced entities within `SimState` (e.g. `analyze_city_food_balance` scanning cities, consumer ids, and inventories) must gracefully handle missing references since the simulation state is highly dynamic. For instance, when analyzing food balances, `food_resource_id` and `consumer_co_id` could be `None`. The logic rightly defaults `food_in_inventory` to 0.0 in these cases.
 **Action:** When testing simulation components that rely on interrelated entities, actively construct test cases where specific relationships (like a missing resource type) are broken. These missing-data edge cases are common in dynamic simulations and provide crucial coverage for fallback and default behaviors.
+
+## $(date +%Y-%m-%d) - Appending Tests hygiene and File cleanup
+**Learning:** Adding unit tests at the end of files without verifying if the file already ends with a `}` (e.g. `mod tests { ... }`) can result in compilation errors due to misplaced or missing braces. Also, generating temporary text and python scripts directly in the repo root without cleaning up leads to code review failures due to poor repository hygiene.
+**Action:** Always parse the file to correctly insert new tests inside the `#[cfg(test)] mod tests` block rather than appending blindly. Delete any scratchpad text files, `lcov.info`, or helper scripts immediately after use.
