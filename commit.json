@@ -1,7 +1,0 @@
-{
-  "title": "🔬 Argus: Test analyze_city_food_balance",
-  "body": "Add tests for analyze_city_food_balance targeting missing food resource edge case.",
-  "intent": "To cover the unexecuted edge case when testing city food balance without food.",
-  "context": "Argus test coverage improvements.",
-  "module": "sim::decisions"
-}
