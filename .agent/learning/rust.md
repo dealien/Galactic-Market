@@ -61,3 +61,7 @@
 ## $(date +%Y-%m-%d) - Appending Tests hygiene and File cleanup
 **Learning:** Adding unit tests at the end of files without verifying if the file already ends with a `}` (e.g. `mod tests { ... }`) can result in compilation errors due to misplaced or missing braces. Also, generating temporary text and python scripts directly in the repo root without cleaning up leads to code review failures due to poor repository hygiene.
 **Action:** Always parse the file to correctly insert new tests inside the `#[cfg(test)] mod tests` block rather than appending blindly. Delete any scratchpad text files, `lcov.info`, or helper scripts immediately after use.
+
+## $(date +%Y-%m-%d) - Epsilon Comparison for Penalty Rates
+**Learning:** When calculating complex economic outcomes like penalty interest rates applied by central banks (`loan.interest_rate = prime_rate * 1.5`), direct floating-point equality checks (e.g., `assert_eq!`) are prone to fail due to minor precision issues (e.g., `0.07500000000000001` vs `0.075`).
+**Action:** When asserting floating-point equality in simulation tests, use an absolute difference with a tolerance (e.g., `< 1e-6`) rather than `f64::EPSILON` or exact equality to avoid precision-related panics.

@@ -4076,6 +4076,122 @@ mod tests {
     }
 
     #[test]
+    fn test_commercial_bank_emergency_injection() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05); // initial prime rate
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 1000000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(central_bank_id, empire_id);
+
+        let comm_bank_id = 2;
+        // Bank cash is LESS than min_reserve
+        // Cash = 10, min_reserve = 100 (10% of 1000)
+        state.companies.insert(
+            comm_bank_id,
+            crate::sim::state::Company {
+                id: comm_bank_id,
+                name: "Commercial Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 10.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(comm_bank_id, empire_id);
+
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 99,
+                bank_company_id: comm_bank_id,
+                balance: 1000.0, // min reserve is 100.0
+                interest_rate: 0.02,
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // Bank cash should be restored to min_reserve (100.0)
+        let comm_bank = state.companies.get(&comm_bank_id).unwrap();
+        assert_eq!(comm_bank.cash, 100.0);
+
+        // An emergency loan of 90.0 should be created
+        let loans: Vec<_> = state
+            .loans
+            .values()
+            .filter(|l| {
+                l.company_id == comm_bank_id && l.lender_company_id == Some(central_bank_id)
+            })
+            .collect();
+        assert_eq!(loans.len(), 1);
+        let loan = loans[0];
+        assert_eq!(loan.balance, 90.0);
+        assert_eq!(loan.principal, 90.0);
+        // Penalty interest rate should be prime_rate * 1.5
+        // We use an epsilon comparison for floats to avoid precision issues
+        assert!((loan.interest_rate - (0.05 * 1.5)).abs() < 1e-6);
+    }
+
+    #[test]
     fn test_commercial_bank_emergency_injection_and_repayment() {
         let mut state = crate::sim::SimState::new();
         let empire_id = 1;
