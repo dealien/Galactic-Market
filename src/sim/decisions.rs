@@ -1773,18 +1773,25 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
             relief_posted_count += 1;
             relief_posted_units += scaled_units;
 
-            if state.should_log(
-                LogCategory::EmpireRelief,
-                &format!("relief:{empire_id}:{city_id}"),
-            ) {
-                tracing::info!(
-                    empire_id = *empire_id,
-                    city_id = *city_id,
-                    relief_units = scaled_units,
-                    cost = scaled_cost,
-                    "Empire Relief Alert: Posted emergency food relief order for starving city"
-                );
-            }
+            debug!(
+                empire_id = *empire_id,
+                city_id = *city_id,
+                relief_units = scaled_units,
+                cost = scaled_cost,
+                "Empire Relief Alert: Posted emergency food relief order for starving city"
+            );
+        }
+
+        if relief_posted_count > 0
+            && state.should_log(LogCategory::EmpireRelief, &format!("relief:{empire_id}"))
+        {
+            tracing::info!(
+                empire_id = *empire_id,
+                cities_relieved = relief_posted_count,
+                total_units = relief_posted_units,
+                total_cost = effective_cost,
+                "Empire Relief Alert: Posted emergency food relief orders for starving cities"
+            );
         }
 
         // Deduct from empire treasury
@@ -3781,15 +3788,15 @@ mod tests {
         // Immediate duplicate returns false
         assert!(!state.should_log(LogCategory::EmpireRelief, "refund:1"));
 
-        // Initial log check for city relief returns true
-        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
+        // Initial log check for empire relief summary returns true
+        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1"));
         // Immediate duplicate returns false
-        assert!(!state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
+        assert!(!state.should_log(LogCategory::EmpireRelief, "relief:1"));
 
         // Advance 100 ticks to 101 -> allowed again
         state.tick = 101;
         assert!(state.should_log(LogCategory::EmpireRelief, "refund:1"));
-        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1:10"));
+        assert!(state.should_log(LogCategory::EmpireRelief, "relief:1"));
     }
 
     #[test]
