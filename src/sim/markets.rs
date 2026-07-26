@@ -644,4 +644,244 @@ mod tests {
             100
         );
     }
+
+    #[test]
+    fn test_buy_order_sorting_highest_price_first() {
+        let mut state = setup_test_state();
+
+        // We need 4 companies total
+        state.companies.insert(3, make_company(3, 1000.0));
+        state.companies.insert(4, make_company(4, 1000.0));
+
+        // Seller: Limit Sell 10 @ 2.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 2.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer 1: Limit Buy 10 @ 3.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 3.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer 2: Limit Buy 10 @ 5.0 (Should beat Buyer 1)
+        state.market_orders.insert(
+            3,
+            MarketOrder {
+                id: 3,
+                company_id: 3,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer 3: Market Buy 10 (Should beat Buyer 2 and Buyer 1)
+        state.market_orders.insert(
+            4,
+            MarketOrder {
+                id: 4,
+                company_id: 4,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 0.0,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // Seller has only 10 items to sell.
+        // It should go to Market Buy (Company 4) because market orders sort first.
+        // Company 4 bought 10 at price 2.0 (since seller limit is 2.0 and market order takes seller limit).
+        assert_eq!(state.companies[&4].cash, 980.0); // 1000 - 20 (price)
+
+        // Let's add more seller inventory and another clear to test the remaining limits
+        state.market_orders.insert(
+            5,
+            MarketOrder {
+                id: 5,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 2.0,
+                created_tick: 0,
+            },
+        );
+        clear_orders(&mut state, 1);
+
+        // Now, Company 3 (Limit Buy @ 5.0) should beat Company 2 (Limit Buy @ 3.0)
+        // Midpoint clearing price between limit 5.0 and limit 2.0 is 3.5.
+        // Buy pays 3.5 * 10 = 35.0
+        assert_eq!(state.companies[&3].cash, 965.0); // 1000 - 35
+
+        // Company 2 should have bought nothing
+        assert_eq!(state.companies[&2].cash, 1000.0);
+    }
+
+    #[test]
+    fn test_sell_order_sorting_lowest_price_first() {
+        let mut state = setup_test_state();
+
+        // Need 4 companies
+        state.companies.insert(3, make_company(3, 1000.0));
+        state.companies.insert(4, make_company(4, 1000.0));
+
+        // Add 10 items to companies 2, 3, and 4
+        state.inventories.insert(
+            Inventory::key(2, 1, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+        state.inventories.insert(
+            Inventory::key(3, 1, 1),
+            Inventory {
+                company_id: 3,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+        state.inventories.insert(
+            Inventory::key(4, 1, 1),
+            Inventory {
+                company_id: 4,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+
+        // Buyer: Limit Buy 10 @ 6.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 6.0,
+                created_tick: 0,
+            },
+        );
+
+        // Seller 1: Limit Sell 10 @ 5.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        // Seller 2: Limit Sell 10 @ 4.0 (Should beat Seller 1)
+        state.market_orders.insert(
+            3,
+            MarketOrder {
+                id: 3,
+                company_id: 3,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 4.0,
+                created_tick: 0,
+            },
+        );
+
+        // Seller 3: Market Sell 10 (Should beat Seller 2 and Seller 1)
+        state.market_orders.insert(
+            4,
+            MarketOrder {
+                id: 4,
+                company_id: 4,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 0.0,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // Buyer only buys 10 items total.
+        // The Market Sell order (Company 4) should get precedence.
+        // Buy is limit 6.0, market sells take the buyer's limit price.
+        // Port fee is 10 * 0.1 = 1.0. Company 4 cash = 1000 + 60 - 1 = 1059
+        assert_eq!(state.companies[&4].cash, 1059.0);
+
+        // Now let's add another buyer to clear the remaining limit orders
+        state.market_orders.insert(
+            5,
+            MarketOrder {
+                id: 5,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 6.0,
+                created_tick: 0,
+            },
+        );
+        clear_orders(&mut state, 1);
+
+        // Seller 2 (Company 3, Limit Sell @ 4.0) should beat Seller 1 (Company 2, Limit Sell @ 5.0)
+        // Midpoint clearing price between limit 6.0 and limit 4.0 is 5.0.
+        // Sell gets 10 * 5.0 = 50 - 1 (fee) = 49.0
+        assert_eq!(state.companies[&3].cash, 1049.0);
+
+        // Seller 1 (Company 2) shouldn't have sold anything yet
+        assert_eq!(state.companies[&2].cash, 1000.0);
+    }
 }
