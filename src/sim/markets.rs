@@ -644,4 +644,86 @@ mod tests {
             100
         );
     }
+
+    #[test]
+    fn test_price_drift_up_on_high_demand() {
+        let mut state = setup_test_state();
+        let city_id = 1;
+        let resource_type_id = 1;
+
+        // Set initial EMA
+        state.ema_prices.insert((city_id, resource_type_id), 20.0);
+
+        // Insert a buy order for city 1, resource 1
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id,
+                resource_type_id,
+                order_type: "buy".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 25.0,
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders
+        clear_orders(&mut state, 1);
+
+        // Price should drift up
+        let ema = state
+            .ema_prices
+            .get(&(city_id, resource_type_id))
+            .copied()
+            .unwrap_or(20.0);
+        assert!(
+            ema > 20.0,
+            "EMA price should drift up from 20.0 on high demand, got {}",
+            ema
+        );
+    }
+
+    #[test]
+    fn test_price_drift_down_on_high_supply() {
+        let mut state = setup_test_state();
+        let city_id = 1;
+        let resource_type_id = 1;
+
+        // Set initial EMA
+        state.ema_prices.insert((city_id, resource_type_id), 20.0);
+
+        // Insert a sell order for city 1, resource 1
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id,
+                resource_type_id,
+                order_type: "sell".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 15.0,
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders
+        clear_orders(&mut state, 1);
+
+        // Price should drift down
+        let ema = state
+            .ema_prices
+            .get(&(city_id, resource_type_id))
+            .copied()
+            .unwrap_or(20.0);
+        assert!(
+            ema < 20.0,
+            "EMA price should drift down from 20.0 on high supply, got {}",
+            ema
+        );
+    }
 }
