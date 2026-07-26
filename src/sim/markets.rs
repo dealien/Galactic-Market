@@ -646,6 +646,88 @@ mod tests {
     }
 
     #[test]
+    fn test_price_drift_up_on_high_demand() {
+        let mut state = setup_test_state();
+        let city_id = 1;
+        let resource_type_id = 1;
+
+        // Set initial EMA
+        state.ema_prices.insert((city_id, resource_type_id), 20.0);
+
+        // Insert a buy order for city 1, resource 1
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id,
+                resource_type_id,
+                order_type: "buy".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 25.0,
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders
+        clear_orders(&mut state, 1);
+
+        // Price should drift up
+        let ema = state
+            .ema_prices
+            .get(&(city_id, resource_type_id))
+            .copied()
+            .unwrap_or(20.0);
+        assert!(
+            ema > 20.0,
+            "EMA price should drift up from 20.0 on high demand, got {}",
+            ema
+        );
+    }
+
+    #[test]
+    fn test_price_drift_down_on_high_supply() {
+        let mut state = setup_test_state();
+        let city_id = 1;
+        let resource_type_id = 1;
+
+        // Set initial EMA
+        state.ema_prices.insert((city_id, resource_type_id), 20.0);
+
+        // Insert a sell order for city 1, resource 1
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id,
+                resource_type_id,
+                order_type: "sell".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 10,
+                price: 15.0,
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders
+        clear_orders(&mut state, 1);
+
+        // Price should drift down
+        let ema = state
+            .ema_prices
+            .get(&(city_id, resource_type_id))
+            .copied()
+            .unwrap_or(20.0);
+        assert!(
+            ema < 20.0,
+            "EMA price should drift down from 20.0 on high supply, got {}",
+            ema
+        );
+    }
+
+    #[test]
     fn test_buy_order_sorting_highest_price_first() {
         let mut state = setup_test_state();
 
@@ -719,9 +801,9 @@ mod tests {
 
         clear_orders(&mut state, 1);
 
-        // Seller has only 10 items to sell.
-        // It should go to Market Buy (Company 4) because market orders sort first.
-        // Company 4 bought 10 at price 2.0 (since seller limit is 2.0 and market order takes seller limit).
+        /* Seller has only 10 items to sell.
+         * It should go to Market Buy (Company 4) because market orders sort first.
+         * Company 4 bought 10 at price 2.0 (since seller limit is 2.0 and market order takes seller limit). */
         assert_eq!(state.companies[&4].cash, 980.0); // 1000 - 20 (price)
 
         // Let's add more seller inventory and another clear to test the remaining limits
@@ -741,9 +823,9 @@ mod tests {
         );
         clear_orders(&mut state, 1);
 
-        // Now, Company 3 (Limit Buy @ 5.0) should beat Company 2 (Limit Buy @ 3.0)
-        // Midpoint clearing price between limit 5.0 and limit 2.0 is 3.5.
-        // Buy pays 3.5 * 10 = 35.0
+        /* Now, Company 3 (Limit Buy @ 5.0) should beat Company 2 (Limit Buy @ 3.0)
+         * Midpoint clearing price between limit 5.0 and limit 2.0 is 3.5.
+         * Buy pays 3.5 * 10 = 35.0 */
         assert_eq!(state.companies[&3].cash, 965.0); // 1000 - 35
 
         // Company 2 should have bought nothing
@@ -853,10 +935,10 @@ mod tests {
 
         clear_orders(&mut state, 1);
 
-        // Buyer only buys 10 items total.
-        // The Market Sell order (Company 4) should get precedence.
-        // Buy is limit 6.0, market sells take the buyer's limit price.
-        // Port fee is 10 * 0.1 = 1.0. Company 4 cash = 1000 + 60 - 1 = 1059
+        /* Buyer only buys 10 items total.
+         * The Market Sell order (Company 4) should get precedence.
+         * Buy is limit 6.0, market sells take the buyer's limit price.
+         * Port fee is 10 * 0.1 = 1.0. Company 4 cash = 1000 + 60 - 1 = 1059 */
         assert_eq!(state.companies[&4].cash, 1059.0);
 
         // Now let's add another buyer to clear the remaining limit orders
@@ -876,9 +958,9 @@ mod tests {
         );
         clear_orders(&mut state, 1);
 
-        // Seller 2 (Company 3, Limit Sell @ 4.0) should beat Seller 1 (Company 2, Limit Sell @ 5.0)
-        // Midpoint clearing price between limit 6.0 and limit 4.0 is 5.0.
-        // Sell gets 10 * 5.0 = 50 - 1 (fee) = 49.0
+        /* Seller 2 (Company 3, Limit Sell @ 4.0) should beat Seller 1 (Company 2, Limit Sell @ 5.0)
+         * Midpoint clearing price between limit 6.0 and limit 4.0 is 5.0.
+         * Sell gets 10 * 5.0 = 50 - 1 (fee) = 49.0 */
         assert_eq!(state.companies[&3].cash, 1049.0);
 
         // Seller 1 (Company 2) shouldn't have sold anything yet
