@@ -61,3 +61,7 @@
 ## $(date +%Y-%m-%d) - Appending Tests hygiene and File cleanup
 **Learning:** Adding unit tests at the end of files without verifying if the file already ends with a `}` (e.g. `mod tests { ... }`) can result in compilation errors due to misplaced or missing braces. Also, generating temporary text and python scripts directly in the repo root without cleaning up leads to code review failures due to poor repository hygiene.
 **Action:** Always parse the file to correctly insert new tests inside the `#[cfg(test)] mod tests` block rather than appending blindly. Delete any scratchpad text files, `lcov.info`, or helper scripts immediately after use.
+
+## $(date +%Y-%m-%d) - Overcoming Coverage Gaps in Market Sorting Logic
+**Learning:** In systems like the market engine where `market_orders` are matched, the use of isolated "single-buyer vs. single-seller" test cases can inadvertently bypass critical sorting closures designed to handle competition. When sorting logic acts on collections, testing with one element results in the sorting logic skipping branch comparisons entirely, leading to gaps in coverage.
+**Action:** When testing matching engines or systems that process a collection of inputs (e.g. orders, production queues), explicitly create test scenarios that seed *multiple competing inputs* per category (e.g., several buyers at different prices/kinds competing for a single seller) to ensure the sorting priority and matching precedence loops are actively executed and validated.
