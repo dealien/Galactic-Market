@@ -2122,16 +2122,40 @@ mod tests {
         let mut state = setup_political_state();
 
         // Setup aggressor (Empire 1) to have lost 50% of its territory to occupation
-        state.star_systems.insert(1, StarSystem { id: 1, sector_id: 1, name: "S1".to_string() });
-        state.star_systems.insert(2, StarSystem { id: 2, sector_id: 1, name: "S2".to_string() });
-        state.sectors.insert(1, Sector { id: 1, empire_id: 1, name: "Sec1".to_string() });
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "S1".to_string(),
+            },
+        );
+        state.star_systems.insert(
+            2,
+            StarSystem {
+                id: 2,
+                sector_id: 1,
+                name: "S2".to_string(),
+            },
+        );
+        state.sectors.insert(
+            1,
+            Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Sec1".to_string(),
+            },
+        );
 
         // Defending empire (Empire 2) occupies one of the two systems (50%)
-        state.occupied_systems.insert(1, crate::sim::state::Occupation {
-            system_id: 1,
-            occupier_empire_id: 2,
-            since_tick: 0,
-        });
+        state.occupied_systems.insert(
+            1,
+            crate::sim::state::Occupation {
+                system_id: 1,
+                occupier_empire_id: 2,
+                since_tick: 0,
+            },
+        );
 
         state.wars.insert(
             1,
@@ -2154,7 +2178,10 @@ mod tests {
         resolve_active_wars(&mut state, &mut rng);
 
         let war = state.wars.get(&1).unwrap();
-        assert_eq!(war.status, "concluded", "War should conclude due to aggressor capitulation");
+        assert_eq!(
+            war.status, "concluded",
+            "War should conclude due to aggressor capitulation"
+        );
     }
 
     /// Verifies a war is forced to conclude when `defender_loss_ratio >= CAPITULATION_THRESHOLD`.
@@ -2170,11 +2197,14 @@ mod tests {
         state.occupied_systems.clear();
 
         // Aggressing empire (Empire 1) occupies one of the two systems (50%)
-        state.occupied_systems.insert(3, crate::sim::state::Occupation {
-            system_id: 3,
-            occupier_empire_id: 1, // Doesn't matter who occupies, just needs to be occupied
-            since_tick: 0,
-        });
+        state.occupied_systems.insert(
+            3,
+            crate::sim::state::Occupation {
+                system_id: 3,
+                occupier_empire_id: 1, // Doesn't matter who occupies, just needs to be occupied
+                since_tick: 0,
+            },
+        );
 
         state.wars.insert(
             1,
@@ -2197,7 +2227,10 @@ mod tests {
         resolve_active_wars(&mut state, &mut rng);
 
         let war = state.wars.get(&1).unwrap();
-        assert_eq!(war.status, "concluded", "War should conclude due to defender capitulation");
+        assert_eq!(
+            war.status, "concluded",
+            "War should conclude due to defender capitulation"
+        );
     }
 
     /// Verifies `infrastructure_lvl` decreases and infrastructure damage events are generated.
@@ -2207,34 +2240,46 @@ mod tests {
         state.tick = 1;
 
         // Setup a system and a city in a war theater
-        state.celestial_bodies.insert(10, crate::sim::state::CelestialBody {
-            id: 10,
-            system_id: 5,
-            name: "Planet".to_string(),
-            fertility: 1.0,
-        });
+        state.celestial_bodies.insert(
+            10,
+            crate::sim::state::CelestialBody {
+                id: 10,
+                system_id: 5,
+                name: "Planet".to_string(),
+                fertility: 1.0,
+            },
+        );
 
-        state.cities.insert(100, crate::sim::state::City {
-            id: 100,
-            body_id: 10,
-            name: "Target City".to_string(),
-            population: 1000,
-            infrastructure_lvl: 5, // Start at max
-            port_tier: 1,
-            port_fee_per_unit: 1.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.01,
-        });
+        state.cities.insert(
+            100,
+            crate::sim::state::City {
+                id: 100,
+                body_id: 10,
+                name: "Target City".to_string(),
+                population: 1000,
+                infrastructure_lvl: 5, // Start at max
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
 
         let mut rng = StdRng::seed_from_u64(42);
         apply_war_infrastructure_damage(&mut state, &[5], &mut rng);
 
         let city = state.cities.get(&100).unwrap();
-        assert_eq!(city.infrastructure_lvl, 4, "Infrastructure should be damaged by 1");
+        assert_eq!(
+            city.infrastructure_lvl, 4,
+            "Infrastructure should be damaged by 1"
+        );
 
         // Check event generation
-        let damage_event = state.active_events.values().find(|e| e.event_type == "infrastructure_damage");
+        let damage_event = state
+            .active_events
+            .values()
+            .find(|e| e.event_type == "infrastructure_damage");
         assert!(damage_event.is_some(), "Damage event should be generated");
     }
 
@@ -2245,38 +2290,51 @@ mod tests {
         state.tick = 1;
 
         // Setup a system and a city in a war theater
-        state.celestial_bodies.insert(10, crate::sim::state::CelestialBody {
-            id: 10,
-            system_id: 5,
-            name: "Planet".to_string(),
-            fertility: 1.0,
-        });
+        state.celestial_bodies.insert(
+            10,
+            crate::sim::state::CelestialBody {
+                id: 10,
+                system_id: 5,
+                name: "Planet".to_string(),
+                fertility: 1.0,
+            },
+        );
 
-        state.cities.insert(100, crate::sim::state::City {
-            id: 100,
-            body_id: 10,
-            name: "Target City".to_string(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 1.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.01,
-        });
+        state.cities.insert(
+            100,
+            crate::sim::state::City {
+                id: 100,
+                body_id: 10,
+                name: "Target City".to_string(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
 
         // Use multiple attempts to overcome the 30% RNG chance, checking if it generates at least once
         let mut event_generated = false;
         let mut rng = StdRng::seed_from_u64(42);
         for _ in 0..20 {
             apply_supply_disruption_events(&mut state, &[5], &mut rng);
-            if state.active_events.values().any(|e| e.event_type == "supply_disruption") {
+            if state
+                .active_events
+                .values()
+                .any(|e| e.event_type == "supply_disruption")
+            {
                 event_generated = true;
                 break;
             }
         }
 
-        assert!(event_generated, "Supply disruption event should be generated");
+        assert!(
+            event_generated,
+            "Supply disruption event should be generated"
+        );
     }
 
     /// Verifies cities not in active war theaters regain `infrastructure_lvl` when tick is a multiple of `INFRA_REPAIR_INTERVAL`.
@@ -2286,46 +2344,58 @@ mod tests {
         state.tick = super::INFRA_REPAIR_INTERVAL;
 
         // City 1 is NOT in a war theater
-        state.celestial_bodies.insert(10, crate::sim::state::CelestialBody {
-            id: 10,
-            system_id: 1,
-            name: "Planet 1".to_string(),
-            fertility: 1.0,
-        });
+        state.celestial_bodies.insert(
+            10,
+            crate::sim::state::CelestialBody {
+                id: 10,
+                system_id: 1,
+                name: "Planet 1".to_string(),
+                fertility: 1.0,
+            },
+        );
 
-        state.cities.insert(100, crate::sim::state::City {
-            id: 100,
-            body_id: 10,
-            name: "Safe City".to_string(),
-            population: 1000,
-            infrastructure_lvl: 3, // Damaged
-            port_tier: 1,
-            port_fee_per_unit: 1.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.01,
-        });
+        state.cities.insert(
+            100,
+            crate::sim::state::City {
+                id: 100,
+                body_id: 10,
+                name: "Safe City".to_string(),
+                population: 1000,
+                infrastructure_lvl: 3, // Damaged
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
 
         // City 2 IS in a war theater
-        state.celestial_bodies.insert(11, crate::sim::state::CelestialBody {
-            id: 11,
-            system_id: 2,
-            name: "Planet 2".to_string(),
-            fertility: 1.0,
-        });
+        state.celestial_bodies.insert(
+            11,
+            crate::sim::state::CelestialBody {
+                id: 11,
+                system_id: 2,
+                name: "Planet 2".to_string(),
+                fertility: 1.0,
+            },
+        );
 
-        state.cities.insert(101, crate::sim::state::City {
-            id: 101,
-            body_id: 11,
-            name: "War City".to_string(),
-            population: 1000,
-            infrastructure_lvl: 3, // Damaged
-            port_tier: 1,
-            port_fee_per_unit: 1.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.01,
-        });
+        state.cities.insert(
+            101,
+            crate::sim::state::City {
+                id: 101,
+                body_id: 11,
+                name: "War City".to_string(),
+                population: 1000,
+                infrastructure_lvl: 3, // Damaged
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
 
         // Setup the war
         state.wars.insert(
@@ -2347,7 +2417,15 @@ mod tests {
 
         repair_infrastructure(&mut state);
 
-        assert_eq!(state.cities.get(&100).unwrap().infrastructure_lvl, 4, "Safe city should be repaired");
-        assert_eq!(state.cities.get(&101).unwrap().infrastructure_lvl, 3, "War city should not be repaired");
+        assert_eq!(
+            state.cities.get(&100).unwrap().infrastructure_lvl,
+            4,
+            "Safe city should be repaired"
+        );
+        assert_eq!(
+            state.cities.get(&101).unwrap().infrastructure_lvl,
+            3,
+            "War city should not be repaired"
+        );
     }
 }
