@@ -106,12 +106,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     let last_prices = last_known_prices(state);
 
     // Collect company IDs that are due for re-evaluation
-    let due: Vec<i32> = state
+    let mut due: Vec<i32> = state
         .companies
         .iter()
         .filter(|(_, c)| c.next_eval_tick <= current_tick)
         .map(|(id, _)| *id)
         .collect();
+
+    // Ensure deterministic processing order
+    due.sort_unstable();
 
     for company_id in due {
         // Copy relevant company data locally to avoid immutable borrow while mutating state
