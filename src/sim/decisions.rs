@@ -106,12 +106,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64) {
     let last_prices = last_known_prices(state);
 
     // Collect company IDs that are due for re-evaluation
-    let due: Vec<i32> = state
+    let mut due: Vec<i32> = state
         .companies
         .iter()
         .filter(|(_, c)| c.next_eval_tick <= current_tick)
         .map(|(id, _)| *id)
         .collect();
+
+    // Ensure deterministic processing order
+    due.sort_unstable();
 
     for company_id in due {
         // Copy relevant company data locally to avoid immutable borrow while mutating state
@@ -4073,6 +4076,144 @@ mod tests {
             })
             .collect();
         assert_eq!(buy_orders.len(), 0);
+    }
+
+    #[test]
+    fn test_commercial_bank_receives_emergency_injection() {
+        let mut state = crate::sim::SimState::new();
+        let empire_id = 1;
+        state.prime_rates.insert(empire_id, 0.05); // initial prime rate
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let central_bank_id = 1;
+        state.companies.insert(
+            central_bank_id,
+            crate::sim::state::Company {
+                id: central_bank_id,
+                name: "Central Bank".into(),
+                company_type: "central_bank".into(),
+                home_city_id: 1,
+                cash: 1000000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(central_bank_id, empire_id);
+
+        let comm_bank_id = 2;
+        // The commercial bank has 50.0 cash.
+        // It has 1000 deposits.
+        // Min reserve requirement = 1000 * 0.10 = 100.0.
+        // So the bank is short 50.0.
+        state.companies.insert(
+            comm_bank_id,
+            crate::sim::state::Company {
+                id: comm_bank_id,
+                name: "Commercial Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 50.0, // Under the min reserve limit
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.company_to_empire.insert(comm_bank_id, empire_id);
+
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 99,
+                bank_company_id: comm_bank_id,
+                balance: 1000.0,
+                interest_rate: 0.02,
+            },
+        );
+
+        // Record the initial loan count to ensure a new loan is created
+        let initial_loans = state.loans.len();
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // Verify the bank received cash to meet the minimum reserve (50.0 + 50.0 = 100.0)
+        let updated_cash = state.companies.get(&comm_bank_id).unwrap().cash;
+        assert_eq!(
+            updated_cash, 100.0,
+            "Bank should have received an emergency injection of 50.0 cash"
+        );
+
+        // Verify the new emergency loan was created
+        assert_eq!(
+            state.loans.len(),
+            initial_loans + 1,
+            "A new emergency loan should be recorded"
+        );
+
+        // Check the newly added loan
+        let new_loan = state
+            .loans
+            .values()
+            .find(|l| l.company_id == comm_bank_id)
+            .expect("Should find loan for commercial bank");
+        assert_eq!(
+            new_loan.principal, 50.0,
+            "Emergency loan principal should match the shortfall"
+        );
+        assert_eq!(
+            new_loan.lender_company_id,
+            Some(central_bank_id),
+            "Lender should be the central bank"
+        );
+        // Initial prime rate is 0.05. Central bank runs first and adjusts the prime rate.
+        // Debt (0.0) < Cash (1000000.0) * 0.1 (100000.0), so prime rate decreases by 0.005 to 0.045.
+        // Penalty rate = new prime * 1.5 = 0.045 * 1.5 = 0.0675
+        assert!(
+            (new_loan.interest_rate - 0.0675).abs() < 1e-6,
+            "Emergency loan should have penalty interest rate based on adjusted prime rate."
+        );
     }
 
     #[test]
