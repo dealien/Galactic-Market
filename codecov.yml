@@ -1,0 +1,35 @@
+comment:
+  layout: "header, diff, components, files, footer" # show component info in the PR comment
+  require_changes: false
+
+component_management:
+  default_rules:
+    # These rules will be inherited by all components
+    statuses:
+      - type: project
+        target: auto
+
+  individual_components:
+    - component_id: module_core
+      name: core
+      paths:
+        - src/*.rs
+      statuses:
+        - type: project
+          target: 80%
+
+    - component_id: module_sim
+      name: sim
+      paths:
+        - src/sim/**
+      statuses:
+        - type: project
+          target: 85%
+
+    - component_id: module_db
+      name: db
+      paths:
+        - src/db/**
+      statuses:
+        - type: project
+          target: 90%
