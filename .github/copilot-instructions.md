@@ -9,7 +9,7 @@
 - `cargo run -- --seed --ticks 100` — Seed the database then run 100 ticks
 - `cargo test` — Run all tests
 - `cargo test <test_name>` — Run a specific test
-- `cargo clippy -- -D warnings` — Lint (warnings-as-errors)
+- `cargo clippy --all-targets -- -D warnings` — Lint (warnings-as-errors)
 - `cargo fmt` — Format code
 - `cargo bench` or `cargo codspeed run` — Run benchmarks
 - `docker-compose up -d` — Start PostgreSQL database
@@ -138,7 +138,7 @@ Every entity in the database is part of this hierarchy (enforced by foreign keys
 - **Async/Await**: Use `tokio` for async runtime; `sqlx` for async database access.
 - **Documentation**: All public items must have `///` doc comments with examples where applicable.
 - **Testing**: Add unit tests in inline `#[cfg(test)]` modules; integration tests under `tests/`.
-- **Formatting & Linting**: Always run `cargo fmt` and ensure `cargo clippy -- -D warnings` passes before committing.
+- **Formatting & Linting**: Always run `cargo fmt` and ensure `cargo clippy --all-targets -- -D warnings` passes before committing.
 
 ### Simulation Principles
 
@@ -178,7 +178,7 @@ Every entity in the database is part of this hierarchy (enforced by foreign keys
 cargo build
 
 # Verify lint/format
-cargo fmt && cargo clippy -- -D warnings
+cargo fmt && cargo clippy --all-targets -- -D warnings
 
 # Run migrations + seed + 10 ticks
 cargo run -- --seed --ticks 10

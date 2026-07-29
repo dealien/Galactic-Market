@@ -16,11 +16,11 @@ trigger: always_on
   - **Build**: Use `cargo build` (debug) or `cargo build --release` (release).
   - **Run**: Use `cargo run` or `cargo run --bin <binary_name>` for projects with multiple binaries.
   - **Test**: Use `cargo test` — never invoke test binaries directly.
-  - **Lint**: Use `cargo clippy -- -D warnings` to treat all warnings as errors.
+  - **Lint**: Use `cargo clippy --all-targets -- -D warnings` to treat all warnings as errors.
   - **Format**: Use `cargo fmt` to format code before presenting work.
   - **Other Tools**: Locate project-local tools (e.g., `cargo-nextest`, `cargo-audit`) via `cargo install` or check for presence in the workspace before use.
 - **Dependency Management**: Use `Cargo.toml` for all dependencies under `[dependencies]`, `[dev-dependencies]`, and `[build-dependencies]`. Never manually edit `Cargo.lock` — let Cargo manage it.
-- **Linting & Formatting**: Always run `cargo fmt` and `cargo clippy -- -D warnings` before presenting work.
+- **Linting & Formatting**: Always run `cargo fmt` and `cargo clippy --all-targets -- -D warnings` before presenting work.
 - **Version Control**: Never automatically commit to Git for the user unless explicitly told.
 
 ## 3. Environment Constraint

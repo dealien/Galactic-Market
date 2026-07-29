@@ -4325,462 +4325,462 @@ mod tests {
         let loan = state.loans.get(&loan_id).unwrap();
         assert_eq!(loan.balance, 0.0);
     }
-}
 
-#[test]
-fn test_plantation_ships_food_to_profitable_city() {
-    let mut state = crate::sim::state::SimState::new();
+    #[test]
+    fn test_plantation_ships_food_to_profitable_city() {
+        let mut state = crate::sim::state::SimState::new();
 
-    let food_id = 7;
-    state.resource_types.insert(
-        food_id,
-        crate::sim::state::ResourceType {
-            id: food_id,
-            name: "Food".to_string(),
-            category: "Consumables".to_string(),
-            is_vital: true,
-        },
-    );
-
-    let home_city_id = 1;
-    let target_city_id = 2;
-    let body_id = 1;
-
-    state.celestial_bodies.insert(
-        body_id,
-        crate::sim::state::CelestialBody {
-            id: body_id,
-            name: "Planet".into(),
-            system_id: 1,
-            fertility: 1.0,
-        },
-    );
-
-    state.cities.insert(
-        home_city_id,
-        crate::sim::state::City {
-            id: home_city_id,
-            body_id: body_id,
-            name: "Home".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.cities.insert(
-        target_city_id,
-        crate::sim::state::City {
-            id: target_city_id,
-            body_id: body_id,
-            name: "Target".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.ema_prices.insert((home_city_id, food_id), 2.0);
-    state.ema_prices.insert((target_city_id, food_id), 10.0);
-
-    let company_id = 100;
-    state.companies.insert(
-        company_id,
-        crate::sim::state::Company {
-            id: company_id,
-            name: "FoodCorp".into(),
-            company_type: "small_company".into(),
-            home_city_id,
-            cash: 1000.0,
-            next_eval_tick: 1,
-            debt: 0.0,
-            status: "active".into(),
-            last_trade_tick: 0,
-        },
-    );
-
-    state.facilities.insert(
-        1,
-        crate::sim::state::Facility {
-            id: 1,
-            company_id,
-            city_id: home_city_id,
-            facility_type: "plantation".into(),
-            capacity: 100,
-            setup_ticks_remaining: 0,
-            target_resource_id: Some(0),
-            production_ratios: None,
-        },
-    );
-
-    state.inventories.insert(
-        crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
-        crate::sim::state::Inventory {
-            company_id,
-            city_id: home_city_id,
-            resource_type_id: food_id,
-            quantity: 50,
-        },
-    );
-
-    crate::sim::decisions::run_decisions(&mut state, 1);
-
-    assert_eq!(state.trade_routes.len(), 1);
-    let route = state.trade_routes.values().next().unwrap();
-    assert_eq!(route.dest_city_id, target_city_id);
-    assert_eq!(route.quantity, 50);
-
-    let inv = state
-        .inventories
-        .get(&crate::sim::state::Inventory::key(
-            company_id,
-            home_city_id,
+        let food_id = 7;
+        state.resource_types.insert(
             food_id,
-        ))
-        .unwrap();
-    assert_eq!(inv.quantity, 0);
-}
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Food".to_string(),
+                category: "Consumables".to_string(),
+                is_vital: true,
+            },
+        );
 
-#[test]
-fn test_plantation_posts_sell_order_if_no_profitable_city() {
-    let mut state = crate::sim::state::SimState::new();
+        let home_city_id = 1;
+        let target_city_id = 2;
+        let body_id = 1;
 
-    let food_id = 7;
-    state.resource_types.insert(
-        food_id,
-        crate::sim::state::ResourceType {
-            id: food_id,
-            name: "Food".to_string(),
-            category: "Consumables".to_string(),
-            is_vital: true,
-        },
-    );
+        state.celestial_bodies.insert(
+            body_id,
+            crate::sim::state::CelestialBody {
+                id: body_id,
+                name: "Planet".into(),
+                system_id: 1,
+                fertility: 1.0,
+            },
+        );
 
-    let home_city_id = 1;
-    let target_city_id = 2;
-    let body_id = 1;
-
-    state.celestial_bodies.insert(
-        body_id,
-        crate::sim::state::CelestialBody {
-            id: body_id,
-            name: "Planet".into(),
-            system_id: 1,
-            fertility: 1.0,
-        },
-    );
-
-    state.cities.insert(
-        home_city_id,
-        crate::sim::state::City {
-            id: home_city_id,
-            body_id: body_id,
-            name: "Home".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.cities.insert(
-        target_city_id,
-        crate::sim::state::City {
-            id: target_city_id,
-            body_id: body_id,
-            name: "Target".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.ema_prices.insert((home_city_id, food_id), 2.0);
-    state.ema_prices.insert((target_city_id, food_id), 1.0);
-
-    let company_id = 100;
-    state.companies.insert(
-        company_id,
-        crate::sim::state::Company {
-            id: company_id,
-            name: "FoodCorp".into(),
-            company_type: "small_company".into(),
+        state.cities.insert(
             home_city_id,
-            cash: 1000.0,
-            next_eval_tick: 1,
-            debt: 0.0,
-            status: "active".into(),
-            last_trade_tick: 0,
-        },
-    );
+            crate::sim::state::City {
+                id: home_city_id,
+                body_id,
+                name: "Home".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
 
-    state.facilities.insert(
-        1,
-        crate::sim::state::Facility {
-            id: 1,
+        state.cities.insert(
+            target_city_id,
+            crate::sim::state::City {
+                id: target_city_id,
+                body_id,
+                name: "Target".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.ema_prices.insert((home_city_id, food_id), 2.0);
+        state.ema_prices.insert((target_city_id, food_id), 10.0);
+
+        let company_id = 100;
+        state.companies.insert(
             company_id,
-            city_id: home_city_id,
-            facility_type: "plantation".into(),
-            capacity: 100,
-            setup_ticks_remaining: 0,
-            target_resource_id: Some(0),
-            production_ratios: None,
-        },
-    );
+            crate::sim::state::Company {
+                id: company_id,
+                name: "FoodCorp".into(),
+                company_type: "small_company".into(),
+                home_city_id,
+                cash: 1000.0,
+                next_eval_tick: 1,
+                debt: 0.0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
 
-    state.inventories.insert(
-        crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
-        crate::sim::state::Inventory {
-            company_id,
-            city_id: home_city_id,
-            resource_type_id: food_id,
-            quantity: 50,
-        },
-    );
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                company_id,
+                city_id: home_city_id,
+                facility_type: "plantation".into(),
+                capacity: 100,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(0),
+                production_ratios: None,
+            },
+        );
 
-    crate::sim::decisions::run_decisions(&mut state, 1);
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
+            crate::sim::state::Inventory {
+                company_id,
+                city_id: home_city_id,
+                resource_type_id: food_id,
+                quantity: 50,
+            },
+        );
 
-    assert_eq!(state.trade_routes.len(), 0);
+        crate::sim::decisions::run_decisions(&mut state, 1);
 
-    let orders: Vec<_> = state.market_orders.values().collect();
-    assert_eq!(orders.len(), 1);
-    assert_eq!(orders[0].order_type, "sell");
-    assert_eq!(orders[0].quantity, 50);
-}
+        assert_eq!(state.trade_routes.len(), 1);
+        let route = state.trade_routes.values().next().unwrap();
+        assert_eq!(route.dest_city_id, target_city_id);
+        assert_eq!(route.quantity, 50);
 
-#[test]
-fn test_plantation_liquidation_sell_order() {
-    let mut state = crate::sim::state::SimState::new();
+        let inv = state
+            .inventories
+            .get(&crate::sim::state::Inventory::key(
+                company_id,
+                home_city_id,
+                food_id,
+            ))
+            .unwrap();
+        assert_eq!(inv.quantity, 0);
+    }
 
-    let food_id = 7;
-    state.resource_types.insert(
-        food_id,
-        crate::sim::state::ResourceType {
-            id: food_id,
-            name: "Food".to_string(),
-            category: "Consumables".to_string(),
-            is_vital: true,
-        },
-    );
+    #[test]
+    fn test_plantation_posts_sell_order_if_no_profitable_city() {
+        let mut state = crate::sim::state::SimState::new();
 
-    let home_city_id = 1;
-    let body_id = 1;
-
-    state.celestial_bodies.insert(
-        body_id,
-        crate::sim::state::CelestialBody {
-            id: body_id,
-            name: "Planet".into(),
-            system_id: 1,
-            fertility: 1.0,
-        },
-    );
-
-    state.cities.insert(
-        home_city_id,
-        crate::sim::state::City {
-            id: home_city_id,
-            body_id: body_id,
-            name: "Home".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    let company_id = 100;
-    state.companies.insert(
-        company_id,
-        crate::sim::state::Company {
-            id: company_id,
-            name: "FoodCorp".into(),
-            company_type: "small_company".into(),
-            home_city_id,
-            cash: 1000.0,
-            next_eval_tick: 1,
-            debt: 0.0,
-            status: "active".into(),
-            last_trade_tick: 0,
-        },
-    );
-
-    state.facilities.insert(
-        1,
-        crate::sim::state::Facility {
-            id: 1,
-            company_id,
-            city_id: home_city_id,
-            facility_type: "plantation".into(),
-            capacity: 100,
-            setup_ticks_remaining: 0,
-            target_resource_id: Some(0),
-            production_ratios: None,
-        },
-    );
-
-    state.inventories.insert(
-        crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
-        crate::sim::state::Inventory {
-            company_id,
-            city_id: home_city_id,
-            resource_type_id: food_id,
-            quantity: 1100, // > 10 * 100
-        },
-    );
-
-    crate::sim::decisions::run_decisions(&mut state, 1);
-
-    assert_eq!(state.trade_routes.len(), 0);
-
-    let orders: Vec<_> = state.market_orders.values().collect();
-    assert_eq!(orders.len(), 1);
-    assert_eq!(orders[0].order_type, "sell");
-    assert_eq!(orders[0].quantity, 1100);
-    let base_cost = 2.0; // labor cost per run
-    assert_eq!(orders[0].price, base_cost * 0.95);
-}
-
-#[test]
-fn test_plantation_insufficient_cash_to_ship() {
-    let mut state = crate::sim::state::SimState::new();
-
-    let food_id = 7;
-    state.resource_types.insert(
-        food_id,
-        crate::sim::state::ResourceType {
-            id: food_id,
-            name: "Food".to_string(),
-            category: "Consumables".to_string(),
-            is_vital: true,
-        },
-    );
-
-    let home_city_id = 1;
-    let target_city_id = 2;
-    let body_id = 1;
-
-    state.celestial_bodies.insert(
-        body_id,
-        crate::sim::state::CelestialBody {
-            id: body_id,
-            name: "Planet".into(),
-            system_id: 1,
-            fertility: 1.0,
-        },
-    );
-
-    state.cities.insert(
-        home_city_id,
-        crate::sim::state::City {
-            id: home_city_id,
-            body_id: body_id,
-            name: "Home".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.cities.insert(
-        target_city_id,
-        crate::sim::state::City {
-            id: target_city_id,
-            body_id: body_id,
-            name: "Target".into(),
-            population: 1000,
-            infrastructure_lvl: 5,
-            port_tier: 1,
-            port_fee_per_unit: 0.0,
-            port_max_throughput: 1000,
-            tax_collected_this_tick: 0.0,
-            population_growth_rate: 0.0,
-        },
-    );
-
-    state.ema_prices.insert((home_city_id, food_id), 2.0);
-    state.ema_prices.insert((target_city_id, food_id), 10.0); // very profitable destination
-
-    let company_id = 100;
-    state.companies.insert(
-        company_id,
-        crate::sim::state::Company {
-            id: company_id,
-            name: "FoodCorp".into(),
-            company_type: "small_company".into(),
-            home_city_id,
-            cash: 0.0, // Insufficient cash to pay for shipping
-            next_eval_tick: 1,
-            debt: 0.0,
-            status: "active".into(),
-            last_trade_tick: 0,
-        },
-    );
-
-    state.facilities.insert(
-        1,
-        crate::sim::state::Facility {
-            id: 1,
-            company_id,
-            city_id: home_city_id,
-            facility_type: "plantation".into(),
-            capacity: 100,
-            setup_ticks_remaining: 0,
-            target_resource_id: Some(0),
-            production_ratios: None,
-        },
-    );
-
-    state.inventories.insert(
-        crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
-        crate::sim::state::Inventory {
-            company_id,
-            city_id: home_city_id,
-            resource_type_id: food_id,
-            quantity: 50, // Enough to be considered for shipment
-        },
-    );
-
-    crate::sim::decisions::run_decisions(&mut state, 1);
-
-    // No trade route should be created because cash is insufficient
-    assert_eq!(state.trade_routes.len(), 0);
-
-    // Instead, a local sell order should be created
-    let orders: Vec<_> = state.market_orders.values().collect();
-    assert_eq!(orders.len(), 1);
-    assert_eq!(orders[0].order_type, "sell");
-    assert_eq!(orders[0].quantity, 50);
-
-    let inv = state
-        .inventories
-        .get(&crate::sim::state::Inventory::key(
-            company_id,
-            home_city_id,
+        let food_id = 7;
+        state.resource_types.insert(
             food_id,
-        ))
-        .unwrap();
-    assert_eq!(inv.quantity, 50);
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Food".to_string(),
+                category: "Consumables".to_string(),
+                is_vital: true,
+            },
+        );
+
+        let home_city_id = 1;
+        let target_city_id = 2;
+        let body_id = 1;
+
+        state.celestial_bodies.insert(
+            body_id,
+            crate::sim::state::CelestialBody {
+                id: body_id,
+                name: "Planet".into(),
+                system_id: 1,
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            home_city_id,
+            crate::sim::state::City {
+                id: home_city_id,
+                body_id,
+                name: "Home".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.cities.insert(
+            target_city_id,
+            crate::sim::state::City {
+                id: target_city_id,
+                body_id,
+                name: "Target".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.ema_prices.insert((home_city_id, food_id), 2.0);
+        state.ema_prices.insert((target_city_id, food_id), 1.0);
+
+        let company_id = 100;
+        state.companies.insert(
+            company_id,
+            crate::sim::state::Company {
+                id: company_id,
+                name: "FoodCorp".into(),
+                company_type: "small_company".into(),
+                home_city_id,
+                cash: 1000.0,
+                next_eval_tick: 1,
+                debt: 0.0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                company_id,
+                city_id: home_city_id,
+                facility_type: "plantation".into(),
+                capacity: 100,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(0),
+                production_ratios: None,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
+            crate::sim::state::Inventory {
+                company_id,
+                city_id: home_city_id,
+                resource_type_id: food_id,
+                quantity: 50,
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        assert_eq!(state.trade_routes.len(), 0);
+
+        let orders: Vec<_> = state.market_orders.values().collect();
+        assert_eq!(orders.len(), 1);
+        assert_eq!(orders[0].order_type, "sell");
+        assert_eq!(orders[0].quantity, 50);
+    }
+
+    #[test]
+    fn test_plantation_liquidation_sell_order() {
+        let mut state = crate::sim::state::SimState::new();
+
+        let food_id = 7;
+        state.resource_types.insert(
+            food_id,
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Food".to_string(),
+                category: "Consumables".to_string(),
+                is_vital: true,
+            },
+        );
+
+        let home_city_id = 1;
+        let body_id = 1;
+
+        state.celestial_bodies.insert(
+            body_id,
+            crate::sim::state::CelestialBody {
+                id: body_id,
+                name: "Planet".into(),
+                system_id: 1,
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            home_city_id,
+            crate::sim::state::City {
+                id: home_city_id,
+                body_id,
+                name: "Home".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let company_id = 100;
+        state.companies.insert(
+            company_id,
+            crate::sim::state::Company {
+                id: company_id,
+                name: "FoodCorp".into(),
+                company_type: "small_company".into(),
+                home_city_id,
+                cash: 1000.0,
+                next_eval_tick: 1,
+                debt: 0.0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                company_id,
+                city_id: home_city_id,
+                facility_type: "plantation".into(),
+                capacity: 100,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(0),
+                production_ratios: None,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
+            crate::sim::state::Inventory {
+                company_id,
+                city_id: home_city_id,
+                resource_type_id: food_id,
+                quantity: 1100, // > 10 * 100
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        assert_eq!(state.trade_routes.len(), 0);
+
+        let orders: Vec<_> = state.market_orders.values().collect();
+        assert_eq!(orders.len(), 1);
+        assert_eq!(orders[0].order_type, "sell");
+        assert_eq!(orders[0].quantity, 1100);
+        let base_cost = 2.0; // labor cost per run
+        assert_eq!(orders[0].price, base_cost * 0.95);
+    }
+
+    #[test]
+    fn test_plantation_insufficient_cash_to_ship() {
+        let mut state = crate::sim::state::SimState::new();
+
+        let food_id = 7;
+        state.resource_types.insert(
+            food_id,
+            crate::sim::state::ResourceType {
+                id: food_id,
+                name: "Food".to_string(),
+                category: "Consumables".to_string(),
+                is_vital: true,
+            },
+        );
+
+        let home_city_id = 1;
+        let target_city_id = 2;
+        let body_id = 1;
+
+        state.celestial_bodies.insert(
+            body_id,
+            crate::sim::state::CelestialBody {
+                id: body_id,
+                name: "Planet".into(),
+                system_id: 1,
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            home_city_id,
+            crate::sim::state::City {
+                id: home_city_id,
+                body_id,
+                name: "Home".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.cities.insert(
+            target_city_id,
+            crate::sim::state::City {
+                id: target_city_id,
+                body_id,
+                name: "Target".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.ema_prices.insert((home_city_id, food_id), 2.0);
+        state.ema_prices.insert((target_city_id, food_id), 10.0); // very profitable destination
+
+        let company_id = 100;
+        state.companies.insert(
+            company_id,
+            crate::sim::state::Company {
+                id: company_id,
+                name: "FoodCorp".into(),
+                company_type: "small_company".into(),
+                home_city_id,
+                cash: 0.0, // Insufficient cash to pay for shipping
+                next_eval_tick: 1,
+                debt: 0.0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                company_id,
+                city_id: home_city_id,
+                facility_type: "plantation".into(),
+                capacity: 100,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(0),
+                production_ratios: None,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(company_id, home_city_id, food_id),
+            crate::sim::state::Inventory {
+                company_id,
+                city_id: home_city_id,
+                resource_type_id: food_id,
+                quantity: 50, // Enough to be considered for shipment
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1);
+
+        // No trade route should be created because cash is insufficient
+        assert_eq!(state.trade_routes.len(), 0);
+
+        // Instead, a local sell order should be created
+        let orders: Vec<_> = state.market_orders.values().collect();
+        assert_eq!(orders.len(), 1);
+        assert_eq!(orders[0].order_type, "sell");
+        assert_eq!(orders[0].quantity, 50);
+
+        let inv = state
+            .inventories
+            .get(&crate::sim::state::Inventory::key(
+                company_id,
+                home_city_id,
+                food_id,
+            ))
+            .unwrap();
+        assert_eq!(inv.quantity, 50);
+    }
 }
