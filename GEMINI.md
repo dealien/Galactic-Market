@@ -56,7 +56,7 @@ The simulation follows a **Research -> Strategy -> Execution** pattern with a fo
 - **Build:** `cargo build`
 - **Test:** `cargo test`
 - **Bench:** `cargo bench`
-- **Lint:** `cargo clippy -- -D warnings`
+- **Lint:** `cargo clippy --all-targets -- -D warnings`
 - **Format:** `cargo fmt`
 - **Generate coverage:** `cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info`
 - **Generate HTML coverage:** `cargo llvm-cov --all-features --workspace --html`
@@ -64,13 +64,15 @@ The simulation follows a **Research -> Strategy -> Execution** pattern with a fo
 
 ### Debugging & Performance
 
-Running the simulation with the `--debug` flag generates high-volume tracing logs. When running for more than 100 ticks, console I/O becomes a significant bottleneck. 
+Running the simulation with the `--debug` flag generates high-volume tracing logs. When running for more than 100 ticks, console I/O becomes a significant bottleneck.
 
 To maintain performance during debugging:
+
 1. **Pipe to File:** Redirect output to a log file instead of the terminal.
 2. **Post-Analysis:** Use `grep` (Linux/WSL) or `Select-String` (PowerShell) to analyze the resulting log.
 
 **PowerShell Example:**
+
 ```powershell
 # Run 1000 ticks with full debug logs saved to a file
 cargo run -- --seed --ticks 1000 --debug > sim_debug.log 2>&1
@@ -86,7 +88,7 @@ Select-String -Path sim_debug.log -Pattern "Match:" | Select-Object -First 20
 - **Cargo First:** Use `cargo` for all development tasks.
 - **Async/Await:** Use `tokio` for concurrency and `sqlx` for database interactions.
 - **Error Handling:** Prefer `Result` and the `?` operator. Avoid `unwrap()` or `expect()` in production code.
-- **Formatting:** Code must be formatted with `cargo fmt` and pass `cargo clippy -- -D warnings`. Ensure compliance before completion.
+- **Formatting:** Code must be formatted with `cargo fmt` and pass `cargo clippy --all-targets -- -D warnings`. Ensure compliance before completion.
 
 ### Simulation Principles
 
@@ -181,7 +183,7 @@ Only `intent` is required. `Lore-id` is auto-generated.
 ### When to Add Trailers
 
 | Situation | Trailer |
-|-----------|---------|
+| ----------- | --------- |
 | Chose A over B | `Rejected: ["B \| reason"]` |
 | Rule must hold | `Constraint: ["the rule"]` |
 | Future instruction | `Directive: ["the instruction"]` |
@@ -192,7 +194,7 @@ Only `intent` is required. `Lore-id` is auto-generated.
 ## Other Commands
 
 | Command | Purpose |
-|---------|---------|
+| --------- | --------- |
 | `lore context <path> --json` | Full context for a file/directory |
 | `lore why <file>:<line> --json` | Line-level blame with Lore context |
 | `lore search --text "q" --json` | Search across all lore |

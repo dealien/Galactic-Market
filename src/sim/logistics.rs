@@ -556,7 +556,7 @@ mod tests {
 
         // Check that inventory wasn't created yet
         let key = Inventory::key(100, 20, 5);
-        assert!(state.inventories.get(&key).is_none());
+        assert!(!state.inventories.contains_key(&key));
 
         // Run logistics on tick 10, should arrive
         run_logistics(&mut state, 10);

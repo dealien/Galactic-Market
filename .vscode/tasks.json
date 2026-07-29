@@ -20,6 +20,7 @@
             "type": "cargo",
             "command": "clippy",
             "args": [
+                "--all-targets",
                 "--",
                 "-D",
                 "warnings"

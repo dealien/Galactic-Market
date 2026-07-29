@@ -14,7 +14,7 @@
 ## Testing Performed
 <!-- Describe how you verified these changes. Include test results, manual runs, or benchmarks. For example:
 - [ ] Unit tests pass (`cargo test`)
-- [ ] Clippy is clean (`cargo clippy -- -D warnings`)
+- [ ] Clippy is clean (`cargo clippy --all-targets -- -D warnings`)
 - [ ] Formatting is correct (`cargo fmt`)
 - [ ] Manual simulation run verification
 -->
