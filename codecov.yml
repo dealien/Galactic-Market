@@ -33,22 +33,22 @@ component_management:
       name: core
       paths:
         - src/*.rs
-#      statuses:
-#        - type: project
+      statuses:
+        - type: project
 #          target: 80%
 
     - component_id: module_sim
       name: sim
       paths:
         - src/sim/**
-#      statuses:
-#        - type: project
+      statuses:
+        - type: project
 #          target: 85%
 
     - component_id: module_db
       name: db
       paths:
         - src/db/**
-#      statuses:
-#        - type: project
+      statuses:
+        - type: project
 #          target: 90%
