@@ -3787,8 +3787,12 @@ mod tests {
         state.tick = 1;
 
         // Give empire some initial treasury
-        state.add_to_empire_treasury(1, 100.0);
-        assert_eq!(state.get_empire_treasury(1), 100.0);
+        state.add_to_empire_treasury(1, 250.0);
+
+        let order_cost = 10.0 * 15.0; // 150.0
+        state.withdraw_from_empire_treasury(1, order_cost);
+
+        assert_eq!(state.get_empire_treasury(1), 100.0); // 250 - 150
 
         // Setup an unmatched empire relief order
         // Empire orders use a negative company_id corresponding to -empire_id
@@ -3816,7 +3820,7 @@ mod tests {
         assert!(state.market_orders.is_empty());
 
         // The unused relief budget should be refunded to the empire's treasury
-        // original 100.0 + (10 units * 15.0 price) = 100.0 + 150.0 = 250.0
+        // remaining 100.0 + (10 units * 15.0 price) = 100.0 + 150.0 = 250.0
         assert_eq!(state.get_empire_treasury(1), 250.0);
     }
 
