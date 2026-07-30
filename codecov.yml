@@ -1,0 +1,54 @@
+# 1. Global coverage settings
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+        threshold: 1% # Allows a 1% global drop before failing the check
+    patch:
+      default:
+        target: 80% # Requires 80% coverage on all *new* lines of code added in a PR
+
+# 2. Ignore unnecessary paths
+ignore:
+  - "tests/**" # Ignores integration tests
+  - "benches/**" # Ignores benchmark files
+  - "target/**" # Ignores build artifacts
+
+# 3. PR Comment Layout
+comment:
+  layout: "header, diff, components, files, footer" # Shows component breakdown in PR comments
+  require_changes: false
+
+# 4. Component-specific settings
+component_management:
+  default_rules:
+    statuses:
+      - type: project
+        target: auto
+        threshold: 1% # Applies the 1% leniency to components missing explicit targets
+
+  individual_components:
+    - component_id: module_core
+      name: core
+      paths:
+        - src/*.rs
+      statuses:
+        - type: project
+#          target: 80%
+
+    - component_id: module_sim
+      name: sim
+      paths:
+        - src/sim/**
+      statuses:
+        - type: project
+#          target: 85%
+
+    - component_id: module_db
+      name: db
+      paths:
+        - src/db/**
+      statuses:
+        - type: project
+#          target: 90%
