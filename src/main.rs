@@ -88,15 +88,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state.event_definitions.len()
     );
 
-    // Initialize RNG
+    // Initialize RNG & resolve seed persistence
     use rand::SeedableRng;
-    let seed = args.random_seed.unwrap_or_else(|| {
-        if state.seed != 0 {
-            state.seed
-        } else {
-            rand::random()
-        }
-    });
+    let (seed, needs_persist) = match args.random_seed {
+        Some(s) => (s, state.seed != s),
+        None if state.seed != 0 => (state.seed, false),
+        None => (rand::random::<u64>(), true),
+    };
+
+    if needs_persist {
+        sqlx::query(
+            "INSERT INTO world_metadata (id, seed) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET seed = EXCLUDED.seed",
+        )
+        .bind(seed as i64)
+        .execute(&pool)
+        .await?;
+    }
+
     state.seed = seed;
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     info!("Simulation RNG seed: {}", seed);
