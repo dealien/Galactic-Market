@@ -2,6 +2,12 @@ use galactic_market::sim::SimState;
 use galactic_market::sim::state::{
     ActiveEvent, CelestialBody, City, Company, Empire, ResourceType, Sector, StarSystem,
 };
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
+fn test_rng() -> StdRng {
+    StdRng::seed_from_u64(42)
+}
 
 fn setup_empire_state() -> SimState {
     let mut state = SimState::new();
@@ -147,7 +153,7 @@ fn test_famine_relief_buy_orders() {
     state.prime_rates.insert(1, 0.05);
 
     // Run decisions phase
-    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+    galactic_market::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
     // Check if any relief orders were posted by company 100 (Central Bank)
     let relief_orders: Vec<_> = state
@@ -191,7 +197,7 @@ fn test_central_bank_monetary_policy() {
     state.prime_rates.insert(1, 0.05);
 
     // Run decisions
-    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+    galactic_market::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
     let next_rate = state.prime_rates[&1];
     assert!(
@@ -246,7 +252,7 @@ fn test_merchant_takes_loan_for_arbitrage() {
     state.prime_rates.insert(1, 0.05);
 
     // Run decisions
-    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+    galactic_market::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
     let merchant = &state.companies[&300];
     assert!(
@@ -280,7 +286,7 @@ fn test_consumer_borrows_during_liquidity_crisis() {
     state.prime_rates.insert(1, 0.05);
 
     // Run decisions
-    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+    galactic_market::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
     let consumer = &state.companies[&400];
     assert!(
@@ -369,7 +375,7 @@ fn test_llr_emergency_lending_and_repayment() {
     state.companies.get_mut(&200).unwrap().next_eval_tick = 1;
 
     // Run decisions phase to trigger LLR loan
-    galactic_market::sim::decisions::run_decisions(&mut state, 1);
+    galactic_market::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
     // Bank cash should now be restored to 50k (min_reserve).
     // So 40k cash was lent by Central Bank.
@@ -396,7 +402,7 @@ fn test_llr_emergency_lending_and_repayment() {
     state.companies.get_mut(&200).unwrap().next_eval_tick = 2;
 
     // Run decisions again
-    galactic_market::sim::decisions::run_decisions(&mut state, 2);
+    galactic_market::sim::decisions::run_decisions(&mut state, 2, &mut test_rng());
 
     // Loan should be fully repaid
     let loan = state.loans.get(&llr_loan_id).unwrap();

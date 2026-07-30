@@ -817,10 +817,16 @@ fn bench_production_phase(bencher: divan::Bencher, num_refineries: usize) {
 
 #[divan::bench(args = [32, 128, 512])]
 fn bench_decisions_phase(bencher: divan::Bencher, num_companies: usize) {
+    use rand::SeedableRng;
     bencher
-        .with_inputs(|| make_decisions_state(num_companies))
-        .bench_local_refs(|state| {
-            galactic_market::sim::decisions::run_decisions(state, 1);
+        .with_inputs(|| {
+            (
+                make_decisions_state(num_companies),
+                rand::rngs::StdRng::seed_from_u64(42),
+            )
+        })
+        .bench_local_refs(|(state, rng)| {
+            galactic_market::sim::decisions::run_decisions(state, 1, rng);
         });
 }
 
@@ -853,10 +859,16 @@ fn bench_spatial_lookup(bencher: divan::Bencher) {
 
 #[divan::bench(args = [1, 4, 16])]
 fn bench_merchant_arbitrage_scan(bencher: divan::Bencher, num_merchants: usize) {
+    use rand::SeedableRng;
     bencher
-        .with_inputs(|| make_merchant_state(num_merchants))
-        .bench_local_refs(|state| {
-            galactic_market::sim::decisions::run_decisions(state, 1);
+        .with_inputs(|| {
+            (
+                make_merchant_state(num_merchants),
+                rand::rngs::StdRng::seed_from_u64(42),
+            )
+        })
+        .bench_local_refs(|(state, rng)| {
+            galactic_market::sim::decisions::run_decisions(state, 1, rng);
         });
 }
 

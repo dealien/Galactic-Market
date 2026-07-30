@@ -71,7 +71,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     sqlx::migrate!("./migrations").run(&pool).await?;
 
     if args.seed {
-        db::seed::run_seed(&pool).await?;
+        let seed = args.random_seed.unwrap_or_else(rand::random);
+        db::seed::run_seed_with_seed(&pool, seed).await?;
     }
 
     // Load full simulation state from DB into memory
@@ -89,7 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize RNG
     use rand::SeedableRng;
-    let seed = args.random_seed.unwrap_or_else(rand::random);
+    let seed = args.random_seed.unwrap_or_else(|| {
+        if state.seed != 0 {
+            state.seed
+        } else {
+            rand::random()
+        }
+    });
+    state.seed = seed;
     let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
     info!("Simulation RNG seed: {}", seed);
 

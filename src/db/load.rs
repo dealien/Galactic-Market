@@ -34,6 +34,14 @@ use crate::sim::state::{
 pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
     let mut state = SimState::new();
 
+    // ── World Metadata ────────────────────────────────────────────────────────
+    let seed_row = sqlx::query_as::<_, (i64,)>("SELECT seed FROM world_metadata WHERE id = 1")
+        .fetch_optional(pool)
+        .await?;
+    if let Some((seed,)) = seed_row {
+        state.seed = seed as u64;
+    }
+
     // ── Cities ────────────────────────────────────────────────────────────────
     let rows = sqlx::query_as::<_, (i32, i32, String, i64, i32, i32, f64, i64, f64, f64, f64)>(
         "SELECT id, body_id, name, population, infrastructure_lvl, port_tier, port_fee_per_unit, port_max_throughput, COALESCE(wage_pool::FLOAT8, 0.0), COALESCE(tax_collected_this_tick::FLOAT8, 0.0), COALESCE(population_growth_rate::FLOAT8, 0.0) FROM cities",
