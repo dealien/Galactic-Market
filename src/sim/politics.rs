@@ -14,8 +14,8 @@ const ALLIED_TENSION_DECAY_RATE: f64 = 0.1;
 const WAR_TENSION_THRESHOLD: f64 = 100.0;
 const TENSION_DECAY_RATE: f64 = 0.01;
 const SECTOR_SPLIT_TENSION_INCREASE: f64 = 0.1;
-pub const SECTOR_SPLIT_PRODUCTION_PENALTY: f64 = 0.15;
-pub const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.25;
+pub const SECTOR_SPLIT_PRODUCTION_PENALTY: f64 = 0.20;
+pub const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.30;
 pub const WAR_THEATER_PRODUCTION_PENALTY: f64 = 0.50;
 
 /// Run the politics phase over the current simulation state.
@@ -1155,10 +1155,8 @@ mod tests {
         };
         state.sector_control.insert(1, control);
 
-        let expected = WAR_THEATER_PRODUCTION_PENALTY
-            + OCCUPATION_PRODUCTION_PENALTY
-            + SECTOR_SPLIT_PRODUCTION_PENALTY;
-        assert_eq!(get_system_production_penalty(&state, 1), expected.min(0.9));
+        // Total penalty: 0.50 + 0.30 + 0.20 = 1.0, which should cap at 0.9
+        assert_eq!(get_system_production_penalty(&state, 1), 0.9);
 
         // Case 5: War inactive - should drop theater penalty
         war.status = "concluded".to_string();
