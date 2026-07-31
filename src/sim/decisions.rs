@@ -3791,6 +3791,49 @@ mod tests {
     }
 
     #[test]
+    fn test_empire_relief_refund_unmatched_orders() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        // Give empire some initial treasury
+        state.add_to_empire_treasury(1, 250.0);
+
+        let order_cost = 10.0 * 15.0; // 150.0
+        state.withdraw_from_empire_treasury(1, order_cost);
+
+        assert_eq!(state.get_empire_treasury(1), 100.0); // 250 - 150
+
+        // Setup an unmatched empire relief order
+        // Empire orders use a negative company_id corresponding to -empire_id
+        let order_id = state.next_order_id();
+        state.market_orders.insert(
+            order_id,
+            MarketOrder {
+                id: order_id,
+                city_id: 1,
+                company_id: -1, // Represents empire_id = 1
+                resource_type_id: 7,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 15.0,
+                quantity: 10,
+                created_tick: state.tick,
+            },
+        );
+        assert_eq!(state.market_orders.len(), 1);
+
+        let tick = state.tick;
+        run_empire_relief(&mut state, tick);
+
+        // The market order should be removed
+        assert!(state.market_orders.is_empty());
+
+        // The unused relief budget should be refunded to the empire's treasury
+        // remaining 100.0 + (10 units * 15.0 price) = 100.0 + 150.0 = 250.0
+        assert_eq!(state.get_empire_treasury(1), 250.0);
+    }
+
+    #[test]
     fn test_empire_relief_logger_deduplication() {
         let mut state = SimState::new();
         state.tick = 1;
