@@ -95,12 +95,15 @@ fn eval_interval_range(company_type: &str) -> (u64, u64) {
 /// ```rust
 /// use galactic_market::sim::SimState;
 /// use galactic_market::sim::decisions::run_decisions;
+/// use rand::SeedableRng;
+/// use rand::rngs::StdRng;
 ///
 /// let mut state = SimState::new();
-/// run_decisions(&mut state, 1);
+/// let mut rng = StdRng::seed_from_u64(42);
+/// run_decisions(&mut state, 1, &mut rng);
 /// ```
-pub fn run_decisions(state: &mut SimState, current_tick: u64) {
-    let mut rng = rand::thread_rng();
+pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng) {
+    // Snapshot the last known clearing prices for decision-making
 
     // Snapshot the last known clearing prices for decision-making
     let last_prices = last_known_prices(state);
@@ -2007,6 +2010,12 @@ pub fn compute_merchant_opportunities(
 mod tests {
     use super::*;
     use crate::sim::state::{City, Company, Deposit, Facility, Inventory, SimState};
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
+
+    fn test_rng() -> StdRng {
+        StdRng::seed_from_u64(42)
+    }
 
     fn make_state_with_miner() -> SimState {
         let mut s = SimState::new();
@@ -2078,14 +2087,14 @@ mod tests {
     #[test]
     fn miner_posts_sell_order_when_inventory_available() {
         let mut state = make_state_with_miner();
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
         assert!(state.market_orders.values().any(|o| o.order_type == "sell"));
     }
 
     #[test]
     fn company_reschedules_next_eval() {
         let mut state = make_state_with_miner();
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
         let company = &state.companies[&1];
         assert!(company.next_eval_tick > 1);
     }
@@ -2094,7 +2103,7 @@ mod tests {
     fn company_skips_when_not_due() {
         let mut state = make_state_with_miner();
         state.companies.get_mut(&1).unwrap().next_eval_tick = 9999;
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
         assert!(state.market_orders.is_empty());
     }
 
@@ -2523,7 +2532,7 @@ mod tests {
         assert!(state.city_food_balance[&1].has_surplus);
 
         // Run merchant AI
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         // Verify: Merchant posted a food buy order (famine relief)
         let food_buy_orders: Vec<_> = state
@@ -3261,7 +3270,7 @@ mod tests {
 
         state.ema_prices.insert((1, 1), 50.0);
 
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         assert_eq!(state.market_orders.len(), 1);
         let order = state.market_orders.values().next().unwrap();
@@ -3521,7 +3530,7 @@ mod tests {
             },
         );
 
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         // Rate should decrease by 0.005 from 0.05
         assert!((state.prime_rates[&empire_id] - 0.045).abs() < f64::EPSILON);
@@ -3591,7 +3600,7 @@ mod tests {
             },
         );
 
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         state.companies.get_mut(&bank_id).unwrap().next_eval_tick = 2; // trigger again
         state.bank_accounts.insert(
@@ -3616,7 +3625,7 @@ mod tests {
             },
         );
 
-        run_decisions(&mut state, 2);
+        run_decisions(&mut state, 2, &mut test_rng());
 
         assert!((state.loans[&1].interest_rate - 0.07).abs() < f64::EPSILON);
         assert!((state.bank_accounts[&1].interest_rate - 0.035).abs() < f64::EPSILON);
@@ -3659,7 +3668,7 @@ mod tests {
         );
 
         // Run decisions
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         // The company's cash should remain unchanged since the bank is missing
         assert_eq!(state.companies[&1].cash, 1000.0);
@@ -3715,7 +3724,7 @@ mod tests {
         );
 
         // Run decisions
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         // Expected deposit is 10000.0 - 5000.0 = 5000.0
         assert_eq!(state.companies[&1].cash, 5000.0);
@@ -3772,7 +3781,7 @@ mod tests {
         );
 
         // Run decisions
-        run_decisions(&mut state, 1);
+        run_decisions(&mut state, 1, &mut test_rng());
 
         // Expected withdraw is (5000.0 - 1000.0) = 4000.0
         // Min of 4000.0 (needed), 4000.0 (account balance), 10000.0 (bank cash) -> 4000.0
@@ -3863,7 +3872,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // debt (50) > cash (100) * 0.4 (40) -> Rate should increase by 0.005 from 0.05
         assert!((state.prime_rates[&empire_id] - 0.055).abs() < f64::EPSILON);
@@ -3957,7 +3966,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // Central bank should have posted a buy order for food
         let buy_orders: Vec<_> = state
@@ -4063,7 +4072,7 @@ mod tests {
             },
         ); // cash < 100_000.0
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // Central bank should NOT have posted a buy order for food because cash < 100,000
         let buy_orders: Vec<_> = state
@@ -4176,7 +4185,7 @@ mod tests {
         // Record the initial loan count to ensure a new loan is created
         let initial_loans = state.loans.len();
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // Verify the bank received cash to meet the minimum reserve (50.0 + 50.0 = 100.0)
         let updated_cash = state.companies.get(&comm_bank_id).unwrap().cash;
@@ -4319,7 +4328,7 @@ mod tests {
             balance: 90.0,
         });
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // the loan balance should be paid off. (350 > 90)
         let loan = state.loans.get(&loan_id).unwrap();
@@ -4430,7 +4439,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         assert_eq!(state.trade_routes.len(), 1);
         let route = state.trade_routes.values().next().unwrap();
@@ -4552,7 +4561,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         assert_eq!(state.trade_routes.len(), 0);
 
@@ -4646,7 +4655,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         assert_eq!(state.trade_routes.len(), 0);
 
@@ -4762,7 +4771,7 @@ mod tests {
             },
         );
 
-        crate::sim::decisions::run_decisions(&mut state, 1);
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
 
         // No trade route should be created because cash is insufficient
         assert_eq!(state.trade_routes.len(), 0);

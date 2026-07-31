@@ -6,7 +6,8 @@
 
 use crate::sim::namegen::{self, LocationType};
 use anyhow::{Context, Result};
-use rand::{Rng, thread_rng};
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use sqlx::PgPool;
 use tracing::info;
 
@@ -40,7 +41,10 @@ pub const DIPLOMATIC_STATUS_WAR: &str = "war";
 /// Populate the database with the initial simulation world if not already seeded.
 ///
 /// Seeds basic resource types, empires, sectors, star systems, celestial bodies,
-/// cities, central banks, facilities, deposits, and initial market orders.
+/// cities, central banks, facilities, deposits, and initial market orders using a randomly
+/// generated seed, which is persisted to the `world_metadata` table.
+///
+/// For explicit seed control, use [`run_seed_with_seed`].
 ///
 /// # Errors
 /// Returns an error if any database query or world-generation step fails.
@@ -58,7 +62,33 @@ pub const DIPLOMATIC_STATUS_WAR: &str = "war";
 /// }
 /// ```
 pub async fn run_seed(pool: &PgPool) -> Result<()> {
-    info!("Seeding universe...");
+    let seed: u64 = rand::random();
+    run_seed_with_seed(pool, seed).await
+}
+
+/// Populate the database with the initial simulation world using a specific random seed.
+///
+/// Seeds basic resource types, empires, sectors, star systems, celestial bodies,
+/// cities, central banks, facilities, deposits, and initial market orders, while
+/// persisting the seed to the `world_metadata` table.
+///
+/// # Errors
+/// Returns an error if any database query or world-generation step fails.
+///
+/// # Examples
+/// ```no_run
+/// use sqlx::PgPool;
+/// use galactic_market::db::seed::run_seed_with_seed;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), anyhow::Error> {
+///     let pool = PgPool::connect("postgres://postgres:password@localhost:5432/galactic_market").await?;
+///     run_seed_with_seed(&pool, 12345).await?;
+///     Ok(())
+/// }
+/// ```
+pub async fn run_seed_with_seed(pool: &PgPool, seed: u64) -> Result<()> {
+    info!("Seeding universe with seed {}...", seed);
 
     // Check if empires exist; skip if already seeded
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
@@ -81,9 +111,17 @@ pub async fn run_seed(pool: &PgPool) -> Result<()> {
         )
     })?;
 
-    let mut rng = thread_rng();
+    let mut rng = StdRng::seed_from_u64(seed);
 
     let mut tx = pool.begin().await?;
+
+    // Store seed metadata in database
+    sqlx::query(
+        "INSERT INTO world_metadata (id, seed) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET seed = EXCLUDED.seed"
+    )
+    .bind(seed as i64)
+    .execute(&mut *tx)
+    .await?;
 
     // 1. Resource Types
     let iron_ore_id = sqlx::query_as::<_, (i32,)>(

@@ -197,6 +197,8 @@ fn pick_random_empire_pair(state: &SimState, rng: &mut impl Rng) -> Option<(i32,
 #[cfg(test)]
 mod tests {
     use crate::sim::state::{SimState, StarSystem};
+    use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     #[test]
     fn test_lane_blockade_no_collision() {
@@ -332,7 +334,7 @@ mod tests {
         };
         state.active_events.insert(4, active_blockade);
 
-        let mut rng = rand::thread_rng();
+        let mut rng = StdRng::seed_from_u64(42);
         super::run_events(&mut state, &mut rng);
 
         assert_eq!(
@@ -391,7 +393,7 @@ mod tests {
 
         state.event_definitions.push(def);
 
-        let mut rng = rand::thread_rng();
+        let mut rng = StdRng::seed_from_u64(42);
         super::trigger_random_event(&mut state, &mut rng);
 
         assert_eq!(state.active_events.len(), 1, "Event should be created");
@@ -440,7 +442,7 @@ mod tests {
 
         state.event_definitions.push(def);
 
-        let mut rng = rand::thread_rng();
+        let mut rng = StdRng::seed_from_u64(42);
         super::trigger_random_event(&mut state, &mut rng);
 
         assert_eq!(state.active_events.len(), 1, "Event should be created");

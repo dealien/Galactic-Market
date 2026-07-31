@@ -96,7 +96,7 @@ impl SimState {
         decisions::analyze_city_food_balance(self);
 
         // ── Phase 5b: Company AI decisions ────────────────────────────────────
-        decisions::run_decisions(self, self.tick);
+        decisions::run_decisions(self, self.tick, rng);
 
         // ── Phase 6: Population consumption ───────────────────────────────────
         consumption::run_consumption(self, self.tick);

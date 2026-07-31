@@ -291,5 +291,17 @@ async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyho
     let emp = reloaded_state.empires.get(&1).unwrap();
     assert_eq!(emp.tax_rate, 0.08);
 
+    // Verify seed persistence (world_metadata)
+    let test_seed: u64 = 987_654_321;
+    sqlx::query(
+        "INSERT INTO world_metadata (id, seed) VALUES (1, $1) ON CONFLICT (id) DO UPDATE SET seed = EXCLUDED.seed",
+    )
+    .bind(test_seed as i64)
+    .execute(&pool)
+    .await?;
+
+    let reloaded_seed_state = galactic_market::db::load::load(&pool).await?;
+    assert_eq!(reloaded_seed_state.seed, test_seed);
+
     Ok(())
 }

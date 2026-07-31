@@ -453,8 +453,9 @@ mod tests {
 
     #[test]
     fn test_combat_produces_winner() {
+        use rand::SeedableRng;
         let mut state = setup_combat_state();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
         let winner = resolve_combat(&mut state, 1, 2, 1, &mut rng);
         assert!(winner.is_some());
         // Winner should be one of the two empires

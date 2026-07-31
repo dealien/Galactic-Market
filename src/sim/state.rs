@@ -466,6 +466,9 @@ pub struct MarketHistory {
 /// Loaded from the database at startup; mutated in-memory each tick; flushed
 /// periodically back to PostgreSQL.
 pub struct SimState {
+    /// Master simulation PRNG seed.
+    pub seed: u64,
+
     /// Current simulation tick.
     pub tick: u64,
 
@@ -645,6 +648,7 @@ impl SimState {
     /// ```
     pub fn new() -> Self {
         Self {
+            seed: 0,
             tick: 0,
             cities: HashMap::new(),
             celestial_bodies: HashMap::new(),
