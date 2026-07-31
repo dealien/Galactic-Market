@@ -41,7 +41,10 @@ pub const DIPLOMATIC_STATUS_WAR: &str = "war";
 /// Populate the database with the initial simulation world if not already seeded.
 ///
 /// Seeds basic resource types, empires, sectors, star systems, celestial bodies,
-/// cities, central banks, facilities, deposits, and initial market orders.
+/// cities, central banks, facilities, deposits, and initial market orders using a randomly
+/// generated seed, which is persisted to the `world_metadata` table.
+///
+/// For explicit seed control, use [`run_seed_with_seed`].
 ///
 /// # Errors
 /// Returns an error if any database query or world-generation step fails.
@@ -59,7 +62,8 @@ pub const DIPLOMATIC_STATUS_WAR: &str = "war";
 /// }
 /// ```
 pub async fn run_seed(pool: &PgPool) -> Result<()> {
-    run_seed_with_seed(pool, 42).await
+    let seed: u64 = rand::random();
+    run_seed_with_seed(pool, seed).await
 }
 
 /// Populate the database with the initial simulation world using a specific random seed.
