@@ -1,0 +1,32 @@
+cat << 'INNER_EOF' > update_decisions.py
+import re
+
+with open('src/sim/decisions.rs', 'r') as f:
+    content = f.read()
+
+pattern = r'''    for company_id in due \{
+        // Copy relevant company data locally to avoid immutable borrow while mutating state
+        let \(status, home_city_id, last_trade_tick\) = \{
+            let c = state\.companies\.get\(&company_id\)\.unwrap\(\);
+            \(c\.status\.clone\(\), c\.home_city_id, c\.last_trade_tick\)
+        \};
+
+        // --- Liquidation AI: Post Fire-Sale Orders ---
+        if status == "bankrupt" \{'''
+
+replace = '''    for company_id in due {
+        // Copy relevant company data locally to avoid immutable borrow while mutating state
+        let (is_bankrupt, home_city_id, last_trade_tick) = {
+            let c = state.companies.get(&company_id).unwrap();
+            (c.status == "bankrupt", c.home_city_id, c.last_trade_tick)
+        };
+
+        // --- Liquidation AI: Post Fire-Sale Orders ---
+        if is_bankrupt {'''
+
+content = re.sub(pattern, replace, content)
+with open('src/sim/decisions.rs', 'w') as f:
+    f.write(content)
+INNER_EOF
+python3 update_decisions.py
+cargo check

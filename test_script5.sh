@@ -1,0 +1,2 @@
+sed -i 's/let active_wars: Vec<(i32, Vec<i32>, Vec<i32>)> = state/let mut active_wars = Vec::with_capacity(state.wars.len());\n    for w in state.wars.values() {\n        if w.status == "active" {\n            let participant_ids = w.participants.iter().map(|(p, _)| *p).collect();\n            active_wars.push((w.id, w.theaters.clone(), participant_ids));\n        }\n    }\n    \/\/ state/g' src/sim/politics.rs
+cargo check

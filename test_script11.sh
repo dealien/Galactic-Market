@@ -1,0 +1,53 @@
+cat << 'INNER_EOF' > update_markets2.py
+import re
+
+with open('src/sim/markets.rs', 'r') as f:
+    content = f.read()
+
+pattern2 = r'''            // Check price compatibility for Limit vs Limit
+            if buy_kind == "limit" && sell_kind == "limit" && buy_price < sell_price \{
+                break; // No more matches possible
+            \}
+
+            // Determine clearing price
+            let clearing_price = match \(buy_kind\.as_str\(\), sell_kind\.as_str\(\)\) \{
+                \("market", "market"\) => \{
+                    // Two market orders: use last known EMA or fallback
+                    state
+                        \.ema_prices
+                        \.get&\(\(city_id, resource_type_id\)\)
+                        \.copied\(\)
+                        \.unwrap_or\(10\.0\)
+                \}
+                \("market", "limit"\) => sell_price,
+                \("limit", "market"\) => buy_price,
+                _ => \(buy_price \+ sell_price\) / 2\.0, // Midpoint discovery for Limit-Limit
+            \};'''
+
+replace2 = '''            // Check price compatibility for Limit vs Limit
+            if buy_is_limit && sell_is_limit && buy_price < sell_price {
+                break; // No more matches possible
+            }
+
+            // Determine clearing price
+            let clearing_price = match (buy_is_limit, sell_is_limit) {
+                (false, false) => {
+                    // Two market orders: use last known EMA or fallback
+                    state
+                        .ema_prices
+                        .get(&(city_id, resource_type_id))
+                        .copied()
+                        .unwrap_or(10.0)
+                }
+                (false, true) => sell_price,
+                (true, false) => buy_price,
+                _ => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
+            };'''
+
+content = re.sub(pattern2, replace2, content)
+
+with open('src/sim/markets.rs', 'w') as f:
+    f.write(content)
+INNER_EOF
+python3 update_markets2.py
+cargo bench --bench sim_bench -- bench_market_clearing
