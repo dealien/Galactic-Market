@@ -37,8 +37,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     }
 
     for ((city_id, resource_type_id), order_ids) in orders_by_market {
-        let mut buys = Vec::new();
-        let mut sells = Vec::new();
+        let mut buys = Vec::with_capacity(order_ids.len());
+        let mut sells = Vec::with_capacity(order_ids.len());
 
         for id in order_ids {
             let order = &state.market_orders[&id];
@@ -56,8 +56,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         buys.sort_by(|&a, &b| {
             let oa = &state.market_orders[&a];
             let ob = &state.market_orders[&b];
-            if oa.order_kind != ob.order_kind {
-                if oa.order_kind == "market" {
+            let oa_is_market = oa.order_kind == "market";
+            let ob_is_market = ob.order_kind == "market";
+
+            if oa_is_market != ob_is_market {
+                if oa_is_market {
                     return std::cmp::Ordering::Less;
                 }
                 return std::cmp::Ordering::Greater;
@@ -70,8 +73,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         sells.sort_by(|&a, &b| {
             let oa = &state.market_orders[&a];
             let ob = &state.market_orders[&b];
-            if oa.order_kind != ob.order_kind {
-                if oa.order_kind == "market" {
+            let oa_is_market = oa.order_kind == "market";
+            let ob_is_market = ob.order_kind == "market";
+
+            if oa_is_market != ob_is_market {
+                if oa_is_market {
                     return std::cmp::Ordering::Less;
                 }
                 return std::cmp::Ordering::Greater;

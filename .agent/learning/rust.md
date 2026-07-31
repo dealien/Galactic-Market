@@ -73,3 +73,7 @@
 ## 2026-07-29 - Default trait usage inside of SimState nested objects
 **Learning:** Instantiating structs within `src/sim/state.rs` often requires fully-qualifying member types or using explicit constructors since they might lack generic `Default` derives or standard parameters (e.g. `City`, `Company`, `Facility`). Tests that need nested `SimState` elements should manually set every necessary field (and watch out for type mismatches, e.g., using `100.0` instead of `100` for an `i32` capacity) rather than trying to default unneeded data. Also, watch out for missing fields inside constructors for structs like `Company` which have new runtime fields added over time.
 **Action:** When creating tests, define nested objects deliberately and check `src/sim/state.rs` for exactly what fields must be set to initialize objects.
+
+## 2025-03-05 - Performance patterns for sorting
+**Learning:** In the market matching tick loop, `sort_by` was being used for sorting orders which guarantees stable sorting (maintaining FIFO for matching prices). An attempt to use `sort_unstable_by` caused a test failure because order matching became non-deterministic for limit orders with the same price, violating the exact preservation of functionality rule.
+**Action:** Do not use `sort_unstable_by` when stable sorting (FIFO behavior) is required, such as in order book matching algorithms.
