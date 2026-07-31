@@ -77,3 +77,7 @@
 ## 2025-03-05 - Performance patterns for sorting
 **Learning:** In the market matching tick loop, `sort_by` was being used for sorting orders which guarantees stable sorting (maintaining FIFO for matching prices). An attempt to use `sort_unstable_by` caused a test failure because order matching became non-deterministic for limit orders with the same price, violating the exact preservation of functionality rule.
 **Action:** Do not use `sort_unstable_by` when stable sorting (FIFO behavior) is required, such as in order book matching algorithms.
+
+## 2025-02-18 - SimState Instantiation and Implicit Struct Initialization
+**Learning:** When writing tests that directly manipulate the `SimState` structs (like `Occupation` or `SectorControl`), the structs may have fewer fields than assumed if one attempts to populate them exhaustively based on older knowledge or generalized assumptions. Specifically, `StarSystem` has no `x`, `y`, or `status` fields; `Occupation` requires `system_id`, `occupier_empire_id`, and `since_tick`; and `SectorControl` uses an `empire_system_counts` HashMap and `total_systems` instead of a flat `controlling_empires` vector.
+**Action:** When manually mocking `SimState` entities for a test, always carefully inspect the `SimState` struct definition (or rely on compiler errors and adapt) to construct valid structs, especially complex nested state like `SectorControl`.

@@ -14,8 +14,8 @@ const ALLIED_TENSION_DECAY_RATE: f64 = 0.1;
 const WAR_TENSION_THRESHOLD: f64 = 100.0;
 const TENSION_DECAY_RATE: f64 = 0.01;
 const SECTOR_SPLIT_TENSION_INCREASE: f64 = 0.1;
-pub const SECTOR_SPLIT_PRODUCTION_PENALTY: f64 = 0.15;
-pub const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.25;
+pub const SECTOR_SPLIT_PRODUCTION_PENALTY: f64 = 0.20;
+pub const OCCUPATION_PRODUCTION_PENALTY: f64 = 0.30;
 pub const WAR_THEATER_PRODUCTION_PENALTY: f64 = 0.50;
 
 /// Run the politics phase over the current simulation state.
@@ -1086,8 +1086,86 @@ pub fn get_system_production_penalty(state: &SimState, system_id: i32) -> f64 {
 mod tests {
     use super::*;
     use crate::sim::state::{
-        DiplomaticRelation, Empire, MilitaryUnit, Sector, StarSystem, SystemLane, Treaty,
+        DiplomaticRelation, Empire, MilitaryUnit, Occupation, Sector, SectorControl, StarSystem,
+        SystemLane, Treaty, War,
     };
+
+    #[test]
+    fn test_get_system_production_penalty() {
+        let mut state = SimState::new();
+
+        // Setup base state
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                name: "Alpha".to_string(),
+                sector_id: 1,
+            },
+        );
+
+        // Case 1: Base penalty is 0
+        assert_eq!(get_system_production_penalty(&state, 1), 0.0);
+
+        // Case 2: War theater penalty
+        let mut war = War {
+            id: 1,
+            aggressor_id: 1,
+            defender_id: 2,
+            participants: vec![],
+            theaters: vec![1],
+            start_tick: 1,
+            end_tick: None,
+            status: "active".to_string(),
+            cumulative_losses: 0.0,
+            aggressor_exhaustion: 0.0,
+            defender_exhaustion: 0.0,
+        };
+        state.wars.insert(1, war.clone());
+        assert_eq!(
+            get_system_production_penalty(&state, 1),
+            WAR_THEATER_PRODUCTION_PENALTY
+        );
+
+        // Case 3: War theater + Occupation penalty
+        state.occupied_systems.insert(
+            1,
+            Occupation {
+                system_id: 1,
+                occupier_empire_id: 2,
+                since_tick: 1,
+            },
+        );
+        assert_eq!(
+            get_system_production_penalty(&state, 1),
+            WAR_THEATER_PRODUCTION_PENALTY + OCCUPATION_PRODUCTION_PENALTY
+        );
+
+        // Case 4: War theater + Occupation + Sector split penalty
+        use std::collections::HashMap;
+        let mut empire_system_counts = HashMap::new();
+        empire_system_counts.insert(1, 1);
+        empire_system_counts.insert(2, 1);
+
+        let control = SectorControl {
+            sector_id: 1,
+            empire_system_counts,
+            total_systems: 2,
+            is_split: true,
+        };
+        state.sector_control.insert(1, control);
+
+        // Total penalty: 0.50 + 0.30 + 0.20 = 1.0, which should cap at 0.9
+        assert_eq!(get_system_production_penalty(&state, 1), 0.9);
+
+        // Case 5: War inactive - should drop theater penalty
+        war.status = "concluded".to_string();
+        state.wars.insert(1, war);
+        assert_eq!(
+            get_system_production_penalty(&state, 1),
+            OCCUPATION_PRODUCTION_PENALTY + SECTOR_SPLIT_PRODUCTION_PENALTY
+        );
+    }
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
