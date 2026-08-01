@@ -324,4 +324,131 @@ mod tests {
         // Deposit should NOT change
         assert_eq!(state.deposits[&1].size_remaining, 1000);
     }
+
+    /// Verifies that extraction is skipped if the facility is not of type 'mine'.
+    #[test]
+    fn extraction_skips_if_not_mine_type() {
+        let mut state = make_state();
+        state.facilities.get_mut(&1).unwrap().facility_type = "factory".into();
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+    }
+
+    /// Verifies that extraction is skipped and setup ticks are decremented if setup ticks remain.
+    #[test]
+    fn extraction_skips_if_setup_ticks_remaining() {
+        let mut state = make_state();
+        state.facilities.get_mut(&1).unwrap().setup_ticks_remaining = 5;
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+        // Setup ticks should decrement
+        assert_eq!(state.facilities[&1].setup_ticks_remaining, 4);
+    }
+
+    /// Verifies that extraction is skipped if the mine has no target resource ID.
+    #[test]
+    fn extraction_skips_if_no_target_resource() {
+        let mut state = make_state();
+        state.facilities.get_mut(&1).unwrap().target_resource_id = None;
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+    }
+
+    /// Verifies that extraction is safely skipped if no eligible deposit is found for the given resource.
+    #[test]
+    fn extraction_skips_if_no_deposit_found() {
+        let mut state = make_state();
+        state.deposits.remove(&1);
+        run_extraction(&mut state);
+        // No crash, extraction skipped. We can verify no inventory created.
+        let key = Inventory::key(1, 1, 1);
+        assert!(!state.inventories.contains_key(&key));
+    }
+
+    /// Verifies that extraction is skipped if the company owning the facility is not found in state.
+    #[test]
+    fn extraction_skips_if_company_not_found() {
+        let mut state = make_state();
+        state.companies.remove(&1);
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+    }
+
+    /// Verifies that if a company has insufficient cash for extraction, the deficit correctly rolls over into debt.
+    #[test]
+    fn extraction_cash_deficit_rolls_into_debt() {
+        let mut state = make_state();
+        // Set company cash to 1.0 (cost is 20.0 for 10 units at 2.0/unit)
+        state.companies.get_mut(&1).unwrap().cash = 1.0;
+
+        run_extraction(&mut state);
+
+        let company = &state.companies[&1];
+        assert_eq!(company.cash, 0.0);
+        assert_eq!(company.debt, 19.0);
+    }
+
+    /// Verifies that extraction is skipped if the city associated with the facility cannot be found.
+    #[test]
+    fn extraction_skips_if_city_not_found() {
+        let mut state = make_state();
+        state.cities.remove(&1);
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+    }
+
+    #[test]
+    fn extraction_skips_if_extract_qty_zero() {
+        let mut state = make_state();
+        // Give the facility 0 capacity so extract_qty becomes 0
+        state.facilities.get_mut(&1).unwrap().capacity = 0;
+
+        run_extraction(&mut state);
+
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+        let key = Inventory::key(1, 1, 1);
+        assert!(!state.inventories.contains_key(&key));
+    }
+
+    /// Verifies that exhausted deposits (size_remaining == 0) are removed from state by `prune_exhausted_deposits`.
+    #[test]
+    fn prune_exhausted_deposits_removes_empty() {
+        let mut state = make_state();
+        state.deposits.get_mut(&1).unwrap().size_remaining = 0;
+
+        prune_exhausted_deposits(&mut state);
+
+        assert!(state.deposits.is_empty());
+    }
+
+    /// Verifies that extraction dynamically throttles (skips) when profit margins are extremely low and surplus exists.
+    #[test]
+    fn extraction_throttles_due_to_low_margin_and_surplus() {
+        let mut state = make_state();
+
+        // Setup low market price
+        state.ema_prices.insert((1, 1), 2.05); // slightly above cost of 2.0, condition is <= 1.05 * cost = 2.1
+
+        // Setup moderate surplus
+        state.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 25, // capacity is 10, so > 20
+            },
+        );
+
+        run_extraction(&mut state);
+        // Deposit should NOT change
+        assert_eq!(state.deposits[&1].size_remaining, 1000);
+        // Inventory shouldn't change
+        assert_eq!(state.inventories[&Inventory::key(1, 1, 1)].quantity, 25);
+    }
 }
