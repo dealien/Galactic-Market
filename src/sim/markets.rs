@@ -42,10 +42,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
         for id in order_ids {
             let order = &state.market_orders[&id];
+            let is_market = order.order_kind == "market";
             if order.order_type == "buy" {
-                buys.push(id);
+                buys.push((id, order.price, is_market));
             } else {
-                sells.push(id);
+                sells.push((id, order.price, is_market));
             }
         }
 
@@ -53,38 +54,24 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         // Market orders first, then Limit orders.
         // Buys: Market -> Highest Limit Price
         // Sells: Market -> Lowest Limit Price
-        buys.sort_by(|&a, &b| {
-            let oa = &state.market_orders[&a];
-            let ob = &state.market_orders[&b];
-            let oa_is_market = oa.order_kind == "market";
-            let ob_is_market = ob.order_kind == "market";
-
-            if oa_is_market != ob_is_market {
-                if oa_is_market {
+        buys.sort_unstable_by(|a, b| {
+            if a.2 != b.2 {
+                if a.2 {
                     return std::cmp::Ordering::Less;
                 }
                 return std::cmp::Ordering::Greater;
             }
-            ob.price
-                .partial_cmp(&oa.price)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        sells.sort_by(|&a, &b| {
-            let oa = &state.market_orders[&a];
-            let ob = &state.market_orders[&b];
-            let oa_is_market = oa.order_kind == "market";
-            let ob_is_market = ob.order_kind == "market";
-
-            if oa_is_market != ob_is_market {
-                if oa_is_market {
+        sells.sort_unstable_by(|a, b| {
+            if a.2 != b.2 {
+                if a.2 {
                     return std::cmp::Ordering::Less;
                 }
                 return std::cmp::Ordering::Greater;
             }
-            oa.price
-                .partial_cmp(&ob.price)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
         });
 
         let mut b_idx = 0;
@@ -98,26 +85,26 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut close = 0.0;
 
         while b_idx < buys.len() && s_idx < sells.len() {
-            let b_id = buys[b_idx];
-            let s_id = sells[s_idx];
+            let b_id = buys[b_idx].0;
+            let s_id = sells[s_idx].0;
 
-            let (buy_qty, buy_price, buy_kind, buy_company_id) = {
+            let (buy_qty, buy_price, buy_is_market, buy_company_id) = {
                 let o = &state.market_orders[&b_id];
-                (o.quantity, o.price, o.order_kind.clone(), o.company_id)
+                (o.quantity, o.price, o.order_kind == "market", o.company_id)
             };
-            let (sell_qty, sell_price, sell_kind, sell_company_id) = {
+            let (sell_qty, sell_price, sell_is_market, sell_company_id) = {
                 let o = &state.market_orders[&s_id];
-                (o.quantity, o.price, o.order_kind.clone(), o.company_id)
+                (o.quantity, o.price, o.order_kind == "market", o.company_id)
             };
 
             // Check price compatibility for Limit vs Limit
-            if buy_kind == "limit" && sell_kind == "limit" && buy_price < sell_price {
+            if !buy_is_market && !sell_is_market && buy_price < sell_price {
                 break; // No more matches possible
             }
 
             // Determine clearing price
-            let clearing_price = match (buy_kind.as_str(), sell_kind.as_str()) {
-                ("market", "market") => {
+            let clearing_price = match (buy_is_market, sell_is_market) {
+                (true, true) => {
                     // Two market orders: use last known EMA or fallback
                     state
                         .ema_prices
@@ -125,9 +112,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         .copied()
                         .unwrap_or(10.0)
                 }
-                ("market", "limit") => sell_price,
-                ("limit", "market") => buy_price,
-                _ => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
+                (true, false) => sell_price,
+                (false, true) => buy_price,
+                (false, false) => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
             };
 
             let actual_buyer_cash = if buy_company_id < 0 {
