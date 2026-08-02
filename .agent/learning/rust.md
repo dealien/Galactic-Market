@@ -81,3 +81,7 @@
 ## 2025-02-18 - SimState Instantiation and Implicit Struct Initialization
 **Learning:** When writing tests that directly manipulate the `SimState` structs (like `Occupation` or `SectorControl`), the structs may have fewer fields than assumed if one attempts to populate them exhaustively based on older knowledge or generalized assumptions. Specifically, `StarSystem` has no `x`, `y`, or `status` fields; `Occupation` requires `system_id`, `occupier_empire_id`, and `since_tick`; and `SectorControl` uses an `empire_system_counts` HashMap and `total_systems` instead of a flat `controlling_empires` vector.
 **Action:** When manually mocking `SimState` entities for a test, always carefully inspect the `SimState` struct definition (or rely on compiler errors and adapt) to construct valid structs, especially complex nested state like `SectorControl`.
+
+## 2025-02-27 - SimState HashMap iteration order test flakiness
+**Learning:** Testing logic that iterates over non-deterministic collections like `HashMap` (e.g. tracking payment exhaustions across multiple loans) can lead to flaky assertions if the test assumes a specific iteration order.
+**Action:** When asserting against side-effects of iterating over `state.loans` or similar `HashMap`s, write assertions that are invariant to the order of operations, such as checking that *one of* a set of expected states is true for specific entries, rather than hardcoding exact values that depend on a specific iteration sequence.
