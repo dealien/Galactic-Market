@@ -402,6 +402,7 @@ mod tests {
         assert_eq!(state.deposits[&1].size_remaining, 1000);
     }
 
+    /// Verifies that extraction is skipped without panic if the calculated extraction quantity is <= 0.
     #[test]
     fn extraction_skips_if_extract_qty_zero() {
         let mut state = make_state();
