@@ -81,3 +81,6 @@
 ## 2025-02-18 - SimState Instantiation and Implicit Struct Initialization
 **Learning:** When writing tests that directly manipulate the `SimState` structs (like `Occupation` or `SectorControl`), the structs may have fewer fields than assumed if one attempts to populate them exhaustively based on older knowledge or generalized assumptions. Specifically, `StarSystem` has no `x`, `y`, or `status` fields; `Occupation` requires `system_id`, `occupier_empire_id`, and `since_tick`; and `SectorControl` uses an `empire_system_counts` HashMap and `total_systems` instead of a flat `controlling_empires` vector.
 **Action:** When manually mocking `SimState` entities for a test, always carefully inspect the `SimState` struct definition (or rely on compiler errors and adapt) to construct valid structs, especially complex nested state like `SectorControl`.
+## 2025-02-18 - Deterministic `sort_unstable_by` in market clearing
+**Learning:** Using `sort_unstable_by` over `sort_by` is much faster but breaks determinism in the simulation tick loop if items have identical sort keys (like limit orders with the same price).
+**Action:** When using `sort_unstable_by` for performance in simulation state arrays, always include explicit tie-breakers (e.g. `created_tick`, then `id`) in the sort tuple to ensure reproducibility under scarcity conditions.
