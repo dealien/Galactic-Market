@@ -88,3 +88,6 @@
 ## 2026-08-03 - Pre-allocated tuples for market matching
 **Learning:** Sorting multiple `MarketOrder` objects in the market clearing loop involves many string comparisons and boolean logic. Pre-calculating the sort criteria as a tuple when filling the initial Vec (e.g. `buys.push((id, is_market, order.price))`) avoids repeated calculations during sorting, which optimizes the tick loop hot path.
 **Action:** When sorting complex objects in hot loops, consider the Schwartzian transform (caching the sort keys in a tuple alongside the original ID or data) to minimize recalculations and string comparisons.
+## 2024-08-04 - Unstable sorting requires deterministic tie-breakers
+**Learning:** When switching from `sort_by` to `sort_unstable_by` for performance optimization in a tick loop (like market order sorting), it's crucial to explicitly break ties (e.g. by `created_tick` and then `id`). `sort_unstable_by` does not preserve original order, and if ties exist, it may randomly re-order orders with the same price, violating deterministic simulation ticks across different seeds or architectures.
+**Action:** Always include deterministic fallback comparisons (`.then_with(|| a_tick.cmp(&b_tick)).then_with(|| a_id.cmp(&b_id))`) when using `sort_unstable_by` on collections of structs that might share primary sorting keys, especially in tick-loop hot paths.
