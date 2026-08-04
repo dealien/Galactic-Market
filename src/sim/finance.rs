@@ -525,4 +525,147 @@ mod tests {
         // Account balance should increase by 10.4
         assert_eq!(state.bank_accounts[&1].balance, 1050.4);
     }
+
+    #[test]
+    fn test_loan_interest_shortfall_lender_not_company() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Broke Borrower".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 5.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Lender is not a company, cash > 0
+        state.add_loan(Loan {
+            id: 1,
+            company_id: 1,
+            lender_company_id: None,
+            principal: 1040.0, // interest will be 10.4
+            interest_rate: 0.52,
+            balance: 1040.0,
+        });
+
+        run_finance(&mut state);
+
+        assert_eq!(state.companies[&1].cash, 0.0);
+        assert_eq!(state.loans[&1].balance, 1045.4); // 1040.0 + 5.4 shortfall
+    }
+
+    #[test]
+    fn test_bankrupt_company_remaining_payment_zero() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 20.0, // Enough to cover the debt
+                debt: 20.0,
+                next_eval_tick: 1,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Lender Co".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 100.0, // Enough to cover the debt
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.add_loan(Loan {
+            id: 1,
+            company_id: 1,
+            lender_company_id: Some(2),
+            principal: 20.0,
+            interest_rate: 0.0,
+            balance: 20.0,
+        });
+
+        state.add_loan(Loan {
+            id: 2,
+            company_id: 1,
+            lender_company_id: Some(2),
+            principal: 10.0,
+            interest_rate: 0.0,
+            balance: 10.0,
+        });
+
+        run_finance(&mut state);
+
+        assert_eq!(state.companies[&1].cash, 0.0);
+        assert_eq!(state.companies[&1].debt, 10.0);
+
+        // Let's assert on loan balances directly
+        let loan1_bal = state.loans[&1].balance;
+        let loan2_bal = state.loans[&2].balance;
+        assert!(loan1_bal == 0.0 || loan2_bal == 0.0);
+        assert!(loan1_bal == 10.0 || loan2_bal == 10.0);
+
+        assert_eq!(state.companies[&2].cash, 120.0); // 100 + 20
+    }
+
+    #[test]
+    fn test_bankrupt_company_liquidation_with_zero_cash() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Zero Cash Bankrupt Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 0.0, // Zero cash
+                debt: 0.0, // No debt
+                next_eval_tick: 1,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+        run_finance(&mut state);
+        assert_eq!(state.companies[&1].status, "liquidated");
+    }
+
+    #[test]
+    fn test_corporate_taxes_no_empire() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Taxpayer Co No Empire".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        run_finance(&mut state);
+        // Company shouldn't be taxed because it has no empire
+        assert_eq!(state.companies[&1].cash, 1000.0);
+    }
 }
