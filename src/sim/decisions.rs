@@ -121,13 +121,18 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
 
     for company_id in due {
         // Copy relevant company data locally to avoid immutable borrow while mutating state
-        let (status, home_city_id, last_trade_tick) = {
+        let (is_bankrupt, is_active, home_city_id, last_trade_tick) = {
             let c = state.companies.get(&company_id).unwrap();
-            (c.status.clone(), c.home_city_id, c.last_trade_tick)
+            (
+                c.status == "bankrupt",
+                c.status == "active",
+                c.home_city_id,
+                c.last_trade_tick,
+            )
         };
 
         // --- Liquidation AI: Post Fire-Sale Orders ---
-        if status == "bankrupt" {
+        if is_bankrupt {
             let mut orders_to_post = Vec::new();
 
             let company_inventories: Vec<_> = state
@@ -166,7 +171,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             continue;
         }
 
-        if status != "active" {
+        if !is_active {
             continue;
         }
 
@@ -255,7 +260,15 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             let (min_interval, max_interval) = eval_interval_range(&company.company_type);
             let jitter = rng.gen_range(min_interval..=max_interval);
             company.next_eval_tick = current_tick + jitter;
-            company.company_type.clone()
+            match company.company_type.as_str() {
+                "central_bank" => "central_bank",
+                "commercial_bank" => "commercial_bank",
+                "merchant" => "merchant",
+                "small_company" => "small_company",
+                "corporation" => "corporation",
+                "consumer" => "consumer",
+                _ => "",
+            }
         };
 
         let mut orders_to_post = Vec::new();
@@ -4834,5 +4847,52 @@ mod tests {
             ))
             .unwrap();
         assert_eq!(inv.quantity, 50);
+    }
+    #[test]
+    fn test_company_promotion_freelancer_to_small() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Freelancer Bob".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 10000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        let mut rng = test_rng();
+        run_decisions(&mut state, 1, &mut rng);
+
+        assert_eq!(state.companies[&1].company_type, "small_company");
+    }
+
+    #[test]
+    fn test_company_promotion_small_to_corporation() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Small Inc".into(),
+                company_type: "small_company".into(),
+                home_city_id: 1,
+                cash: 100000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        let mut rng = test_rng();
+        run_decisions(&mut state, 1, &mut rng);
+
+        assert_eq!(state.companies[&2].company_type, "corporation");
     }
 }
