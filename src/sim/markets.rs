@@ -100,23 +100,23 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let (b_id, _, _, _) = buys[b_idx];
             let (s_id, _, _, _) = sells[s_idx];
 
-            let (buy_qty, buy_price, buy_is_limit, buy_company_id) = {
+            let (buy_qty, buy_price, buy_is_market, buy_company_id) = {
                 let o = &state.market_orders[&b_id];
-                (o.quantity, o.price, o.order_kind == "limit", o.company_id)
+                (o.quantity, o.price, o.order_kind == "market", o.company_id)
             };
-            let (sell_qty, sell_price, sell_is_limit, sell_company_id) = {
+            let (sell_qty, sell_price, sell_is_market, sell_company_id) = {
                 let o = &state.market_orders[&s_id];
-                (o.quantity, o.price, o.order_kind == "limit", o.company_id)
+                (o.quantity, o.price, o.order_kind == "market", o.company_id)
             };
 
             // Check price compatibility for Limit vs Limit
-            if buy_is_limit && sell_is_limit && buy_price < sell_price {
+            if !buy_is_market && !sell_is_market && buy_price < sell_price {
                 break; // No more matches possible
             }
 
             // Determine clearing price
-            let clearing_price = match (buy_is_limit, sell_is_limit) {
-                (false, false) => {
+            let clearing_price = match (buy_is_market, sell_is_market) {
+                (true, true) => {
                     // Two market orders: use last known EMA or fallback
                     state
                         .ema_prices
@@ -124,8 +124,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         .copied()
                         .unwrap_or(10.0)
                 }
-                (false, true) => sell_price,
-                (true, false) => buy_price,
+                (true, false) => sell_price,
+                (false, true) => buy_price,
                 _ => (buy_price + sell_price) / 2.0, // Midpoint discovery for Limit-Limit
             };
 
