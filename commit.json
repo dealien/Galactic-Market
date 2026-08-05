@@ -1,0 +1,5 @@
+{
+  "message": "Add test coverage for company promotion logic in sim decisions",
+  "description": "Added two unit tests to verify that freelancers upgrade to small companies, and small companies upgrade to corporations when their cash exceeds certain thresholds.",
+  "intent": "improve test coverage in src/sim/decisions.rs for company promotion paths"
+}
