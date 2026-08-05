@@ -44,9 +44,9 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let order = &state.market_orders[&id];
             let is_market = order.order_kind == "market";
             if order.order_type == "buy" {
-                buys.push((id, is_market, order.price));
+                buys.push((id, is_market, order.price, order.created_tick));
             } else {
-                sells.push((id, is_market, order.price));
+                sells.push((id, is_market, order.price, order.created_tick));
             }
         }
 
@@ -54,29 +54,37 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         // Market orders first, then Limit orders.
         // Buys: Market -> Highest Limit Price
         // Sells: Market -> Lowest Limit Price
-        buys.sort_by(|&(_, a_is_market, a_price), &(_, b_is_market, b_price)| {
-            if a_is_market != b_is_market {
-                if a_is_market {
-                    return std::cmp::Ordering::Less;
+        buys.sort_unstable_by(
+            |&(a_id, a_is_market, a_price, a_tick), &(b_id, b_is_market, b_price, b_tick)| {
+                if a_is_market != b_is_market {
+                    if a_is_market {
+                        return std::cmp::Ordering::Less;
+                    }
+                    return std::cmp::Ordering::Greater;
                 }
-                return std::cmp::Ordering::Greater;
-            }
-            b_price
-                .partial_cmp(&a_price)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+                b_price
+                    .partial_cmp(&a_price)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a_tick.cmp(&b_tick))
+                    .then_with(|| a_id.cmp(&b_id))
+            },
+        );
 
-        sells.sort_by(|&(_, a_is_market, a_price), &(_, b_is_market, b_price)| {
-            if a_is_market != b_is_market {
-                if a_is_market {
-                    return std::cmp::Ordering::Less;
+        sells.sort_unstable_by(
+            |&(a_id, a_is_market, a_price, a_tick), &(b_id, b_is_market, b_price, b_tick)| {
+                if a_is_market != b_is_market {
+                    if a_is_market {
+                        return std::cmp::Ordering::Less;
+                    }
+                    return std::cmp::Ordering::Greater;
                 }
-                return std::cmp::Ordering::Greater;
-            }
-            a_price
-                .partial_cmp(&b_price)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+                a_price
+                    .partial_cmp(&b_price)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| a_tick.cmp(&b_tick))
+                    .then_with(|| a_id.cmp(&b_id))
+            },
+        );
 
         let mut b_idx = 0;
         let mut s_idx = 0;
@@ -89,8 +97,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut close = 0.0;
 
         while b_idx < buys.len() && s_idx < sells.len() {
-            let (b_id, _, _) = buys[b_idx];
-            let (s_id, _, _) = sells[s_idx];
+            let (b_id, _, _, _) = buys[b_idx];
+            let (s_id, _, _, _) = sells[s_idx];
 
             let (buy_qty, buy_price, buy_is_limit, buy_company_id) = {
                 let o = &state.market_orders[&b_id];
