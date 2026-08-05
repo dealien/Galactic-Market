@@ -4848,4 +4848,51 @@ mod tests {
             .unwrap();
         assert_eq!(inv.quantity, 50);
     }
+    #[test]
+    fn test_company_promotion_freelancer_to_small() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Freelancer Bob".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 10000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        let mut rng = test_rng();
+        run_decisions(&mut state, 1, &mut rng);
+
+        assert_eq!(state.companies[&1].company_type, "small_company");
+    }
+
+    #[test]
+    fn test_company_promotion_small_to_corporation() {
+        let mut state = SimState::new();
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Small Inc".into(),
+                company_type: "small_company".into(),
+                home_city_id: 1,
+                cash: 100000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        let mut rng = test_rng();
+        run_decisions(&mut state, 1, &mut rng);
+
+        assert_eq!(state.companies[&2].company_type, "corporation");
+    }
 }
