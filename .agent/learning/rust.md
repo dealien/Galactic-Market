@@ -65,3 +65,19 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-08-04 - Unstable sorting requires deterministic tie-breakers
 **Learning:** When switching from `sort_by` to `sort_unstable_by` for performance optimization in a tick loop (like market order sorting), it's crucial to explicitly break ties (e.g. by `created_tick` and then `id`). `sort_unstable_by` does not preserve original order, and if ties exist, it may randomly re-order orders with the same price, violating deterministic simulation ticks across different seeds or architectures.
 **Action:** Always include deterministic fallback comparisons (`.then_with(|| a_tick.cmp(&b_tick)).then_with(|| a_id.cmp(&b_id))`) when using `sort_unstable_by` on collections of structs that might share primary sorting keys, especially in tick-loop hot paths.
+
+## 2024-05-18 - Missing Docstrings Discovered in Review
+**Learning:** When adding new test functions, docstrings (`///`) must be strictly applied above the `#[test]` attribute for every function to satisfy testing conventions and review standards.
+**Action:** When creating new tests in the future, always include a behavior-explaining docstring immediately before `#[test]`.
+
+## 2025-02-27 - SimState HashMap iteration order test flakiness
+**Learning:** Testing logic that iterates over non-deterministic collections like `HashMap` (e.g. tracking payment exhaustions across multiple loans) can lead to flaky assertions if the test assumes a specific iteration order.
+**Action:** When asserting against side-effects of iterating over `state.loans` or similar `HashMap`s, write assertions that are invariant to the order of operations, such as checking that *one of* a set of expected states is true for specific entries, rather than hardcoding exact values that depend on a specific iteration sequence.
+
+## 2026-08-03 - Pre-allocated tuples for market matching
+**Learning:** Sorting multiple `MarketOrder` objects in the market clearing loop involves many string comparisons and boolean logic. Pre-calculating the sort criteria as a tuple when filling the initial Vec (e.g. `buys.push((id, is_market, order.price))`) avoids repeated calculations during sorting, which optimizes the tick loop hot path.
+**Action:** When sorting complex objects in hot loops, consider the Schwartzian transform (caching the sort keys in a tuple alongside the original ID or data) to minimize recalculations and string comparisons.
+
+## 2024-08-04 - Unstable sorting requires deterministic tie-breakers
+**Learning:** When switching from `sort_by` to `sort_unstable_by` for performance optimization in a tick loop (like market order sorting), it's crucial to explicitly break ties (e.g. by `created_tick` and then `id`). `sort_unstable_by` does not preserve original order, and if ties exist, it may randomly re-order orders with the same price, violating deterministic simulation ticks across different seeds or architectures.
+**Action:** Always include deterministic fallback comparisons (`.then_with(|| a_tick.cmp(&b_tick)).then_with(|| a_id.cmp(&b_id))`) when using `sort_unstable_by` on collections of structs that might share primary sorting keys, especially in tick-loop hot paths.
