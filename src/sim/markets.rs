@@ -971,4 +971,95 @@ mod tests {
         // Seller 1 (Company 2) shouldn't have sold anything yet
         assert_eq!(state.companies[&2].cash, 1000.0);
     }
+
+    #[test]
+    fn test_void_sell_order_lack_of_inventory() {
+        let mut state = setup_test_state();
+
+        // Remove the seller's inventory
+        state.inventories.remove(&Inventory::key(1, 1, 1));
+
+        // Seller: Limit Sell 10 @ 5.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Limit Buy 10 @ 5.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // The sell order should have been voided
+        assert_eq!(state.market_orders.len(), 1);
+        assert!(state.market_orders.contains_key(&2));
+        assert!(!state.market_orders.contains_key(&1));
+    }
+
+    #[test]
+    fn test_limit_order_incompatibility() {
+        let mut state = setup_test_state();
+
+        // Seller: Limit Sell 10 @ 6.0
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 6.0,
+                created_tick: 0,
+            },
+        );
+
+        // Buyer: Limit Buy 10 @ 5.0
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                quantity: 10,
+                price: 5.0,
+                created_tick: 0,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        // Neither order should be filled or voided
+        assert_eq!(state.market_orders.len(), 2);
+        assert!(state.market_orders.contains_key(&1));
+        assert!(state.market_orders.contains_key(&2));
+    }
 }
