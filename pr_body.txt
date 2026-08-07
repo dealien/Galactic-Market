@@ -1,0 +1,4 @@
+💡 What: Directly partition buy and sell orders when building `markets` map and precompute order metadata in tuples.
+🎯 Why: Avoids re-iterating over `order_ids` to construct `buys` and `sells` vectors and skips repeated lookups of order metadata inside the `while` loop.
+📊 Impact: About 6% reduction in market clearing latency (27.1µs -> 25.17µs for n=32).
+🔬 Measurement: Measured via `cargo bench bench_market_clearing`.
