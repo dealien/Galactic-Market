@@ -32,8 +32,16 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
     for (&id, order) in &state.market_orders {
         let is_market = order.order_kind == "market";
-        let item = (id, is_market, order.price, order.created_tick, order.company_id);
-        let entry = markets.entry((order.city_id, order.resource_type_id)).or_default();
+        let item = (
+            id,
+            is_market,
+            order.price,
+            order.created_tick,
+            order.company_id,
+        );
+        let entry = markets
+            .entry((order.city_id, order.resource_type_id))
+            .or_default();
         if order.order_type == "buy" {
             entry.0.push(item);
         } else {
@@ -42,7 +50,6 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     }
 
     for ((city_id, resource_type_id), (mut buys, mut sells)) in markets {
-
         // Sort orders:
         // Market orders first, then Limit orders.
         // Buys: Market -> Highest Limit Price
