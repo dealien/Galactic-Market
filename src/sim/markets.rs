@@ -28,7 +28,8 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 /// ```
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     type OrderTuple = (i32, bool, f64, u64);
-    let mut orders_by_market: HashMap<(i32, i32), (Vec<OrderTuple>, Vec<OrderTuple>)> = HashMap::new();
+    let mut orders_by_market: HashMap<(i32, i32), (Vec<OrderTuple>, Vec<OrderTuple>)> =
+        HashMap::new();
 
     for (&id, order) in &state.market_orders {
         let is_market = order.order_kind == "market";
@@ -44,7 +45,6 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     }
 
     for ((city_id, resource_type_id), (mut buys, mut sells)) in orders_by_market {
-
         // Sort orders:
         // Market orders first, then Limit orders.
         // Buys: Market -> Highest Limit Price
