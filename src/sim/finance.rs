@@ -527,6 +527,62 @@ mod tests {
     }
 
     #[test]
+    fn test_loan_interest_lender_company_receives_payment() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Solvent Borrower".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 100.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Bank Lender".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 100.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.add_loan(Loan {
+            id: 1,
+            company_id: 1,
+            lender_company_id: Some(2), // Lender is a company
+            principal: 1000.0,
+            balance: 1000.0,
+            interest_rate: 0.05,
+        });
+
+        // Interest is calculated as: balance * (interest_rate / 52.0)
+        // 1000.0 * (0.05 / 52.0) = 0.9615384615384616
+        run_finance(&mut state);
+
+        let interest = 1000.0 * (0.05 / 52.0);
+
+        let borrower = state.companies.get(&1).unwrap();
+        assert_eq!(borrower.cash, 100.0 - interest);
+
+        let lender = state.companies.get(&2).unwrap();
+        assert_eq!(lender.cash, 100.0 + interest);
+    }
+
+    #[test]
     fn test_loan_interest_shortfall_lender_not_company() {
         let mut state = SimState::new();
 

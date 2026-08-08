@@ -85,3 +85,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## $(date +%Y-%m-%d) - Optimizing Simulation Hot Paths via Direct Partitioning
 **Learning:** To optimize simulation hot paths, avoid creating intermediate vectors of IDs for grouping. Instead, directly partition cached data tuples into their final target collections (e.g., `HashMap<Key, (Vec<Tuple>, Vec<Tuple>)>`) to reduce allocation overhead and prevent redundant map lookups during iteration.
 **Action:** When gathering entities for paired processing (like buys/sells or attackers/defenders), build a struct or tuple containing all needed properties and distribute them directly into partitioned vectors within a single pass over the source map.
+
+## 2024-05-18 - Finance Phase Loan Interest Structure Learning
+**Learning:** `Loan` state models interest payments flowing dynamically from the borrower's cash explicitly into the lender company's cash (`Company::cash`) *only if* the `lender_company_id` is set to a valid, active company (e.g. a `commercial_bank`).
+**Action:** When mocking state to test loan flows, ensure the lender is created in `state.companies` and its ID is mapped on `loan.lender_company_id`. Otherwise, the interest acts purely as an economic sink (money destroyed).
