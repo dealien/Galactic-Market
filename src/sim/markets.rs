@@ -27,28 +27,23 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 /// clear_orders(&mut state, 1);
 /// ```
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
-    let mut orders_by_market: HashMap<(i32, i32), Vec<i32>> = HashMap::new();
+    type OrderTuple = (i32, bool, f64, u64);
+    let mut orders_by_market: HashMap<(i32, i32), (Vec<OrderTuple>, Vec<OrderTuple>)> = HashMap::new();
 
     for (&id, order) in &state.market_orders {
-        orders_by_market
+        let is_market = order.order_kind == "market";
+        let tuple = (id, is_market, order.price, order.created_tick);
+        let entry = orders_by_market
             .entry((order.city_id, order.resource_type_id))
-            .or_default()
-            .push(id);
+            .or_default();
+        if order.order_type == "buy" {
+            entry.0.push(tuple);
+        } else {
+            entry.1.push(tuple);
+        }
     }
 
-    for ((city_id, resource_type_id), order_ids) in orders_by_market {
-        let mut buys = Vec::with_capacity(order_ids.len());
-        let mut sells = Vec::with_capacity(order_ids.len());
-
-        for id in order_ids {
-            let order = &state.market_orders[&id];
-            let is_market = order.order_kind == "market";
-            if order.order_type == "buy" {
-                buys.push((id, is_market, order.price, order.created_tick));
-            } else {
-                sells.push((id, is_market, order.price, order.created_tick));
-            }
-        }
+    for ((city_id, resource_type_id), (mut buys, mut sells)) in orders_by_market {
 
         // Sort orders:
         // Market orders first, then Limit orders.
