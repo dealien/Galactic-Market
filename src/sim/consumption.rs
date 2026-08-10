@@ -494,7 +494,10 @@ mod tests {
         run_consumption(&mut state, 1);
         let orders: Vec<_> = state.market_orders.values().collect();
         assert!(!orders.is_empty(), "Orders should be posted during famine");
-        let famine_order = orders.iter().find(|o| o.resource_type_id == 1).expect("Should find order for vital resource");
+        let famine_order = orders
+            .iter()
+            .find(|o| o.resource_type_id == 1)
+            .expect("Should find order for vital resource");
 
         // Run baseline for comparison
         let mut state_baseline = make_consumer_state(1_000_000, 10_000.0);
@@ -504,8 +507,16 @@ mod tests {
         }
         run_consumption(&mut state_baseline, 1);
         let baseline_orders: Vec<_> = state_baseline.market_orders.values().collect();
-        let baseline_order = baseline_orders.iter().find(|o| o.resource_type_id == 1).expect("Should find baseline order");
-        assert!(famine_order.price > baseline_order.price, "Consumer should bid higher during famine ({} vs {})", famine_order.price, baseline_order.price);
+        let baseline_order = baseline_orders
+            .iter()
+            .find(|o| o.resource_type_id == 1)
+            .expect("Should find baseline order");
+        assert!(
+            famine_order.price > baseline_order.price,
+            "Consumer should bid higher during famine ({} vs {})",
+            famine_order.price,
+            baseline_order.price
+        );
     }
 
     fn setup_population_dynamics_state(population: i64, food_amount: i64) -> SimState {
