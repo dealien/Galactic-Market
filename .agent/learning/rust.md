@@ -90,6 +90,10 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** `Loan` state models interest payments flowing dynamically from the borrower's cash explicitly into the lender company's cash (`Company::cash`) *only if* the `lender_company_id` is set to a valid, active company (e.g. a `commercial_bank`).
 **Action:** When mocking state to test loan flows, ensure the lender is created in `state.companies` and its ID is mapped on `loan.lender_company_id`. Otherwise, the interest acts purely as an economic sink (money destroyed).
 
+## 2024-03-24 - Exhaustive Edge Case Testing via Manual State Construction
+**Learning:** Simulation events logic relies on multiple disparate systems (e.g. relations, traits, treaties) interconnected within `SimState`. Because these state structs may be sparsely populated unless carefully seeded, achieving 100% path coverage in complex nested logic (like `has_conflicting_alliances`) necessitates precise state instantiation mimicking legacy behavior constraints instead of merely exercising the happy paths.
+**Action:** When writing state-dependent tests for deeply nested logic, prioritize constructing minimal, exact `SimState` fixtures directly in test functions mapping edge case invariants rather than relying on generic shared setups.
+
 ## 2024-05-15 - Structure Imports in Sim
 **Learning:** Core simulation data structures like `MarketOrder`, `ActiveEvent`, and `City` are defined in `crate::sim::state`, not in a separate `models` module as is common in some other frameworks.
 **Action:** When creating setup data for tests (e.g. inserting into `state.market_orders`), always import or qualify with `crate::sim::state::` rather than `crate::models::` or `crate::sim::models::`.
