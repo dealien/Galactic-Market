@@ -26,7 +26,7 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 /// let mut state = SimState::new();
 /// clear_orders(&mut state, 1);
 /// ```
-type OrderKey = (i32, bool, f64, u64, i32);
+type OrderKey = (i32, bool, f64, u64, i32, i64);
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     let mut markets: HashMap<(i32, i32), (Vec<OrderKey>, Vec<OrderKey>)> = HashMap::new();
 
@@ -38,6 +38,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             order.price,
             order.created_tick,
             order.company_id,
+            order.quantity,
         );
         let entry = markets
             .entry((order.city_id, order.resource_type_id))
@@ -55,7 +56,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         // Buys: Market -> Highest Limit Price
         // Sells: Market -> Lowest Limit Price
         buys.sort_unstable_by(
-            |&(a_id, a_is_market, a_price, a_tick, _), &(b_id, b_is_market, b_price, b_tick, _)| {
+            |&(a_id, a_is_market, a_price, a_tick, _, _),
+             &(b_id, b_is_market, b_price, b_tick, _, _)| {
                 if a_is_market != b_is_market {
                     if a_is_market {
                         return std::cmp::Ordering::Less;
@@ -71,7 +73,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         );
 
         sells.sort_unstable_by(
-            |&(a_id, a_is_market, a_price, a_tick, _), &(b_id, b_is_market, b_price, b_tick, _)| {
+            |&(a_id, a_is_market, a_price, a_tick, _, _),
+             &(b_id, b_is_market, b_price, b_tick, _, _)| {
                 if a_is_market != b_is_market {
                     if a_is_market {
                         return std::cmp::Ordering::Less;
@@ -97,11 +100,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut close = 0.0;
 
         while b_idx < buys.len() && s_idx < sells.len() {
-            let (b_id, buy_is_market, buy_price, _, buy_company_id) = buys[b_idx];
-            let (s_id, sell_is_market, sell_price, _, sell_company_id) = sells[s_idx];
-
-            let buy_qty = state.market_orders[&b_id].quantity;
-            let sell_qty = state.market_orders[&s_id].quantity;
+            let (_b_id, buy_is_market, buy_price, _, buy_company_id, buy_qty) = buys[b_idx];
+            let (_s_id, sell_is_market, sell_price, _, sell_company_id, sell_qty) = sells[s_idx];
 
             // Check price compatibility for Limit vs Limit
             if !buy_is_market && !sell_is_market && buy_price < sell_price {
@@ -210,8 +210,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 buyer_inv.quantity += qty;
 
                 // Update remaining order quantities
-                state.market_orders.get_mut(&b_id).unwrap().quantity -= qty;
-                state.market_orders.get_mut(&s_id).unwrap().quantity -= qty;
+                buys[b_idx].5 -= qty;
+                sells[s_idx].5 -= qty;
 
                 // Statistics
                 total_volume += qty;
@@ -244,7 +244,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 // the successful trade path (qty > 0).
                 if affordable_by_buyer == 0 && actual_buyer_cash < clearing_price {
                     debug!(buy_company_id, "Voiding buy order due to lack of cash");
-                    state.market_orders.remove(&b_id);
+                    buys[b_idx].5 = 0;
                     b_idx += 1;
                     continue;
                 } else if actual_seller_inventory == 0 {
@@ -252,7 +252,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         sell_company_id,
                         "Voiding sell order due to lack of inventory"
                     );
-                    state.market_orders.remove(&s_id);
+                    sells[s_idx].5 = 0;
                     s_idx += 1;
                     continue;
                 } else {
@@ -269,25 +269,27 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
             // Advance pointers if orders fully filled after a successful trade.
             // Only reached when qty > 0 (the void branches above all `continue`).
-            if state
-                .market_orders
-                .get(&b_id)
-                .map(|o| o.quantity)
-                .unwrap_or(0)
-                == 0
-            {
-                state.market_orders.remove(&b_id);
+            if buys[b_idx].5 == 0 {
                 b_idx += 1;
             }
-            if state
-                .market_orders
-                .get(&s_id)
-                .map(|o| o.quantity)
-                .unwrap_or(0)
-                == 0
-            {
-                state.market_orders.remove(&s_id);
+            if sells[s_idx].5 == 0 {
                 s_idx += 1;
+            }
+        }
+
+        // Write back updated quantities to state for all processed orders
+        for b in buys.iter().take(b_idx + 1) {
+            if b.5 <= 0 {
+                state.market_orders.remove(&b.0);
+            } else if let Some(order) = state.market_orders.get_mut(&b.0) {
+                order.quantity = b.5;
+            }
+        }
+        for s in sells.iter().take(s_idx + 1) {
+            if s.5 <= 0 {
+                state.market_orders.remove(&s.0);
+            } else if let Some(order) = state.market_orders.get_mut(&s.0) {
+                order.quantity = s.5;
             }
         }
 

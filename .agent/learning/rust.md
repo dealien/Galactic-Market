@@ -97,3 +97,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-15 - Structure Imports in Sim
 **Learning:** Core simulation data structures like `MarketOrder`, `ActiveEvent`, and `City` are defined in `crate::sim::state`, not in a separate `models` module as is common in some other frameworks.
 **Action:** When creating setup data for tests (e.g. inserting into `state.market_orders`), always import or qualify with `crate::sim::state::` rather than `crate::models::` or `crate::sim::models::`.
+
+## 2024-08-13 - Eliminate Hashmap Lookups from Market Clearing Tick Loop
+**Learning:** In the core simulation hot loop (`src/sim/markets.rs`), repetitively looking up orders by ID in `state.market_orders` via `.get_mut()` inside the `while` match loop, and enthusiastically removing them via `.remove()`, caused a major performance bottleneck due to hash collisions and re-allocation overhead.
+**Action:** Extend the initial sorting `OrderKey` tuple to hold the `quantity`. Mutate this local value during the loop `O(1)`, and write back all modified quantities in bulk outside the loop. Use `order.quantity = 0` as a tombstone for voided orders instead of inline `.remove()`, deferring cleanup to the existing `.retain()` sweep at the end of the phase. This prevents state leaks while dramatically dropping CPU cycles.
