@@ -303,6 +303,10 @@ fn compute_max_runs(state: &SimState, company_id: i32, city_id: i32, recipe: &Re
         .map(|input| {
             let key = Inventory::key(company_id, city_id, input.resource_type_id);
             let have = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
+            if input.quantity == 0 {
+                // Prevent accidental division by zero from malformed recipes
+                return 0;
+            }
             have / input.quantity as i64
         })
         .min()
@@ -652,5 +656,27 @@ mod tests {
                 .unwrap_or(0),
             30
         );
+    }
+
+    #[test]
+    fn test_compute_max_runs_zero_input() {
+        let state = SimState::new();
+
+        let recipe = Recipe {
+            id: 1,
+            name: "Zero Input Recipe".into(),
+            output_resource_id: 2,
+            output_qty: 1,
+            facility_type: "refinery".into(),
+            inputs: vec![RecipeInput {
+                resource_type_id: 1,
+                quantity: 0,
+            }],
+            labor_cost_per_run: 1.0,
+        };
+
+        // When input quantity is 0, compute_max_runs returns 0 and avoids division by zero.
+        let runs = compute_max_runs(&state, 1, 1, &recipe);
+        assert_eq!(runs, 0);
     }
 }
