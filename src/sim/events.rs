@@ -466,6 +466,55 @@ mod tests {
     }
 
     #[test]
+    fn test_run_events_trigger_random_event() {
+        let mut state = SimState::new();
+
+        let effect_def = crate::sim::state::EventEffectDefinition {
+            effect_type: "tension_increase".to_string(),
+            duration_range: [0, 0],
+        };
+
+        let def = crate::sim::state::EventDefinition {
+            id: "test_tension".to_string(),
+            weight: 100,
+            severity_range: [1.0, 1.0],
+            effects: vec![effect_def],
+            flavor_text: "Tension between {empire_a} and {empire_b}".to_string(),
+        };
+
+        state.event_definitions.push(def);
+
+        let emp1 = crate::sim::state::Empire {
+            id: 1,
+            name: "Emp1".into(),
+            government_type: "Gov".into(),
+            tax_rate_base: 0.1,
+            tax_rate: 0.1,
+        };
+        let emp2 = crate::sim::state::Empire {
+            id: 2,
+            name: "Emp2".into(),
+            government_type: "Gov".into(),
+            tax_rate_base: 0.1,
+            tax_rate: 0.1,
+        };
+        state.empires.insert(1, emp1);
+        state.empires.insert(2, emp2);
+
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut triggered = false;
+        for _ in 0..100 {
+            super::run_events(&mut state, &mut rng);
+            if !state.active_events.is_empty() {
+                triggered = true;
+                break;
+            }
+        }
+
+        assert!(triggered, "run_events should have triggered a random event");
+    }
+
+    #[test]
     fn test_pick_random_helpers_with_empty_state() {
         use crate::sim::events::*;
         let state = crate::sim::state::SimState::new();
