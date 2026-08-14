@@ -92,3 +92,15 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2025-02-20 - Testing Random Events Based on Probabilities
 **Learning:** Testing logic that relies on `rng.gen_bool(prob)` can be difficult to hit consistently with a single test run without injecting a custom RNG interface.
 **Action:** When testing code containing probabilistic branches (e.g. `rng.gen_bool(0.05)` in event loops), instead of mocking the RNG or guessing a magic seed, it is effective to run the target function in a deterministic loop (e.g. 100 iterations) with a standard seeded RNG until the condition is met, verifying that the branch is eventually reached and handles state correctly.
+
+## 2024-03-24 - Exhaustive Edge Case Testing via Manual State Construction
+**Learning:** Simulation events logic relies on multiple disparate systems (e.g. relations, traits, treaties) interconnected within `SimState`. Because these state structs may be sparsely populated unless carefully seeded, achieving 100% path coverage in complex nested logic (like `has_conflicting_alliances`) necessitates precise state instantiation mimicking legacy behavior constraints instead of merely exercising the happy paths.
+**Action:** When writing state-dependent tests for deeply nested logic, prioritize constructing minimal, exact `SimState` fixtures directly in test functions mapping edge case invariants rather than relying on generic shared setups.
+
+## 2024-05-15 - Structure Imports in Sim
+**Learning:** Core simulation data structures like `MarketOrder`, `ActiveEvent`, and `City` are defined in `crate::sim::state`, not in a separate `models` module as is common in some other frameworks.
+**Action:** When creating setup data for tests (e.g. inserting into `state.market_orders`), always import or qualify with `crate::sim::state::` rather than `crate::models::` or `crate::sim::models::`.
+
+## 2024-08-13 - Eliminate Hashmap Lookups from Market Clearing Tick Loop
+**Learning:** In the core simulation hot loop (`src/sim/markets.rs`), repetitively looking up orders by ID in `state.market_orders` via `.get_mut()` inside the `while` match loop, and enthusiastically removing them via `.remove()`, caused a major performance bottleneck due to hash collisions and re-allocation overhead.
+**Action:** Extend the initial sorting `OrderKey` tuple to hold the `quantity`. Mutate this local value during the loop `O(1)`, and write back all modified quantities in bulk outside the loop. Use `order.quantity = 0` as a tombstone for voided orders instead of inline `.remove()`, deferring cleanup to the existing `.retain()` sweep at the end of the phase. This prevents state leaks while dramatically dropping CPU cycles.

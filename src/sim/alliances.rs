@@ -565,4 +565,193 @@ mod tests {
             "Should conservatively reject alliance for unknown roles in same war"
         );
     }
+
+    #[test]
+    fn test_alliance_dissolution_due_to_high_tension() {
+        let mut state = setup_alliance_state();
+
+        // Add an active treaty for the pair
+        state.treaties.insert(
+            1,
+            crate::sim::state::Treaty {
+                id: 1,
+                alliance_name: "Test Alliance".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 0,
+                dissolved_tick: None,
+            },
+        );
+
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.status = "alliance".to_string();
+        rel.tension = 60.0; // Over ALLIANCE_DISSOLUTION_TENSION (which is 50.0)
+
+        check_alliance_dissolution(&mut state);
+
+        let treaty = state.treaties.get(&1).unwrap();
+        assert!(
+            treaty.dissolved_tick.is_some(),
+            "Treaty should be dissolved"
+        );
+
+        let rel_after = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        assert_eq!(
+            rel_after.status, "neutral",
+            "Status should return to neutral"
+        );
+    }
+
+    #[test]
+    fn test_alliance_dissolution_ignores_dissolved_treaty() {
+        let mut state = setup_alliance_state();
+
+        state.treaties.insert(
+            1,
+            crate::sim::state::Treaty {
+                id: 1,
+                alliance_name: "Test Alliance".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 0,
+                dissolved_tick: Some(5), // Already dissolved
+            },
+        );
+
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.status = "neutral".to_string(); // Already updated
+        rel.tension = 60.0; // High tension
+
+        check_alliance_dissolution(&mut state);
+
+        let rel_after = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        assert_eq!(rel_after.status, "neutral", "Status shouldn't change");
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_with_defender_and_ally() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 3,
+                defender_id: 1,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![
+                    (3, "aggressor".to_string()),
+                    (1, "defender".to_string()),
+                    (2, "aggressor_ally".to_string()), // 2 is an aggressor ally against 1
+                ],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        // Empire 1 is defender, Empire 2 is aggressor ally. They shouldn't ally.
+        assert!(
+            has_conflicting_alliances(&state, 1, 2),
+            "Should detect conflict when one is defender and other is aggressor ally"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_with_ally_role() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 3,
+                defender_id: 4,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![
+                    (3, "aggressor".to_string()),
+                    (4, "defender".to_string()),
+                    (1, "ally".to_string()), // legacy role, side unknown
+                    (2, "ally".to_string()), // legacy role, side unknown
+                ],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        // Both are in the same active war, but their sides are "ally" (unknown).
+        // It should reject it conservatively.
+        assert!(
+            has_conflicting_alliances(&state, 1, 2),
+            "Should conservatively detect conflict with legacy 'ally' roles"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_unrecognized_role_returns_none() {
+        let mut state = setup_alliance_state();
+
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 3,
+                defender_id: 4,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![
+                    (1, "unknown_role".to_string()),
+                    (2, "another_unknown".to_string()),
+                ],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        // Unknown roles should evaluate to None for participant_side, meaning no conflict detected
+        // via the clear opposite-side check.
+        assert!(
+            has_conflicting_alliances(&state, 1, 2),
+            "Should still fall back to the conservative 'both are in active war' check"
+        );
+    }
+
+    #[test]
+    fn test_run_alliances_calls_formation_and_dissolution() {
+        let mut state = setup_alliance_state();
+        state.tick = crate::sim::alliances::ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        run_alliances(&mut state, &mut rng);
+        assert_eq!(state.treaties.len(), 1, "Should have formed an alliance");
+    }
 }

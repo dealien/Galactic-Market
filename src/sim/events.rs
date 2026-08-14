@@ -513,4 +513,77 @@ mod tests {
 
         assert!(triggered, "run_events should have triggered a random event");
     }
+
+    #[test]
+    fn test_pick_random_helpers_with_empty_state() {
+        use crate::sim::events::*;
+        let state = crate::sim::state::SimState::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+
+        // These should gracefully return None if there are no items
+        assert_eq!(pick_random_lane(&state, &mut rng), None);
+        assert_eq!(pick_random_city(&state, &mut rng), None);
+        assert_eq!(pick_random_empire_pair(&state, &mut rng), None);
+    }
+
+    #[test]
+    fn test_trigger_random_event_blockade_lane() {
+        let mut state = crate::sim::state::SimState::new();
+        state.tick = 10;
+        state.next_event_id = 1;
+
+        let sys1 = crate::sim::state::StarSystem {
+            id: 1,
+            sector_id: 1,
+            name: "System One".to_string(),
+        };
+        let sys2 = crate::sim::state::StarSystem {
+            id: 2,
+            sector_id: 1,
+            name: "System Two".to_string(),
+        };
+        state.star_systems.insert(1, sys1);
+        state.star_systems.insert(2, sys2);
+
+        state.system_lanes.insert(
+            (1, 2),
+            crate::sim::state::SystemLane {
+                system_a_id: 1,
+                system_b_id: 2,
+                distance_ly: 5.0,
+                lane_type: "hyperspace".to_string(),
+            },
+        );
+
+        let effect_def = crate::sim::state::EventEffectDefinition {
+            effect_type: "blockade_lane".to_string(),
+            duration_range: [10, 10],
+        };
+
+        let def = crate::sim::state::EventDefinition {
+            id: "test_blockade".to_string(),
+            weight: 100,
+            severity_range: [1.0, 1.0],
+            effects: vec![effect_def],
+            flavor_text: "Blockade between {system_a} and {system_b}".to_string(),
+        };
+
+        state.event_definitions.push(def);
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        crate::sim::events::trigger_random_event(&mut state, &mut rng);
+
+        assert_eq!(state.active_events.len(), 1, "Event should be created");
+        let event = state.active_events.get(&1).unwrap();
+        assert_eq!(event.event_type, "blockade_lane");
+        assert_eq!(event.target_id, Some((1, 2)));
+        assert_eq!(
+            event.flavor_text.as_deref(),
+            Some("Blockade between System One and System Two")
+        );
+        assert_eq!(
+            state.blockade_version, 1,
+            "Blockade version should increment"
+        );
+    }
 }
