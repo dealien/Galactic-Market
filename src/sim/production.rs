@@ -297,13 +297,16 @@ pub fn run_production(state: &mut SimState) {
 
 /// Returns the maximum number of times a recipe can run given current inventory.
 fn compute_max_runs(state: &SimState, company_id: i32, city_id: i32, recipe: &Recipe) -> i64 {
+    if recipe.inputs.is_empty() {
+        return i64::MAX;
+    }
     recipe
         .inputs
         .iter()
         .map(|input| {
             let key = Inventory::key(company_id, city_id, input.resource_type_id);
             let have = state.inventories.get(&key).map(|i| i.quantity).unwrap_or(0);
-            if input.quantity == 0 {
+            if input.quantity <= 0 {
                 // Prevent accidental division by zero from malformed recipes
                 return 0;
             }
@@ -676,6 +679,47 @@ mod tests {
         };
 
         // When input quantity is 0, compute_max_runs returns 0 and avoids division by zero.
+        let runs = compute_max_runs(&state, 1, 1, &recipe);
+        assert_eq!(runs, 0);
+    }
+
+    #[test]
+    fn test_compute_max_runs_empty_inputs() {
+        let state = SimState::new();
+
+        let recipe = Recipe {
+            id: 2,
+            name: "No Input Recipe".into(),
+            output_resource_id: 2,
+            output_qty: 1,
+            facility_type: "refinery".into(),
+            inputs: vec![],
+            labor_cost_per_run: 1.0,
+        };
+
+        // When inputs are empty, compute_max_runs returns i64::MAX (unbounded by input inventory).
+        let runs = compute_max_runs(&state, 1, 1, &recipe);
+        assert_eq!(runs, i64::MAX);
+    }
+
+    #[test]
+    fn test_compute_max_runs_negative_input() {
+        let state = SimState::new();
+
+        let recipe = Recipe {
+            id: 3,
+            name: "Negative Input Recipe".into(),
+            output_resource_id: 2,
+            output_qty: 1,
+            facility_type: "refinery".into(),
+            inputs: vec![RecipeInput {
+                resource_type_id: 1,
+                quantity: -5,
+            }],
+            labor_cost_per_run: 1.0,
+        };
+
+        // When input quantity is negative, compute_max_runs returns 0 to prevent erratic calculations.
         let runs = compute_max_runs(&state, 1, 1, &recipe);
         assert_eq!(runs, 0);
     }

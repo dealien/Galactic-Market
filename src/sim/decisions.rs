@@ -1524,9 +1524,14 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
                                 .get(&(refinery_city_id, input.resource_type_id))
                                 .copied()
                                 .unwrap_or(2.5);
-                            let mut max_affordable = (out_price * recipe.output_qty as f64
-                                - labor_margin)
-                                / (recipe.inputs.iter().map(|i| i.quantity).sum::<i32>() as f64);
+                            let total_input_qty: i32 =
+                                recipe.inputs.iter().map(|i| i.quantity).sum();
+                            let mut max_affordable = if total_input_qty > 0 {
+                                (out_price * recipe.output_qty as f64 - labor_margin)
+                                    / total_input_qty as f64
+                            } else {
+                                0.0
+                            };
                             let in_key = Inventory::key(
                                 company_id,
                                 refinery_city_id,
@@ -1574,8 +1579,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
                 let company_cash = state.companies.get(&company_id).unwrap().cash;
                 let facility = state.facilities.get(&facility_id).unwrap();
                 let expansion_cost = 1500.0 * 1.3_f64.powi(facility.capacity / 5);
-                let expected_additional_profit =
-                    (total_positive_margin / facility.capacity as f64) * 5.0;
+                let expected_additional_profit = if facility.capacity > 0 {
+                    (total_positive_margin / facility.capacity as f64) * 5.0
+                } else {
+                    0.0
+                };
                 let roi_ticks = expansion_cost / expected_additional_profit.max(0.01);
 
                 let mut can_afford = company_cash > expansion_cost * 3.0;
