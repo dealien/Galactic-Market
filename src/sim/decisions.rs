@@ -1957,13 +1957,9 @@ pub fn compute_merchant_opportunities(
                 .unwrap_or(false)
                 || state
                     .inventories
-                    .iter()
-                    .any(|(&(co_id, city_id, r_id), inv)| {
-                        co_id == merchant_id
-                            && city_id == origin_city_id
-                            && r_id == res_id
-                            && inv.quantity > 0
-                    });
+                    .get(&(merchant_id, origin_city_id, res_id))
+                    .map(|inv| inv.quantity > 0)
+                    .unwrap_or(false);
 
             if !has_inventory {
                 continue; // Can't profitably sell what we don't have
