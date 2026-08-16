@@ -104,6 +104,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-08-13 - Eliminate Hashmap Lookups from Market Clearing Tick Loop
 **Learning:** In the core simulation hot loop (`src/sim/markets.rs`), repetitively looking up orders by ID in `state.market_orders` via `.get_mut()` inside the `while` match loop, and enthusiastically removing them via `.remove()`, caused a major performance bottleneck due to hash collisions and re-allocation overhead.
 **Action:** Extend the initial sorting `OrderKey` tuple to hold the `quantity`. Mutate this local value during the loop `O(1)`, and write back all modified quantities in bulk outside the loop. Use `order.quantity = 0` as a tombstone for voided orders instead of inline `.remove()`, deferring cleanup to the existing `.retain()` sweep at the end of the phase. This prevents state leaks while dramatically dropping CPU cycles.
+
 ## 2026-08-16 - Extracting Loop-Invariant Lookups
 **Learning:** In simulation hot paths (like `clear_orders` in `src/sim/markets.rs`), ensure loop-invariant `HashMap` lookups (e.g., retrieving constant attributes for a `city_id` during a trading matching loop) are extracted and cached outside inner loops to avoid redundant O(1) map lookup overheads.
 **Action:** When iterating over combinations in an outer loop (e.g., `for ((city_id, _), ...)`), always pre-calculate properties dependent solely on the outer keys before entering the inner matching loop.
+
+## 2026-08-15 - Optimizing Merchant Inventory Lookup
+**Learning:** In `src/sim/decisions.rs`, the function `compute_merchant_opportunities` checked for available inventory using an `iter().any(...)` over the entire `state.inventories` HashMap. Because this lookup occurred inside a nested loop over resources and cities, the O(N) scan created a significant performance bottleneck.
+**Action:** Replaced the O(N) `iter().any(...)` scan with an O(1) `HashMap::get()` lookup using the exact composite tuple key `(merchant_id, origin_city_id, res_id)`. This reduced the opportunity scan time considerably and eliminated redundant iterations.
