@@ -89,6 +89,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Finance Phase Loan Interest Structure Learning
 **Learning:** `Loan` state models interest payments flowing dynamically from the borrower's cash explicitly into the lender company's cash (`Company::cash`) *only if* the `lender_company_id` is set to a valid, active company (e.g. a `commercial_bank`).
 **Action:** When mocking state to test loan flows, ensure the lender is created in `state.companies` and its ID is mapped on `loan.lender_company_id`. Otherwise, the interest acts purely as an economic sink (money destroyed).
+
 ## 2025-02-20 - Testing Random Events Based on Probabilities
 **Learning:** Testing logic that relies on `rng.gen_bool(prob)` can be difficult to hit consistently with a single test run without injecting a custom RNG interface.
 **Action:** When testing code containing probabilistic branches (e.g. `rng.gen_bool(0.05)` in event loops), instead of mocking the RNG or guessing a magic seed, it is effective to run the target function in a deterministic loop (e.g. 100 iterations) with a standard seeded RNG until the condition is met, verifying that the branch is eventually reached and handles state correctly.
