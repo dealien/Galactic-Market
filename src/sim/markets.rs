@@ -99,6 +99,13 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut open = None;
         let mut close = 0.0;
 
+        let port_fee_per_unit = state
+            .cities
+            .get(&city_id)
+            .map(|c| c.port_fee_per_unit)
+            .unwrap_or(0.0);
+        let city_consumer_id_opt = state.city_consumer_ids.get(&city_id).copied();
+
         while b_idx < buys.len() && s_idx < sells.len() {
             let (_b_id, buy_is_market, buy_price, _, buy_company_id, buy_qty) = buys[b_idx];
             let (_s_id, sell_is_market, sell_price, _, sell_company_id, sell_qty) = sells[s_idx];
@@ -157,10 +164,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 let cash_transferred = qty as f64 * clearing_price;
 
                 // Issue #9: Calculate port fee on settlement
-                let city = state.cities.get(&city_id);
-                let port_fee = city
-                    .map(|c| c.port_fee_per_unit * qty as f64)
-                    .unwrap_or(0.0);
+                let port_fee = port_fee_per_unit * qty as f64;
 
                 // Transfer cash (seller receives cash, minus port fee)
                 if let Some(seller) = state.companies.get_mut(&sell_company_id) {
@@ -185,11 +189,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                 let target_buyer_company_id = if buy_company_id < 0 {
                     // Sentinels (e.g. Empire Relief) deposit the purchased goods directly
                     // into the city's consumer company inventory to feed the population.
-                    state
-                        .city_consumer_ids
-                        .get(&city_id)
-                        .copied()
-                        .unwrap_or(buy_company_id)
+                    city_consumer_id_opt.unwrap_or(buy_company_id)
                 } else {
                     buy_company_id
                 };
