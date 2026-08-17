@@ -113,3 +113,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-08-15 - Optimizing Merchant Inventory Lookup
 **Learning:** In `src/sim/decisions.rs`, the function `compute_merchant_opportunities` checked for available inventory using an `iter().any(...)` over the entire `state.inventories` HashMap. Because this lookup occurred inside a nested loop over resources and cities, the O(N) scan created a significant performance bottleneck.
 **Action:** Replaced the O(N) `iter().any(...)` scan with an O(1) `HashMap::get()` lookup using the exact composite tuple key `(merchant_id, origin_city_id, res_id)`. This reduced the opportunity scan time considerably and eliminated redundant iterations.
+
+## 2024-05-18 - Pre-allocating HashMap Entry Collections
+**Learning:** In the `markets.rs` tick loop, using `.or_default()` on a `HashMap::entry` allocates default vectors with a capacity of 0. When pushing items to these vectors immediately after, it forces dynamic resizing and heap allocations during the hot loop.
+**Action:** Replace `.or_default()` with `.or_insert_with(|| (Vec::with_capacity(N), Vec::with_capacity(M)))` when the approximate size is known, to eliminate dynamic resizing overhead in hot loops.
