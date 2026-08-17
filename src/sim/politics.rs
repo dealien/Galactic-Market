@@ -1085,7 +1085,6 @@ pub fn get_system_production_penalty(state: &SimState, system_id: i32) -> f64 {
 #[cfg(test)]
 mod tests {
 
-
     #[test]
     fn test_run_politics_pipeline_execution() {
         use rand::SeedableRng;
@@ -1123,7 +1122,7 @@ mod tests {
                 tension: 50.0,
                 status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
                 neutral_since_tick: 0,
-            }
+            },
         );
 
         // Run the politics pipeline
