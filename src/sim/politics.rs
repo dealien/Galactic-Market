@@ -1084,6 +1084,56 @@ pub fn get_system_production_penalty(state: &SimState, system_id: i32) -> f64 {
 
 #[cfg(test)]
 mod tests {
+
+
+    #[test]
+    fn test_run_politics_pipeline_execution() {
+        use rand::SeedableRng;
+        let mut state = SimState::new();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        // Add some basic entities to make sure the loop executes and affects state.
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Test Empire".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        state.empires.insert(
+            2,
+            crate::sim::state::Empire {
+                id: 2,
+                name: "Test Empire 2".to_string(),
+                government_type: "Democracy".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+
+        // Add diplomatic relation to test tension decay
+        state.diplomatic_relations.insert(
+            (1, 2),
+            DiplomaticRelation {
+                empire_a_id: 1,
+                empire_b_id: 2,
+                tension: 50.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            }
+        );
+
+        // Run the politics pipeline
+        super::run_politics(&mut state, &mut rng);
+
+        // Verify that update_tension decreased the tension
+        let rel = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        assert!(rel.tension < 50.0);
+    }
+
     use super::*;
     use crate::sim::state::{
         DiplomaticRelation, Empire, MilitaryUnit, Occupation, Sector, SectorControl, StarSystem,
