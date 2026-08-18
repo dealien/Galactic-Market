@@ -1,8 +1,8 @@
 use galactic_market::sim::SimState;
-use serial_test::serial;
 use galactic_market::sim::state::{
     City, Company, Deposit, Facility, Inventory, MarketOrder, Recipe, RecipeInput,
 };
+use serial_test::serial;
 
 /// Build a minimal SimState with one miner + deposit + refinery for integration tests.
 fn full_economy_state() -> SimState {
@@ -308,8 +308,6 @@ async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyho
     Ok(())
 }
 
-/// Tests that `run_seed` populates the database with the core entities
-/// needed to bootstrap the simulation economy, verifying counts match the seed setup.
 /// Tests that `run_seed` populates the database with the core entities
 /// needed to bootstrap the simulation economy, verifying counts match the seed setup.
 #[tokio::test]

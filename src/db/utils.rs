@@ -36,7 +36,9 @@ pub async fn clear_database(pool: &PgPool) -> Result<(), sqlx::Error> {
         .await?;
 
     // Recreate the schema fresh
-    sqlx::query("CREATE SCHEMA IF NOT EXISTS public").execute(pool).await?;
+    sqlx::query("CREATE SCHEMA IF NOT EXISTS public")
+        .execute(pool)
+        .await?;
 
     info!("Database cleared. Schema is fresh.");
     Ok(())
