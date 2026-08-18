@@ -696,8 +696,10 @@ mod tests {
             .fetch_one(&pool)
             .await?;
 
-        assert_eq!(count_after_first.0, count_after_second.0, "Should have the same number of empires after a second seed");
-
+        assert_eq!(
+            count_after_first.0, count_after_second.0,
+            "Should have the same number of empires after a second seed"
+        );
 
         Ok(())
     }
