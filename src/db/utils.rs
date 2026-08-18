@@ -31,7 +31,7 @@ pub async fn clear_database(pool: &PgPool) -> Result<(), sqlx::Error> {
     info!("Clearing database: dropping and recreating public schema...");
 
     // Drop the public schema cascade to clean up all tables and views
-    sqlx::query("DROP SCHEMA public CASCADE")
+    sqlx::query("DROP SCHEMA IF EXISTS public CASCADE")
         .execute(pool)
         .await?;
 
