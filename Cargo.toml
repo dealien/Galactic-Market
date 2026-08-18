@@ -20,6 +20,7 @@ petgraph = "0.8.3"
 
 [dev-dependencies]
 divan = { version = "4.4.1", package = "codspeed-divan-compat" }
+serial_test = "4.0.1"
 
 [[bench]]
 name = "sim_bench"
