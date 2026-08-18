@@ -673,3 +673,34 @@ pub async fn run_seed_with_seed(pool: &PgPool, seed: u64) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[sqlx::test]
+    async fn test_run_seed_twice(pool: PgPool) -> Result<()> {
+        // Run the seed for the first time
+        run_seed(&pool).await?;
+
+        // Capture the number of empires after the first run
+        let count_after_first: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
+            .fetch_one(&pool)
+            .await?;
+
+        // Run the seed a second time; it should skip gracefully
+        run_seed(&pool).await?;
+
+        // Verify the number of empires remains the same
+        let count_after_second: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
+            .fetch_one(&pool)
+            .await?;
+
+        assert_eq!(
+            count_after_first.0, count_after_second.0,
+            "Should have the same number of empires after a second seed"
+        );
+
+        Ok(())
+    }
+}
