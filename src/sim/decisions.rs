@@ -1406,7 +1406,9 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
                     if current_ratios.is_empty() || company_cash >= required_cash {
                         facility.production_ratios = Some(new_ratios.clone());
                         facility.setup_ticks_remaining = 3;
-                        state.companies.get_mut(&company_id).unwrap().cash -= retooling_fee;
+                        if !current_ratios.is_empty() {
+                            state.companies.get_mut(&company_id).unwrap().cash -= retooling_fee;
+                        }
                         debug!(company_id, "Refinery switched production ratios");
                     }
                 }
@@ -4898,5 +4900,85 @@ mod tests {
         run_decisions(&mut state, 1, &mut rng);
 
         assert_eq!(state.companies[&2].company_type, "corporation");
+    }
+
+    #[test]
+    fn test_refinery_retooling_fee_initialization() {
+        let mut state = SimState::new();
+
+        let home_city_id = 1;
+        let body_id = 1;
+        let company_id = 1;
+
+        state.cities.insert(
+            home_city_id,
+            crate::sim::state::City {
+                id: home_city_id,
+                body_id,
+                name: "Home".into(),
+                population: 1000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let initial_cash = 100.0; // Less than 200.0 retooling fee
+        state.companies.insert(
+            company_id,
+            Company {
+                id: company_id,
+                name: "Refining Co".into(),
+                company_type: "small_company".into(),
+                home_city_id,
+                cash: initial_cash,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                company_id,
+                city_id: home_city_id,
+                facility_type: "refinery".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None, // First initialization
+            },
+        );
+
+        state.recipes.insert(
+            1,
+            crate::sim::state::Recipe {
+                id: 1,
+                name: "Refine Ore".into(),
+                facility_type: "refinery".into(),
+                inputs: vec![],
+                output_resource_id: 1,
+                output_qty: 10,
+                labor_cost_per_run: 5.0,
+            },
+        );
+
+        state.ema_prices.insert((home_city_id, 1), 10.0);
+
+        let mut rng = test_rng();
+        run_decisions(&mut state, 1, &mut rng);
+
+        // Ratios should be initialized
+        let facility = &state.facilities[&1];
+        assert!(facility.production_ratios.is_some());
+
+        // Cash should NOT be deducted on first initialization
+        assert_eq!(state.companies[&company_id].cash, initial_cash);
     }
 }
