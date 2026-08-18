@@ -42,7 +42,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         );
         let entry = markets
             .entry((order.city_id, order.resource_type_id))
-            .or_default();
+            .or_insert_with(|| (Vec::with_capacity(4), Vec::with_capacity(4)));
         if order.order_type == "buy" {
             entry.0.push(item);
         } else {
