@@ -28,10 +28,12 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 /// ```
 type OrderKey = (i32, bool, f64, u64, i32, i64);
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
-    let mut markets: HashMap<(i32, i32), (Vec<OrderKey>, Vec<OrderKey>)> = HashMap::new();
+    let mut markets: HashMap<(i32, i32), (Vec<OrderKey>, Vec<OrderKey>)> =
+        HashMap::with_capacity(32);
 
     for (&id, order) in &state.market_orders {
-        let is_market = order.order_kind == "market";
+        let is_market = order.order_kind.as_str() == "market";
+        let is_buy = order.order_type.as_str() == "buy";
         let item = (
             id,
             is_market,
@@ -40,10 +42,11 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             order.company_id,
             order.quantity,
         );
+        // Bolt optimization: Pre-allocate vectors with capacity to avoid dynamic sizing overhead in tick loop
         let entry = markets
             .entry((order.city_id, order.resource_type_id))
             .or_insert_with(|| (Vec::with_capacity(4), Vec::with_capacity(4)));
-        if order.order_type == "buy" {
+        if is_buy {
             entry.0.push(item);
         } else {
             entry.1.push(item);
@@ -105,6 +108,13 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             .map(|c| c.port_fee_per_unit)
             .unwrap_or(0.0);
         let city_consumer_id_opt = state.city_consumer_ids.get(&city_id).copied();
+        // Bolt optimization: Hoist the loop-invariant EMA price lookup outside of the
+        // while matching loop to avoid repeated O(1) hashmap lookups for every single trade.
+        let last_ema_price = state
+            .ema_prices
+            .get(&(city_id, resource_type_id))
+            .copied()
+            .unwrap_or(10.0);
 
         while b_idx < buys.len() && s_idx < sells.len() {
             let (_b_id, buy_is_market, buy_price, _, buy_company_id, buy_qty) = buys[b_idx];
@@ -119,11 +129,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             let clearing_price = match (buy_is_market, sell_is_market) {
                 (true, true) => {
                     // Two market orders: use last known EMA or fallback
-                    state
-                        .ema_prices
-                        .get(&(city_id, resource_type_id))
-                        .copied()
-                        .unwrap_or(10.0)
+                    last_ema_price
                 }
                 (true, false) => sell_price,
                 (false, true) => buy_price,
