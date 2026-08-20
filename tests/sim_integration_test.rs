@@ -249,7 +249,7 @@ fn test_market_clearing_balances() {
 }
 
 #[tokio::test]
-#[serial]
+#[serial(db)]
 async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyhow::Error> {
     let _ = dotenvy::dotenv().ok();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
@@ -311,7 +311,7 @@ async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyho
 /// Tests that `run_seed` populates the database with the core entities
 /// needed to bootstrap the simulation economy, verifying counts match the seed setup.
 #[tokio::test]
-#[serial]
+#[serial(db)]
 async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
     let _ = dotenvy::dotenv().ok();
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
