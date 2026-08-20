@@ -419,6 +419,46 @@ mod tests {
     }
 
     #[test]
+    fn test_bankrupt_company_not_liquidated_with_inventory() {
+        let mut state = SimState::new();
+        use crate::sim::state::Inventory;
+
+        // Bankrupt company with enough cash to pay off debt but STILL has inventory
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co With Inv".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 50.0, // Enough to cover the debt
+                debt: 50.0,
+                next_eval_tick: 1,
+                status: "bankrupt".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Add inventory
+        state.inventories.insert(
+            (1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+
+        run_finance(&mut state);
+
+        // Debt is paid off, cash drops to 0.0, but status MUST remain "bankrupt" because it has inventory
+        assert_eq!(state.companies[&1].cash, 0.0);
+        assert_eq!(state.companies[&1].debt, 0.0);
+        assert_eq!(state.companies[&1].status, "bankrupt");
+    }
+
+    #[test]
     fn test_bankrupt_company_liquidation() {
         let mut state = SimState::new();
 
