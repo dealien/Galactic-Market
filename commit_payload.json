@@ -1,7 +1,0 @@
-{
-  "intent": "Add test coverage for trigger_random_event branch in run_events",
-  "body": "Added a test that exercises the random event generation logic which was previously uncovered.",
-  "trailers": {
-    "Tested": "cargo test --lib sim::events"
-  }
-}
