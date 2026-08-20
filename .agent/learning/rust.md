@@ -117,3 +117,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Pre-allocating HashMap Entry Collections
 **Learning:** In the `markets.rs` tick loop, using `.or_default()` on a `HashMap::entry` allocates default vectors with a capacity of 0. When pushing items to these vectors immediately after, it forces dynamic resizing and heap allocations during the hot loop.
 **Action:** Replace `.or_default()` with `.or_insert_with(|| (Vec::with_capacity(N), Vec::with_capacity(M)))` when the approximate size is known, to eliminate dynamic resizing overhead in hot loops.
+
+## 2024-10-24 - Serializing Database Integration Tests
+**Learning:** When writing database-dependent integration tests that use `clear_database` (which resets the public schema), tests must be executed serially to prevent concurrent execution from causing race conditions and schema conflicts like 'schema public already exists'. Ensure you use the `serial_test` crate with the `#[serial]` macro on conflicting tests, and use `IF NOT EXISTS` for schema creation in the reset logic.
+**Action:** Always add `#[serial]` to `#[tokio::test]` functions in integration tests that mutate or reset the shared test database.
