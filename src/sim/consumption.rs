@@ -8,7 +8,7 @@ use tracing::debug;
 
 use crate::sim::state::{MarketOrder, SimState};
 
-/// Ingots demanded per 1,000 citizens per tick.
+/// Food demanded per 1,000 citizens per tick.
 const DEMAND_PER_1K_POPULATION: i64 = 1;
 
 /// Issue #10: Population fulfillment thresholds for growth/decline
@@ -205,10 +205,10 @@ fn update_population_dynamics(state: &mut SimState) {
             if let Some(consumer_co_id) = state.city_consumer_ids.get(city_id) {
                 let inv_key = (*consumer_co_id, *city_id, food_id);
                 if let Some(inv) = state.inventories.get_mut(&inv_key) {
-                    food_consumed = inv.quantity as f64;
                     // Population consumes up to what is required
                     let consumed_qty = (inv.quantity).min(food_required as i64);
                     inv.quantity -= consumed_qty;
+                    food_consumed = consumed_qty as f64;
                 }
             }
         }
@@ -719,5 +719,32 @@ mod tests {
 
         assert_eq!(c1.population, pop1 - expected_migration);
         assert_eq!(c2.population, pop2 + expected_migration);
+    }
+
+    #[test]
+    fn test_food_consumed_measures_actual_consumption_not_stock() {
+        // Pop = 1,000,000 citizens require 1,000 units of food (1 unit per 1k pop)
+        let pop = 1_000_000;
+        // Set initial food stock to 50,000 (well in excess of 1,000 required food)
+        let initial_food_stock = 50_000;
+        let mut state = setup_population_dynamics_state(pop, initial_food_stock);
+
+        update_population_dynamics(&mut state);
+
+        // Check remaining inventory: 50,000 initial minus 1,000 consumed = 49,000
+        let inv_key = crate::sim::state::Inventory::key(1, 1, 1);
+        let inv = state.inventories.get(&inv_key).unwrap();
+        assert_eq!(
+            inv.quantity, 49_000,
+            "Inventory should only be reduced by actual consumed quantity (1,000), not total stock"
+        );
+
+        // Fulfillment ratio is 1,000 consumed / 1,000 required = 1.0 (100%), which is >= 95% growth threshold.
+        // Growth rate is +0.05% (+500 citizens), so population becomes 1,000,500.
+        let city = state.cities.get(&1).unwrap();
+        assert_eq!(
+            city.population, 1_000_500,
+            "Population should grow to 1,000,500 based on 100% fulfillment"
+        );
     }
 }
