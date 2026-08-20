@@ -1950,6 +1950,9 @@ pub fn compute_merchant_opportunities(
 
     let mut opportunities = Vec::new();
 
+    // Optimization: Precompute the home_city_id for the merchant
+    let merchant_home_city_id = state.companies.get(&merchant_id).map(|c| c.home_city_id);
+
     // Triple-nested loop: all resources × origin cities × destination cities
     for &res_id in state.resource_types.keys() {
         for &origin_city_id in state.cities.keys() {
@@ -1960,11 +1963,7 @@ pub fn compute_merchant_opportunities(
                 .unwrap_or(1000.0);
 
             // Skip if no inventory to sell (can't buy)
-            let has_inventory = state
-                .companies
-                .get(&merchant_id)
-                .map(|c| c.home_city_id == origin_city_id)
-                .unwrap_or(false)
+            let has_inventory = merchant_home_city_id == Some(origin_city_id)
                 || state
                     .inventories
                     .get(&(merchant_id, origin_city_id, res_id))
@@ -1985,6 +1984,11 @@ pub fn compute_merchant_opportunities(
                     .get(&(dest_city_id, res_id))
                     .copied()
                     .unwrap_or(0.0);
+
+                // Bolt optimization: Only compute transport costs if there's a potential profit
+                if sell_price <= buy_price {
+                    continue;
+                }
 
                 let transport =
                     crate::sim::logistics::get_transport_info(state, origin_city_id, dest_city_id);
