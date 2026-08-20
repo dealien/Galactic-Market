@@ -1,2 +1,9 @@
+[profile.default]
+retries = 3
+
+[[profile.default.overrides]]
+filter = 'test(test_database_seeding) or test(test_db_flush)'
+threads = 1
+
 [profile.ci.junit]
 path = "junit.xml"
