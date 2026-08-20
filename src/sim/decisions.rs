@@ -15,20 +15,42 @@ use crate::sim::state::{Facility, Inventory, MarketOrder, SimState, TradeRoute};
 /// Evaluate and issue a loan from a commercial bank to a company.
 fn request_loan(state: &mut SimState, company_id: i32, amount: f64) -> bool {
     let (bank_id, _home_city_id) = {
-        let c = &state.companies[&company_id];
-        let city = &state.cities[&c.home_city_id];
-        let body = &state.celestial_bodies[&city.body_id];
-        let system = &state.star_systems[&body.system_id];
+        let c = match state.companies.get(&company_id) {
+            Some(c) => c,
+            None => return false,
+        };
+        let city = match state.cities.get(&c.home_city_id) {
+            Some(city) => city,
+            None => return false,
+        };
+        let body = match state.celestial_bodies.get(&city.body_id) {
+            Some(body) => body,
+            None => return false,
+        };
+        let system = match state.star_systems.get(&body.system_id) {
+            Some(system) => system,
+            None => return false,
+        };
         let sector_id = system.sector_id;
 
         // Find commercial bank in this sector
         let bank = state.companies.values().find(|b| {
-            b.company_type == "commercial_bank" && {
-                let b_city = &state.cities[&b.home_city_id];
-                let b_body = &state.celestial_bodies[&b_city.body_id];
-                let b_sys = &state.star_systems[&b_body.system_id];
-                b_sys.sector_id == sector_id
+            if b.company_type != "commercial_bank" {
+                return false;
             }
+            let b_city = match state.cities.get(&b.home_city_id) {
+                Some(city) => city,
+                None => return false,
+            };
+            let b_body = match state.celestial_bodies.get(&b_city.body_id) {
+                Some(body) => body,
+                None => return false,
+            };
+            let b_sys = match state.star_systems.get(&b_body.system_id) {
+                Some(sys) => sys,
+                None => return false,
+            };
+            b_sys.sector_id == sector_id
         });
 
         match bank {
@@ -38,12 +60,19 @@ fn request_loan(state: &mut SimState, company_id: i32, amount: f64) -> bool {
     };
 
     // Bank evaluates the loan (conservative Debt-to-Asset ratio < 0.8)
-    let current_debt = state.companies[&company_id].debt;
-    let total_assets = state.companies[&company_id].cash + 10000.0; // Minimal asset floor
+    let company = match state.companies.get(&company_id) {
+        Some(c) => c,
+        None => return false,
+    };
+    let current_debt = company.debt;
+    let total_assets = company.cash + 10000.0; // Minimal asset floor
     let debt_to_asset = (current_debt + amount) / total_assets;
 
     if debt_to_asset < 0.8 {
-        let bank_cash = state.companies[&bank_id].cash;
+        let bank_cash = match state.companies.get(&bank_id) {
+            Some(b) => b.cash,
+            None => return false,
+        };
         if bank_cash >= amount {
             if let Some(bank) = state.companies.get_mut(&bank_id) {
                 bank.cash -= amount;
@@ -3483,6 +3512,35 @@ mod tests {
         assert_eq!(state.companies[&1].cash, 1000.0);
         assert_eq!(state.companies[&1].debt, 0.0);
         assert_eq!(state.loans.len(), 0);
+    }
+
+    /// Tests that a loan request fails gracefully (returns false without panicking)
+    /// when referenced entities (company, city, body, or system) are missing from state.
+    #[test]
+    fn test_request_loan_rejected_missing_entities() {
+        let mut state = make_state_with_bank();
+
+        // 1. Missing requesting company_id
+        assert!(!request_loan(&mut state, 999, 5000.0));
+
+        // 2. Missing company's home_city_id
+        state.companies.get_mut(&1).unwrap().home_city_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
+
+        // 3. Missing city's body_id
+        let mut state = make_state_with_bank();
+        state.cities.get_mut(&1).unwrap().body_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
+
+        // 4. Missing celestial body's system_id
+        let mut state = make_state_with_bank();
+        state.celestial_bodies.get_mut(&1).unwrap().system_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
+
+        // 5. Missing bank's home_city_id
+        let mut state = make_state_with_bank();
+        state.companies.get_mut(&2).unwrap().home_city_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
     }
 
     #[test]
