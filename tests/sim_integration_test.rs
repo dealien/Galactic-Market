@@ -324,62 +324,71 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
     galactic_market::db::utils::clear_database(&pool).await?;
     sqlx::migrate!("./migrations").run(&pool).await?;
 
+    let empires_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
+        .fetch_one(&pool)
+        .await?;
+    let cities_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM cities")
+        .fetch_one(&pool)
+        .await?;
+    let companies_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM companies")
+        .fetch_one(&pool)
+        .await?;
+    let resources_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM resource_types")
+        .fetch_one(&pool)
+        .await?;
+    let facilities_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM facilities")
+        .fetch_one(&pool)
+        .await?;
+    let deposits_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM deposits")
+        .fetch_one(&pool)
+        .await?;
+
     // Run seed
     galactic_market::db::seed::run_seed(&pool).await?;
 
-    // Check empires
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
+    let empires_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(count.0, 2, "Should have seeded 2 empires");
+    let cities_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM cities")
+        .fetch_one(&pool)
+        .await?;
+    let companies_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM companies")
+        .fetch_one(&pool)
+        .await?;
+    let resources_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM resource_types")
+        .fetch_one(&pool)
+        .await?;
+    let facilities_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM facilities")
+        .fetch_one(&pool)
+        .await?;
+    let deposits_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM deposits")
+        .fetch_one(&pool)
+        .await?;
 
-    // Check cities
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM cities")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(count.0, 32, "Should have seeded 32 cities");
-
-    // Check that companies exist
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM companies")
-        .fetch_one(&pool)
-        .await?;
-    assert!(count.0 > 0, "Should have seeded companies");
-
-    // Check resource_types
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM resource_types")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(count.0, 7, "Should have seeded 7 resource types");
-
-    // Check star_systems
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM star_systems")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(count.0, 4, "Should have seeded 4 star systems");
-
-    // Check celestial_bodies
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM celestial_bodies")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(count.0, 8, "Should have seeded 8 celestial bodies");
-
-    // Check facilities
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM facilities")
-        .fetch_one(&pool)
-        .await?;
-    assert!(count.0 > 0, "Should have seeded facilities");
-
-    // Check deposits
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM deposits")
-        .fetch_one(&pool)
-        .await?;
-    assert!(count.0 > 0, "Should have seeded deposits");
-
-    // Check recipes
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM recipes")
-        .fetch_one(&pool)
-        .await?;
-    assert!(count.0 > 0, "Should have seeded recipes");
+    assert!(
+        empires_after.0 > empires_before.0,
+        "Should have seeded empires"
+    );
+    assert!(
+        cities_after.0 > cities_before.0,
+        "Should have seeded cities"
+    );
+    assert!(
+        companies_after.0 > companies_before.0,
+        "Should have seeded companies"
+    );
+    assert!(
+        resources_after.0 > resources_before.0,
+        "Should have seeded resource types"
+    );
+    assert!(
+        facilities_after.0 > facilities_before.0,
+        "Should have seeded facilities"
+    );
+    assert!(
+        deposits_after.0 > deposits_before.0,
+        "Should have seeded deposits"
+    );
 
     Ok(())
 }

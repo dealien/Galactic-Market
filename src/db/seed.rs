@@ -679,6 +679,7 @@ mod tests {
     use super::*;
 
     #[sqlx::test]
+    #[serial_test::serial(db)]
     async fn test_run_seed_twice(pool: PgPool) -> Result<()> {
         // Run the seed for the first time
         run_seed(&pool).await?;

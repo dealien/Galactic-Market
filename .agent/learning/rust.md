@@ -125,3 +125,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Optimizing the merchant opportunity scan hot loop
 **Learning:** O(R * C^2) loops (like computing arbitrage routes across resources, origin cities, and destination cities) can be dramatically sped up by short-circuiting expensive map lookups (like transport distance costs) when `sell_price <= buy_price`. Furthermore, hoisting loop-invariant hashmap lookups (like fetching the merchant's home city ID) outside the innermost loops prevents redundant O(1) allocation overheads.
 **Action:** When working with nested loops scanning large cross-products of IDs, evaluate condition checks in order of computational expense. Put simple mathematical comparisons (`sell_price <= buy_price`) *before* expensive state lookups (`get_transport_info`) to short-circuit the loop early and realize massive micro-optimization speedups (e.g. ~10x). Always pre-fetch constant attributes (like the evaluating merchant's home city) before entering the loop.
+
+## 2024-05-18 - Isolated Test Execution for Coverage Analysis
+**Learning:** When generating coverage using `cargo-llvm-cov` in environments with failing database integration tests, passing module filters (e.g., `-- sim::production`) prevents those failures from breaking the coverage generation process.
+**Action:** When running coverage on a specific module in a repository with flaky/failing tests in other modules, always pass the module name as a filter to `cargo-llvm-cov` to isolate the run and successfully generate `lcov.info`.
