@@ -1766,15 +1766,12 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
     // Check if empire can afford relief (up to max % of treasury)
     let mut empire_relief_map = std::collections::HashMap::new();
     for (city_id, empire_id, relief_units, relief_cost, _fulfillment) in relief_orders {
-        empire_relief_map
+        // Bolt optimization: Replace double map lookup and eager vector allocations with single entry API and closure
+        let entry = empire_relief_map
             .entry(empire_id)
-            .or_insert((Vec::new(), 0.0))
-            .0
-            .push((city_id, relief_units, relief_cost));
-        empire_relief_map
-            .entry(empire_id)
-            .or_insert((Vec::new(), 0.0))
-            .1 += relief_cost;
+            .or_insert_with(|| (Vec::with_capacity(4), 0.0));
+        entry.0.push((city_id, relief_units, relief_cost));
+        entry.1 += relief_cost;
     }
 
     // Execute relief orders constrained by budget
