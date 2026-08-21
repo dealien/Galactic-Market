@@ -723,4 +723,73 @@ mod tests {
         let runs = compute_max_runs(&state, 1, 1, &recipe);
         assert_eq!(runs, 0);
     }
+
+    #[test]
+    fn refinery_insufficient_cash_debt_accumulates() {
+        let mut state = make_state();
+
+        // Labor cost per run is 1.5. Capacity is 5 runs.
+        // Total labor cost = 1.5 * 5 = 7.5
+        // Let's set cash to 2.0. So shortfall should be 5.5, cash 0.0, debt 5.5
+
+        let company = state.companies.get_mut(&1).unwrap();
+        company.cash = 2.0;
+        company.debt = 0.0;
+
+        super::run_production(&mut state);
+
+        let company = state.companies.get(&1).unwrap();
+        assert_eq!(company.cash, 0.0);
+        assert_eq!(company.debt, 5.5);
+    }
+
+    #[test]
+    fn plantation_insufficient_cash_debt_accumulates() {
+        let mut state = make_state();
+
+        // Remove refinery and add plantation
+        state.facilities.clear();
+        state.recipes.clear();
+
+        state.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "plantation".into(),
+                capacity: 5,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        state.recipes.insert(
+            2,
+            Recipe {
+                id: 2,
+                name: "Food Production".into(),
+                output_resource_id: 3,
+                output_qty: 2,
+                facility_type: "plantation".into(),
+                inputs: vec![],
+                labor_cost_per_run: 2.0,
+            },
+        );
+
+        // Body fertility is 1.0. capacity * (1.0 + 1.0) = 10 runs
+        // Total labor cost = 2.0 * 10 = 20.0
+        // Set cash to 5.0. Shortfall = 15.0
+
+        let company = state.companies.get_mut(&1).unwrap();
+        company.cash = 5.0;
+        company.debt = 0.0;
+
+        super::run_production(&mut state);
+
+        let company = state.companies.get(&1).unwrap();
+        assert_eq!(company.cash, 0.0);
+        assert_eq!(company.debt, 15.0);
+    }
 }
