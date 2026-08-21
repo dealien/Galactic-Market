@@ -22,15 +22,15 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** In the `sim::consumption` module, simulating population dynamics (`update_population_dynamics`) involves tracking food fulfillment based on an explicit mathematical relationship with `POPULATION_GROWTH_RATE`, `POPULATION_DECLINE_RATE`, and `POPULATION_STARVATION_RATE`. Tests must set up specific mock `SimState` instances containing a City, Consumer Company, and Inventory with carefully calculated resource quantities to hit the various interpolation thresholds (e.g. `FOOD_FULFILLMENT_DECLINE_MIN`). For migration, testing must mock an entire empire hierarchy (Sector, StarSystem, CelestialBody) containing multiple cities with divergent `CityFoodBalance` ratios, ensuring `state.tick` correctly hits the `MIGRATION_INTERVAL` check.
 **Action:** When testing simulation modules relying on complex hierarchical dependencies or time-interval checks, explicitly mock the entire required chain in `SimState` and carefully manipulate `state.tick`.
 
-## $(date +%Y-%m-%d) - SimState Setup and Missing Entity Handling
+## 2024-08-21 - SimState Setup and Missing Entity Handling
 **Learning:** Functions that iterate over multiple cross-referenced entities within `SimState` (e.g. `analyze_city_food_balance` scanning cities, consumer ids, and inventories) must gracefully handle missing references since the simulation state is highly dynamic. For instance, when analyzing food balances, `food_resource_id` and `consumer_co_id` could be `None`. The logic rightly defaults `food_in_inventory` to 0.0 in these cases.
 **Action:** When testing simulation components that rely on interrelated entities, actively construct test cases where specific relationships (like a missing resource type) are broken. These missing-data edge cases are common in dynamic simulations and provide crucial coverage for fallback and default behaviors.
 
-## $(date +%Y-%m-%d) - Appending Tests hygiene and File cleanup
+## 2024-08-21 - Appending Tests hygiene and File cleanup
 **Learning:** Adding unit tests at the end of files without verifying if the file already ends with a `}` (e.g. `mod tests { ... }`) can result in compilation errors due to misplaced or missing braces. Also, generating temporary text and python scripts directly in the repo root without cleaning up leads to code review failures due to poor repository hygiene.
 **Action:** Always parse the file to correctly insert new tests inside the `#[cfg(test)] mod tests` block rather than appending blindly. Delete any scratchpad text files, `lcov.info`, or helper scripts immediately after use.
 
-## $(date +%Y-%m-%d) - Overcoming Coverage Gaps in Market Sorting Logic
+## 2024-08-21 - Overcoming Coverage Gaps in Market Sorting Logic
 **Learning:** In systems like the market engine where `market_orders` are matched, the use of isolated "single-buyer vs. single-seller" test cases can inadvertently bypass critical sorting closures designed to handle competition. When sorting logic acts on collections, testing with one element results in the sorting logic skipping branch comparisons entirely, leading to gaps in coverage.
 **Action:** When testing matching engines or systems that process a collection of inputs (e.g. orders, production queues), explicitly create test scenarios that seed *multiple competing inputs* per category (e.g., several buyers at different prices/kinds competing for a single seller) to ensure the sorting priority and matching precedence loops are actively executed and validated.
 
@@ -82,7 +82,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When switching from `sort_by` to `sort_unstable_by` for performance optimization in a tick loop (like market order sorting), it's crucial to explicitly break ties (e.g. by `created_tick` and then `id`). `sort_unstable_by` does not preserve original order, and if ties exist, it may randomly re-order orders with the same price, violating deterministic simulation ticks across different seeds or architectures.
 **Action:** Always include deterministic fallback comparisons (`.then_with(|| a_tick.cmp(&b_tick)).then_with(|| a_id.cmp(&b_id))`) when using `sort_unstable_by` on collections of structs that might share primary sorting keys, especially in tick-loop hot paths.
 
-## $(date +%Y-%m-%d) - Optimizing Simulation Hot Paths via Direct Partitioning
+## 2024-08-21 - Optimizing Simulation Hot Paths via Direct Partitioning
 **Learning:** To optimize simulation hot paths, avoid creating intermediate vectors of IDs for grouping. Instead, directly partition cached data tuples into their final target collections (e.g., `HashMap<Key, (Vec<Tuple>, Vec<Tuple>)>`) to reduce allocation overhead and prevent redundant map lookups during iteration.
 **Action:** When gathering entities for paired processing (like buys/sells or attackers/defenders), build a struct or tuple containing all needed properties and distribute them directly into partitioned vectors within a single pass over the source map.
 
@@ -125,3 +125,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Optimizing the merchant opportunity scan hot loop
 **Learning:** O(R * C^2) loops (like computing arbitrage routes across resources, origin cities, and destination cities) can be dramatically sped up by short-circuiting expensive map lookups (like transport distance costs) when `sell_price <= buy_price`. Furthermore, hoisting loop-invariant hashmap lookups (like fetching the merchant's home city ID) outside the innermost loops prevents redundant O(1) allocation overheads.
 **Action:** When working with nested loops scanning large cross-products of IDs, evaluate condition checks in order of computational expense. Put simple mathematical comparisons (`sell_price <= buy_price`) *before* expensive state lookups (`get_transport_info`) to short-circuit the loop early and realize massive micro-optimization speedups (e.g. ~10x). Always pre-fetch constant attributes (like the evaluating merchant's home city) before entering the loop.
+
+## 2024-08-21 - Eager allocations with HashMap Entry API
+**Learning:** Using `.or_insert((Vec::new(), 0.0))` on a `HashMap` `Entry` evaluates its arguments eagerly. This means a temporary `Vec` struct is initialized eagerly (and if it were `with_capacity`, eagerly heap allocated), even if the key already exists and the default value is immediately discarded. Doing this twice for the same key (a double map lookup) in a hot loop compounds the performance penalty.
+**Action:** Always replace `.or_insert(Vec::new())` (or tuples containing `Vec::new()`) with `.or_insert_with(|| ...)` in hot loops. Additionally, combine operations on the same key into a single `let entry = map.entry(key).or_insert_with(...)` binding to avoid double lookups.
