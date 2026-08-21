@@ -648,6 +648,11 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
 
                 // If food was routed, skip normal arbitrage this tick
                 if food_routed {
+                    for mut order in orders_to_post {
+                        let id = state.next_order_id();
+                        order.id = id;
+                        state.market_orders.insert(id, order);
+                    }
                     continue;
                 }
 
@@ -5038,5 +5043,213 @@ mod tests {
 
         // Cash should NOT be deducted on first initialization
         assert_eq!(state.companies[&company_id].cash, initial_cash);
+    }
+
+    #[test]
+    fn test_commercial_bank_capacity_zero_utilization() {
+        let mut state = SimState::new();
+
+        let empire_id = 1;
+        let prime_rate = 0.05;
+        state.prime_rates.insert(empire_id, prime_rate);
+
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        let bank_id = 1;
+        state.companies.insert(
+            bank_id,
+            Company {
+                id: bank_id,
+                name: "Test Bank".into(),
+                company_type: "commercial_bank".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.bank_accounts.insert(
+            1,
+            crate::sim::state::BankAccount {
+                id: 1,
+                company_id: 2,
+                bank_company_id: bank_id,
+                balance: 1000.0,
+                interest_rate: 0.0,
+            },
+        );
+
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        assert!((state.bank_accounts[&1].interest_rate - (prime_rate * 0.5)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_merchant_routes_food_from_surplus_to_starving_ignores_self() {
+        let mut state = SimState::new();
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food Ration".into(),
+                category: "Consumer Good".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Surplus City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            crate::sim::state::City {
+                id: 2,
+                body_id: 1,
+                name: "Starving City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.city_food_balance.insert(
+            1,
+            crate::sim::state::CityFoodBalance {
+                city_id: 1,
+                food_surplus: 100,
+                fulfillment_ratio: 1.0,
+                needs_relief: false,
+                has_surplus: true,
+            },
+        );
+        state.city_food_balance.insert(
+            2,
+            crate::sim::state::CityFoodBalance {
+                city_id: 2,
+                food_surplus: 0,
+                fulfillment_ratio: 0.1,
+                needs_relief: true,
+                has_surplus: false,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 10.0);
+        state.ema_prices.insert((2, 1), 50.0);
+
+        let merchant_id = 1;
+        state.companies.insert(
+            merchant_id,
+            Company {
+                id: merchant_id,
+                name: "Food Transport Co".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 10_000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        let orders: Vec<_> = state.market_orders.values().collect();
+        assert!(
+            !orders.is_empty(),
+            "Merchant should post buy order for food"
+        );
+        let food_order = orders.iter().find(|o| o.company_id == merchant_id).unwrap();
+        assert_eq!(
+            food_order.city_id, 1,
+            "Order should be placed at surplus origin city"
+        );
+        assert_eq!(food_order.resource_type_id, 1);
     }
 }
