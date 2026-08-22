@@ -10,6 +10,7 @@
 //! Full integration testing with 200+ ticks is done via `cargo run -- --seed --clear --ticks 200`
 
 use galactic_market::sim::SimState;
+use serial_test::serial;
 use galactic_market::sim::state::{City, Company, Deposit, Facility, Recipe, RecipeInput};
 
 /// Build a test state with multiple merchants and cities for cache testing
