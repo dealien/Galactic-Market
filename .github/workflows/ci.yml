@@ -25,6 +25,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_PASSWORD: password
           POSTGRES_DB: galactic_market
         ports:
@@ -83,6 +84,7 @@ jobs:
         image: postgres:16
         env:
           POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_PASSWORD: password
           POSTGRES_DB: galactic_market
         ports:
