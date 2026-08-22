@@ -5,8 +5,6 @@
 //! a starting economy.
 
 use crate::sim::namegen::{self, LocationType};
-#[cfg(test)]
-use serial_test::serial;
 use anyhow::{Context, Result};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -681,7 +679,6 @@ mod tests {
     use super::*;
 
     #[sqlx::test]
-    #[serial_test::serial(db)]
     async fn test_run_seed_twice(pool: PgPool) -> Result<()> {
         // Run the seed for the first time
         run_seed(&pool).await?;

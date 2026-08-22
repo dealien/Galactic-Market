@@ -1,8 +1,8 @@
 use galactic_market::sim::SimState;
-use serial_test::serial;
 use galactic_market::sim::state::{
     City, Company, Deposit, Facility, Inventory, MarketOrder, Recipe, RecipeInput,
 };
+use serial_test::serial;
 
 /// Build a minimal SimState with one miner + deposit + refinery for integration tests.
 fn full_economy_state() -> SimState {
