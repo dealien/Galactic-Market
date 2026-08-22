@@ -20,6 +20,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_PASSWORD: password
           POSTGRES_DB: galactic_market
         options: >-
@@ -33,6 +34,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Install Ripgrep
         run: sudo apt-get update && sudo apt-get install -y ripgrep
