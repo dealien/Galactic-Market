@@ -207,7 +207,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         city_id,
                         resource_type_id,
                     ))
-                    .or_insert(Inventory {
+                    .or_insert_with(|| Inventory {
                         company_id: target_buyer_company_id,
                         city_id,
                         resource_type_id,
