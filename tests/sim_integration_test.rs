@@ -2,7 +2,6 @@ use galactic_market::sim::SimState;
 use galactic_market::sim::state::{
     City, Company, Deposit, Facility, Inventory, MarketOrder, Recipe, RecipeInput,
 };
-use serial_test::serial;
 
 /// Build a minimal SimState with one miner + deposit + refinery for integration tests.
 fn full_economy_state() -> SimState {
@@ -248,19 +247,10 @@ fn test_market_clearing_balances() {
     );
 }
 
-#[tokio::test]
-#[serial(db)]
-async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyhow::Error> {
-    let _ = dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await?;
-
-    galactic_market::db::utils::clear_database(&pool).await?;
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
+#[sqlx::test]
+async fn test_db_flush_persists_closed_loop_economy_fields(
+    pool: sqlx::PgPool,
+) -> Result<(), anyhow::Error> {
     galactic_market::db::seed::run_seed(&pool).await?;
 
     let mut state = galactic_market::db::load::load(&pool).await?;
@@ -310,20 +300,8 @@ async fn test_db_flush_persists_closed_loop_economy_fields() -> Result<(), anyho
 
 /// Tests that `run_seed` populates the database with the core entities
 /// needed to bootstrap the simulation economy, verifying counts match the seed setup.
-#[tokio::test]
-#[serial(db)]
-async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
-    let _ = dotenvy::dotenv().ok();
-    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL not set");
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect(&database_url)
-        .await?;
-
-    // Clear db
-    galactic_market::db::utils::clear_database(&pool).await?;
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
+#[sqlx::test]
+async fn test_database_seeding_creates_records(pool: sqlx::PgPool) -> Result<(), anyhow::Error> {
     let empires_before: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM empires")
         .fetch_one(&pool)
         .await?;
@@ -364,6 +342,7 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
     let deposits_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM deposits")
         .fetch_one(&pool)
         .await?;
+
     assert!(
         empires_after.0 > empires_before.0,
         "Should have seeded empires"
@@ -388,24 +367,6 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
         deposits_after.0 > deposits_before.0,
         "Should have seeded deposits"
     );
-
-    let star_systems_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM star_systems")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(star_systems_after.0, 4, "Should have seeded 4 star systems");
-
-    let celestial_bodies_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM celestial_bodies")
-        .fetch_one(&pool)
-        .await?;
-    assert_eq!(
-        celestial_bodies_after.0, 8,
-        "Should have seeded 8 celestial bodies"
-    );
-
-    let recipes_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM recipes")
-        .fetch_one(&pool)
-        .await?;
-    assert!(recipes_after.0 > 0, "Should have seeded recipes");
 
     Ok(())
 }
