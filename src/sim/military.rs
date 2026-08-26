@@ -390,6 +390,86 @@ pub fn spawn_initial_units(state: &mut SimState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_resolve_combat_zero_strength() {
+        use rand::SeedableRng;
+        let mut state = SimState::new();
+        // Do not add any units, so strengths will be 0.
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+        let winner = resolve_combat(&mut state, 1, 2, 1, &mut rng);
+        assert!(winner.is_none());
+    }
+
+    #[test]
+    fn test_resolve_combat_unit_destroyed() {
+        use rand::SeedableRng;
+        let mut state = SimState::new();
+
+        let unit_id_loser = 1;
+        state.military_units.insert(
+            unit_id_loser,
+            MilitaryUnit {
+                id: unit_id_loser,
+                empire_id: 1,
+                system_id: 1,
+                unit_type: "fleet".into(),
+                strength: 6.0, // Low enough that losing will drop it below 5.0
+                morale: 1.0,
+                status: "deployed".into(),
+            },
+        );
+
+        let unit_id_winner = 2;
+        state.military_units.insert(
+            unit_id_winner,
+            MilitaryUnit {
+                id: unit_id_winner,
+                empire_id: 2,
+                system_id: 1,
+                unit_type: "fleet".into(),
+                strength: 100.0, // Guaranteed to win
+                morale: 1.0,
+                status: "deployed".into(),
+            },
+        );
+
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42); // 42 roll doesn't matter much with 100 vs 6
+        let winner = resolve_combat(&mut state, 1, 2, 1, &mut rng);
+
+        assert_eq!(winner, Some(2));
+        assert!(!state.military_units.contains_key(&unit_id_loser));
+        assert!(state.military_units.contains_key(&unit_id_winner));
+    }
+
+    #[test]
+    fn test_maintenance_costs_wartime() {
+        let mut state = setup_combat_state();
+        state.empire_treasuries.insert(1, 10000.0);
+
+        // Put empire 1 at war
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                participants: vec![(1, "aggressor".into())],
+                theaters: vec![],
+                start_tick: 1,
+                end_tick: None,
+                status: "active".into(),
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        apply_maintenance_costs(&mut state);
+
+        // Unit strength is 100, cost = 100 * 0.5 * 2.0 = 100
+        assert!((state.get_empire_treasury(1) - 9900.0).abs() < 0.01);
+    }
     use crate::sim::state::{Sector, SimState, StarSystem};
 
     fn setup_combat_state() -> SimState {
