@@ -5253,4 +5253,365 @@ mod tests {
         );
         assert_eq!(food_order.resource_type_id, 1);
     }
+
+    #[test]
+    fn test_merchant_shipping_inventory() {
+        let mut state = SimState::new();
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food Ration".into(),
+                category: "Consumer Good".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Surplus City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            crate::sim::state::City {
+                id: 2,
+                body_id: 1,
+                name: "Starving City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 10.0);
+        state.ema_prices.insert((2, 1), 50.0);
+
+        let merchant_id = 1;
+        state.companies.insert(
+            merchant_id,
+            Company {
+                id: merchant_id,
+                name: "Food Transport Co".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 10_000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(merchant_id, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: merchant_id,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        assert_eq!(
+            state.trade_routes.len(),
+            1,
+            "Merchant should create a trade route to ship inventory"
+        );
+
+        let route = state.trade_routes.values().next().unwrap();
+        assert_eq!(route.origin_city_id, 1);
+        assert_eq!(route.dest_city_id, 2);
+        assert_eq!(route.quantity, 100);
+
+        let inv = state
+            .inventories
+            .get(&crate::sim::state::Inventory::key(merchant_id, 1, 1))
+            .unwrap();
+        assert_eq!(inv.quantity, 0, "Inventory should be zeroed after shipping");
+    }
+
+    #[test]
+    fn test_merchant_posts_sell_order_when_no_profitable_shipping() {
+        let mut state = SimState::new();
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food Ration".into(),
+                category: "Consumer Good".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Surplus City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            crate::sim::state::City {
+                id: 2,
+                body_id: 1,
+                name: "Starving City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        // Make local price higher than destination price to prevent shipping
+        state.ema_prices.insert((1, 1), 50.0);
+        state.ema_prices.insert((2, 1), 10.0);
+
+        let merchant_id = 1;
+        state.companies.insert(
+            merchant_id,
+            Company {
+                id: merchant_id,
+                name: "Food Transport Co".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 10_000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(merchant_id, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: merchant_id,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        assert_eq!(
+            state.trade_routes.len(),
+            0,
+            "Merchant should not ship inventory when local price is better"
+        );
+
+        let orders: Vec<_> = state.market_orders.values().collect();
+        assert_eq!(orders.len(), 1, "Merchant should post a sell order locally");
+
+        let sell_order = orders[0];
+        assert_eq!(sell_order.city_id, 1);
+        assert_eq!(sell_order.company_id, merchant_id);
+        assert_eq!(sell_order.resource_type_id, 1);
+        assert_eq!(sell_order.order_type, "sell");
+        assert_eq!(sell_order.quantity, 100);
+
+        // Price should be local_ema * 0.98
+        assert!((sell_order.price - (50.0 * 0.98)).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_merchant_shipping_insufficient_cash() {
+        let mut state = SimState::new();
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food Ration".into(),
+                category: "Consumer Good".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sec1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                name: "Sys1".into(),
+                sector_id: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Surplus City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            crate::sim::state::City {
+                id: 2,
+                body_id: 1,
+                name: "Starving City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 10.0);
+        state.ema_prices.insert((2, 1), 50.0);
+
+        let merchant_id = 1;
+        state.companies.insert(
+            merchant_id,
+            Company {
+                id: merchant_id,
+                name: "Food Transport Co".into(),
+                company_type: "merchant".into(),
+                home_city_id: 1,
+                cash: 0.0, // Insufficient cash to ship
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(merchant_id, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: merchant_id,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        assert_eq!(
+            state.trade_routes.len(),
+            0,
+            "Merchant should not create a trade route due to insufficient cash"
+        );
+
+        let inv = state
+            .inventories
+            .get(&crate::sim::state::Inventory::key(merchant_id, 1, 1))
+            .unwrap();
+        assert_eq!(inv.quantity, 100, "Inventory should not be zeroed");
+    }
 }

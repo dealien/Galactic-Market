@@ -129,3 +129,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-08-21 - Eager allocations with HashMap Entry API
 **Learning:** Using `.or_insert((Vec::new(), 0.0))` on a `HashMap` `Entry` evaluates its arguments eagerly. This means a temporary `Vec` struct is initialized eagerly (and if it were `with_capacity`, eagerly heap allocated), even if the key already exists and the default value is immediately discarded. Doing this twice for the same key (a double map lookup) in a hot loop compounds the performance penalty.
 **Action:** Always replace `.or_insert(Vec::new())` (or tuples containing `Vec::new()`) with `.or_insert_with(|| ...)` in hot loops. Additionally, combine operations on the same key into a single `let entry = map.entry(key).or_insert_with(...)` binding to avoid double lookups.
+
+## $(date +%Y-%m-%d) - Testing Merchant Logistics and Trade Routes
+**Learning:** When testing logic that evaluates trade routes or arbitrage opportunities (like merchant shipping decisions in `src/sim/decisions.rs`), the `SimState` setup must explicitly initialize multiple distinct cities (and related metadata like `ema_prices`) to satisfy internal destination loops (`for &dest_city_id in state.cities.keys()`) and correctly trigger cross-city evaluation logic.
+**Action:** When testing merchant or logistical logic, always seed `SimState` with at least two cities (an origin and a destination) and set appropriate varying EMA prices to trigger the expected trading behavior (shipping vs. local selling).
