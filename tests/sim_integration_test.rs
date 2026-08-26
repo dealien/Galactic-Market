@@ -364,7 +364,6 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
     let deposits_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM deposits")
         .fetch_one(&pool)
         .await?;
-
     assert!(
         empires_after.0 > empires_before.0,
         "Should have seeded empires"
@@ -389,6 +388,24 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
         deposits_after.0 > deposits_before.0,
         "Should have seeded deposits"
     );
+
+    let star_systems_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM star_systems")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(star_systems_after.0, 4, "Should have seeded 4 star systems");
+
+    let celestial_bodies_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM celestial_bodies")
+        .fetch_one(&pool)
+        .await?;
+    assert_eq!(
+        celestial_bodies_after.0, 8,
+        "Should have seeded 8 celestial bodies"
+    );
+
+    let recipes_after: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM recipes")
+        .fetch_one(&pool)
+        .await?;
+    assert!(recipes_after.0 > 0, "Should have seeded recipes");
 
     Ok(())
 }

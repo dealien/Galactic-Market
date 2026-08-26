@@ -482,6 +482,106 @@ mod tests {
     }
 
     #[test]
+    fn refinery_insufficient_cash_rolls_into_debt() {
+        let mut state = make_state();
+        // Set cash to less than the required labor cost (5 runs * 1.5 = 7.5)
+        state.companies.get_mut(&1).unwrap().cash = 5.0;
+
+        run_production(&mut state);
+
+        let company = state.companies.get(&1).unwrap();
+        // Cash should be depleted
+        assert_eq!(company.cash, 0.0);
+        // Shortfall is 7.5 - 5.0 = 2.5
+        assert_eq!(company.debt, 2.5);
+    }
+
+    #[test]
+    fn plantation_insufficient_cash_rolls_into_debt() {
+        let mut state = SimState::new();
+
+        // Set up city and planet with 1.0x fertility
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Fertile Planet".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".into(),
+                population: 10000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Farmer".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                // Less than the required labor cost (10 cap * (1+1.0) * 2.0 = 40.0)
+                cash: 10.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Plantation with base capacity 10
+        state.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "plantation".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        // Plantation recipe: produces Food Rations (resource_id 3)
+        state.recipes.insert(
+            1,
+            Recipe {
+                id: 1,
+                name: "Food Ration Growth".into(),
+                output_resource_id: 3,
+                output_qty: 1,
+                facility_type: "plantation".into(),
+                inputs: vec![],
+                labor_cost_per_run: 2.0,
+            },
+        );
+
+        run_production(&mut state);
+
+        let company = state.companies.get(&1).unwrap();
+        // Cash should be depleted
+        assert_eq!(company.cash, 0.0);
+        // Required labor cost is 40.0, cash was 10.0, shortfall is 30.0
+        assert_eq!(company.debt, 30.0);
+    }
+
+    #[test]
     fn plantation_produces_food_at_base_fertility() {
         let mut state = SimState::new();
 
