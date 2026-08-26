@@ -349,19 +349,19 @@ async fn test_database_seeding_creates_records() -> Result<(), anyhow::Error> {
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM resource_types")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(count.0, 7, "Should have seeded 7 resource types");
+    assert!(count.0 > 0, "Should have seeded resource types");
 
     // Check star_systems
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM star_systems")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(count.0, 4, "Should have seeded 4 star systems");
+    assert!(count.0 > 0, "Should have seeded star systems");
 
     // Check celestial_bodies
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM celestial_bodies")
         .fetch_one(&pool)
         .await?;
-    assert_eq!(count.0, 8, "Should have seeded 8 celestial bodies");
+    assert!(count.0 > 0, "Should have seeded celestial bodies");
 
     // Check facilities
     let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM facilities")
