@@ -130,6 +130,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When generating coverage using `cargo-llvm-cov` in environments with failing database integration tests, passing module filters (e.g., `-- sim::production`) prevents those failures from breaking the coverage generation process.
 **Action:** When running coverage on a specific module in a repository with flaky/failing tests in other modules, always pass the module name as a filter to `cargo-llvm-cov` to isolate the run and successfully generate `lcov.info`.
 
-## $(date +%Y-%m-%d) - Testing Merchant Logistics and Trade Routes
+## 2026-08-26 - Testing Merchant Logistics and Trade Routes
 **Learning:** When testing logic that evaluates trade routes or arbitrage opportunities (like merchant shipping decisions in `src/sim/decisions.rs`), the `SimState` setup must explicitly initialize multiple distinct cities (and related metadata like `ema_prices`) to satisfy internal destination loops (`for &dest_city_id in state.cities.keys()`) and correctly trigger cross-city evaluation logic.
 **Action:** When testing merchant or logistical logic, always seed `SimState` with at least two cities (an origin and a destination) and set appropriate varying EMA prices to trigger the expected trading behavior (shipping vs. local selling).
