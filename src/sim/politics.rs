@@ -391,6 +391,9 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
             let pre_attacker = calculate_side_strength(state, &aggressor_side, system_id);
             let pre_defender = calculate_side_strength(state, &defender_side, system_id);
 
+            let mut attacker_str = pre_attacker;
+            let mut defender_str = pre_defender;
+
             if pre_attacker > 0.0 && pre_defender > 0.0 {
                 resolve_side_combat(state, &aggressor_side, &defender_side, system_id, rng);
 
@@ -399,10 +402,10 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
 
                 aggressor_losses += (pre_attacker - post_attacker).max(0.0);
                 defender_losses += (pre_defender - post_defender).max(0.0);
-            }
 
-            let attacker_str = calculate_side_strength(state, &aggressor_side, system_id);
-            let defender_str = calculate_side_strength(state, &defender_side, system_id);
+                attacker_str = post_attacker;
+                defender_str = post_defender;
+            }
 
             let system_owner_empire_id = state
                 .star_systems
@@ -529,53 +532,26 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
 
         // Issue #15: Check territory-based capitulation (forced peace if >=50% sectors/systems occupied)
         if !war_concluded {
-            let aggressor_total = state
-                .star_systems
-                .values()
-                .filter(|s| {
-                    state
-                        .sectors
-                        .get(&s.sector_id)
-                        .map(|sec| sec.empire_id == aggressor_id)
-                        .unwrap_or(false)
-                })
-                .count();
-            let aggressor_occupied = state
-                .occupied_systems
-                .values()
-                .filter(|occ| {
-                    state
-                        .star_systems
-                        .get(&occ.system_id)
-                        .and_then(|s| state.sectors.get(&s.sector_id))
-                        .map(|sec| sec.empire_id == aggressor_id)
-                        .unwrap_or(false)
-                })
-                .count();
+            let mut aggressor_total = 0;
+            let mut aggressor_occupied = 0;
+            let mut defender_total = 0;
+            let mut defender_occupied = 0;
 
-            let defender_total = state
-                .star_systems
-                .values()
-                .filter(|s| {
-                    state
-                        .sectors
-                        .get(&s.sector_id)
-                        .map(|sec| sec.empire_id == defender_id)
-                        .unwrap_or(false)
-                })
-                .count();
-            let defender_occupied = state
-                .occupied_systems
-                .values()
-                .filter(|occ| {
-                    state
-                        .star_systems
-                        .get(&occ.system_id)
-                        .and_then(|s| state.sectors.get(&s.sector_id))
-                        .map(|sec| sec.empire_id == defender_id)
-                        .unwrap_or(false)
-                })
-                .count();
+            for s in state.star_systems.values() {
+                if let Some(sec) = state.sectors.get(&s.sector_id) {
+                    if sec.empire_id == aggressor_id {
+                        aggressor_total += 1;
+                        if state.occupied_systems.contains_key(&s.id) {
+                            aggressor_occupied += 1;
+                        }
+                    } else if sec.empire_id == defender_id {
+                        defender_total += 1;
+                        if state.occupied_systems.contains_key(&s.id) {
+                            defender_occupied += 1;
+                        }
+                    }
+                }
+            }
 
             let aggressor_loss_ratio = if aggressor_total > 0 {
                 aggressor_occupied as f64 / aggressor_total as f64
