@@ -4030,6 +4030,190 @@ mod tests {
         assert_eq!(state.get_empire_treasury(1), 250.0);
     }
 
+    /// Tests that `run_empire_relief` aggregates starving cities per empire using entry API,
+    /// caps relief budget according to treasury percentage (20%), and posts emergency food buy orders.
+    #[test]
+    fn test_empire_relief_starving_cities_budget_scaling() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        // Register Food resource type
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food".into(),
+                category: "Food".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        state.add_to_empire_treasury(empire_id, 100_000.0);
+
+        // Setup Sector -> StarSystem -> CelestialBody mapping for Empire 1
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sector 1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body 1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        // Setup two starving cities for Empire 1
+        // City 1: pop 10,000 -> relief needed: 1,000 units @ 15.0 = 15,000 cost
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Starving City 1".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.city_consumer_ids.insert(1, 101);
+
+        // City 2: pop 20,000 -> relief needed: 2,000 units @ 15.0 = 30,000 cost
+        state.cities.insert(
+            2,
+            crate::sim::state::City {
+                id: 2,
+                body_id: 1,
+                name: "Starving City 2".into(),
+                population: 20_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.city_consumer_ids.insert(2, 102);
+
+        // Run empire relief logic
+        run_empire_relief(&mut state, 1);
+
+        // Verify emergency market buy orders were created for both cities
+        // Total relief cost requested = 45,000. Max relief (20% of 100,000 treasury) = 20,000.
+        // Scaling factor = 20,000 / 45,000 = ~0.4444
+        assert_eq!(
+            state.market_orders.len(),
+            2,
+            "Expected 2 relief buy orders (one per starving city)"
+        );
+
+        for order in state.market_orders.values() {
+            assert_eq!(
+                order.company_id, -empire_id,
+                "Relief order company_id should be -empire_id"
+            );
+            assert_eq!(order.resource_type_id, 1, "Relief order should be for Food");
+            assert_eq!(order.order_type, "buy");
+            assert_eq!(order.price, 15.0);
+            assert!(
+                order.quantity > 0,
+                "Scaled relief units should be greater than 0"
+            );
+        }
+    }
+
+    /// Tests that `run_empire_relief` skips posting orders when empire treasury is insufficient.
+    #[test]
+    fn test_empire_relief_insufficient_treasury() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food".into(),
+                category: "Food".into(),
+                is_vital: true,
+            },
+        );
+
+        let empire_id = 1;
+        // Treasury is 0
+        state.add_to_empire_treasury(empire_id, 0.0);
+
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                name: "Sector 1".into(),
+                empire_id,
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body 1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "Starving City".into(),
+                population: 10_000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.city_consumer_ids.insert(1, 101);
+
+        run_empire_relief(&mut state, 1);
+
+        // Treasury is zero, so effective cost is 0.0 < 0.01 -> no relief orders created
+        assert!(
+            state.market_orders.is_empty(),
+            "No relief orders should be posted when treasury is zero"
+        );
+    }
+
     #[test]
     fn test_empire_relief_logger_deduplication() {
         let mut state = SimState::new();
