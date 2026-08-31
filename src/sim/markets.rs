@@ -101,6 +101,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut low = f64::MAX;
         let mut open = None;
         let mut close = 0.0;
+        let mut total_city_tax = 0.0;
 
         let port_fee_per_unit = state
             .cities
@@ -184,7 +185,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
                 // Issue #9: Transfer port fee to city tax pool
                 if port_fee > 0.0 {
-                    state.add_city_tax(city_id, port_fee);
+                    total_city_tax += port_fee;
                 }
 
                 // Transfer inventory
@@ -281,6 +282,12 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             if sells[s_idx].5 == 0 {
                 s_idx += 1;
             }
+        }
+
+        // Bolt optimization: Batch city tax additions to avoid redundant O(1) hash map
+        // lookups (`get_mut`) inside the matching loop.
+        if total_city_tax > 0.0 {
+            state.add_city_tax(city_id, total_city_tax);
         }
 
         // Write back updated quantities to state for all processed orders
