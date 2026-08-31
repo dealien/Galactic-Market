@@ -2139,6 +2139,120 @@ mod tests {
     }
 
     #[test]
+    fn test_consumer_ai_loan_and_buy_order() {
+        let mut state = SimState::new();
+
+        // 1. Create a commercial bank with enough cash
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                company_type: "commercial_bank".into(),
+                cash: 50000.0,
+                home_city_id: 1,
+                debt: 0.0,
+                name: "Bank".into(),
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // 2. Create a consumer company with cash < 100
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                company_type: "consumer".into(),
+                cash: 50.0,
+                home_city_id: 1,
+                debt: 0.0,
+                name: "Consumer".into(),
+                next_eval_tick: 0,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // 3. Setup city, body, and system, and sector
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                population: 100,
+                name: "City".into(),
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Planet".into(),
+                fertility: 1.0,
+            },
+        );
+
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Test System".into(),
+            },
+        );
+
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "Test Sector".into(),
+            },
+        );
+
+        // 4. Create a Consumer Good resource
+        state.resource_types.insert(
+            10,
+            crate::sim::state::ResourceType {
+                id: 10,
+                category: "Consumer Good".into(),
+                name: "Widgets".into(),
+                is_vital: false,
+            },
+        );
+
+        // 5. Provide an EMA price so bid price logic executes predictably
+        state.ema_prices.insert((1, 10), 50.0);
+
+        // 6. Run decisions
+        run_decisions(&mut state, 1, &mut test_rng());
+
+        // Assert loan was taken (cash should be 50.0 + 5000.0 = 5050.0)
+        let consumer_cash = state.companies.get(&2).unwrap().cash;
+        assert_eq!(consumer_cash, 5050.0);
+
+        // Assert buy order was placed for the resource
+        let buy_orders: Vec<_> = state
+            .market_orders
+            .values()
+            .filter(|o| o.company_id == 2 && o.resource_type_id == 10 && o.order_type == "buy")
+            .collect();
+        assert!(
+            !buy_orders.is_empty(),
+            "Consumer should have placed a buy order"
+        );
+    }
+
+    #[test]
     fn miner_posts_sell_order_when_inventory_available() {
         let mut state = make_state_with_miner();
         run_decisions(&mut state, 1, &mut test_rng());

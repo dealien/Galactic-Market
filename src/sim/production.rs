@@ -482,6 +482,31 @@ mod tests {
     }
 
     #[test]
+    fn refinery_output_reduced_by_sector_split_penalty() {
+        let mut state = make_state();
+
+        // The default capacity is 5. Default output is 1 per run.
+        // Base capacity = 5.
+        // SECTOR_SPLIT_PRODUCTION_PENALTY is 0.20.
+        // Allocated capacity = (5 * (1.0 - 0.20)).round() = 4.
+
+        state.sector_control.insert(
+            1,
+            crate::sim::state::SectorControl {
+                sector_id: 1,
+                empire_system_counts: std::collections::HashMap::new(),
+                total_systems: 2,
+                is_split: true,
+            },
+        );
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert_eq!(state.inventories[&ingot_key].quantity, 4);
+    }
+
+    #[test]
     fn refinery_insufficient_cash_rolls_into_debt() {
         let mut state = make_state();
         // Set cash to less than the required labor cost (5 runs * 1.5 = 7.5)
