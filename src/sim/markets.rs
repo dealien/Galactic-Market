@@ -1251,12 +1251,6 @@ mod tests {
         );
     }
 
-
-
-
-
-
-
     #[test]
     fn test_buy_sell_sorting_market_fallback_branch() {
         let mut state = _setup_test_state();
@@ -1294,7 +1288,10 @@ mod tests {
         remaining_orders.sort_unstable();
 
         let expected_orders: Vec<i32> = vec![2];
-        assert_eq!(remaining_orders, expected_orders, "Expected order 2 to remain due to cash/inventory constraints or clearing logic, while testing NAN partial_cmp.");
+        assert_eq!(
+            remaining_orders, expected_orders,
+            "Expected order 2 to remain due to cash/inventory constraints or clearing logic, while testing NAN partial_cmp."
+        );
     }
 
     #[test]
