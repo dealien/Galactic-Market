@@ -1251,6 +1251,52 @@ mod tests {
         );
     }
 
+
+
+
+
+
+
+    #[test]
+    fn test_buy_sell_sorting_market_fallback_branch() {
+        let mut state = _setup_test_state();
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "market".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: f64::NAN, // NAN to trigger unwrap_or branch for market orders if any
+                created_tick: 2,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "market".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: f64::NAN, // NAN to trigger unwrap_or branch
+                created_tick: 1,
+            },
+        );
+        clear_orders(&mut state, 2);
+
+        let mut remaining_orders: Vec<i32> = state.market_orders.keys().copied().collect();
+        remaining_orders.sort_unstable();
+
+        let expected_orders: Vec<i32> = vec![2];
+        assert_eq!(remaining_orders, expected_orders, "Expected order 2 to remain due to cash/inventory constraints or clearing logic, while testing NAN partial_cmp.");
+    }
+
     #[test]
     fn test_buy_sell_sorting_partial_cmp_equal() {
         let mut state = _setup_test_state();
