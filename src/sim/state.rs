@@ -1558,4 +1558,83 @@ mod tests {
         state.company_to_empire.insert(1, 42);
         assert_eq!(state.get_company_empire(1), Some(42));
     }
+
+    /// Tests that the Default trait implementation correctly calls new() and that
+    /// generate_summary correctly tallies population, plantations, and market orders.
+    #[test]
+    fn test_sim_state_default_and_summary_details() {
+        // Use Default::default() to ensure coverage
+        let mut state: SimState = Default::default();
+
+        // Add a city with population to test population tally
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Test City".to_string(),
+                population: 5000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
+
+        // Add a plantation to test active plantation tally
+        state.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "plantation".to_string(),
+                capacity: 100,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        // Add a buy order
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        // Add a sell order
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                price: 10.0,
+                quantity: 5,
+                created_tick: 0,
+            },
+        );
+
+        let summary = state.generate_summary();
+
+        assert_eq!(summary.total_population, 5000);
+        assert_eq!(summary.active_plantations, 1);
+        assert_eq!(summary.buy_orders, 1);
+        assert_eq!(summary.sell_orders, 1);
+    }
 }
