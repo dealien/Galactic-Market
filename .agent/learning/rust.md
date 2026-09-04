@@ -157,3 +157,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-08-31 - [Optimize market clearing loop by batching city tax updates]
 **Learning:** In heavily nested loops like the market clearing tick loop, repeatedly calling functions that perform map lookups (`state.add_city_tax` calling `.entry().or_insert()`) for every matched trade incurs significant overhead due to repeated hashing and `Entry` allocation overhead. In this case, `add_city_tax` is called on every matched trade but always targets the exact same `city_id` (which is invariant inside the `while` loop).
 **Action:** Hoist the accumulation of values into a local variable (e.g. `total_city_tax += port_fee`) inside the loop, and apply it in a single batched function call (`state.add_city_tax(city_id, total_city_tax)`) after the loop completes to avoid O(N) map lookups, replacing them with a single O(1) update.
+
+## 2026-09-04 - Struct Initialization in Tests
+**Learning:** When writing tests that initialize complex simulation structs (like `City` or `Facility`), guessing the fields or relying on outdated assumptions often leads to compilation errors (e.g., missing `body_id`, `infrastructure_lvl`, `port_tier`).
+**Action:** Always read the exact struct definitions in `src/sim/state.rs` (e.g., using `cat` and `grep`) before writing test setups to ensure all required fields are correctly initialized.
