@@ -1228,6 +1228,58 @@ pub struct TickSummary {
 mod tests {
     use super::*;
 
+    /// Verifies that `SimState::default()` creates a state initialized at tick 0.
+    #[test]
+    fn test_simstate_default_creates_empty_state_at_tick_zero() {
+        let state = SimState::default();
+        assert_eq!(state.tick, 0);
+        assert_eq!(state.next_facility_id, 1);
+        assert_eq!(state.next_loan_id, 1);
+    }
+
+    /// Verifies that `state.next_facility_id()` successfully returns an ID and increments the internal counter correctly.
+    #[test]
+    fn test_next_facility_id_multiple_calls_increments_id() {
+        let mut state = SimState::new();
+        let id1 = state.next_facility_id();
+        assert_eq!(id1, 1);
+        let id2 = state.next_facility_id();
+        assert_eq!(id2, 2);
+    }
+
+    /// Verifies that `state.next_loan_id()` successfully returns an ID and increments the internal counter correctly.
+    #[test]
+    fn test_next_loan_id_multiple_calls_increments_id() {
+        let mut state = SimState::new();
+        let id1 = state.next_loan_id();
+        assert_eq!(id1, 1);
+        let id2 = state.next_loan_id();
+        assert_eq!(id2, 2);
+    }
+
+    /// Verifies that `TickSummary::default()` has initial numeric values set to 0 and empty collections.
+    #[test]
+    fn test_ticksummary_default_initializes_empty_metrics() {
+        let summary = TickSummary::default();
+        assert_eq!(summary.tick, 0);
+        assert_eq!(summary.total_cash, 0.0);
+        assert_eq!(summary.total_debt, 0.0);
+        assert_eq!(summary.total_inventory, 0);
+        assert_eq!(summary.active_orders, 0);
+        assert_eq!(summary.trade_volume, 0);
+        assert_eq!(summary.avg_ore_price, 0.0);
+        assert!(summary.ingot_prices.is_empty());
+        assert_eq!(summary.total_companies, 0);
+        assert!(summary.company_breakdown.is_empty());
+        assert_eq!(summary.total_population, 0);
+        assert_eq!(summary.total_food_inventory, 0);
+        assert_eq!(summary.active_plantations, 0);
+        assert_eq!(summary.avg_debt_to_cash, 0.0);
+        assert_eq!(summary.total_active_events, 0);
+        assert_eq!(summary.buy_orders, 0);
+        assert_eq!(summary.sell_orders, 0);
+    }
+
     #[test]
     fn test_wage_pool_operations() {
         let mut state = SimState::new();

@@ -161,3 +161,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-04 - Struct Initialization in Tests
 **Learning:** When writing tests that initialize complex simulation structs (like `City` or `Facility`), guessing the fields or relying on outdated assumptions often leads to compilation errors (e.g., missing `body_id`, `infrastructure_lvl`, `port_tier`).
 **Action:** Always read the exact struct definitions in `src/sim/state.rs` (e.g., using `cat` and `grep`) before writing test setups to ensure all required fields are correctly initialized.
+
+## 2024-05-24 - Documenting the testing intent in code
+**Learning:** When acting as Argus writing tests in this codebase, adding specific `///` or `//` docstrings explaining the tested behavior to test functions is considered a strict requirement. Test names must also follow a highly descriptive pattern like `test_[function]_[condition]_[expected_result]`.
+**Action:** When adding tests in Rust code, always include a rustdoc comment explicitly stating what behavior the test verifies and name it following the `test_[target]_[condition]_[expected_result]` format.
+
+## 2024-05-18 - Market Fallback Sorting Tests
+**Learning:** When writing tests to cover `partial_cmp().unwrap_or()` fallback branches for floats (e.g. `f64::NAN`), weak assertions like `.len() < x` are considered anti-patterns. The test must deterministically verify exactly what elements matched and which remained to actually prove the correctness of the sorting logic in edge cases.
+**Action:** When writing tests for collection manipulation (like sorting or order clearing), avoid weak assertions like `.len() < x`. Always assert the exact final state of the collection, such as checking exactly which element IDs remain, to ensure the behavior is properly verified.
