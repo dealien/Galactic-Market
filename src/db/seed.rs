@@ -677,10 +677,8 @@ pub async fn run_seed_with_seed(pool: &PgPool, seed: u64) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serial_test::serial;
 
     #[sqlx::test]
-    #[serial(db)]
     async fn test_run_seed_twice(pool: PgPool) -> Result<()> {
         // Run the seed for the first time
         run_seed(&pool).await?;
