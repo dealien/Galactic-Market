@@ -157,6 +157,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-08-31 - [Optimize market clearing loop by batching city tax updates]
 **Learning:** In heavily nested loops like the market clearing tick loop, repeatedly calling functions that perform map lookups (`state.add_city_tax` calling `.entry().or_insert()`) for every matched trade incurs significant overhead due to repeated hashing and `Entry` allocation overhead. In this case, `add_city_tax` is called on every matched trade but always targets the exact same `city_id` (which is invariant inside the `while` loop).
 **Action:** Hoist the accumulation of values into a local variable (e.g. `total_city_tax += port_fee`) inside the loop, and apply it in a single batched function call (`state.add_city_tax(city_id, total_city_tax)`) after the loop completes to avoid O(N) map lookups, replacing them with a single O(1) update.
+
 ## 2024-05-24 - Documenting the testing intent in code
 **Learning:** When acting as Argus writing tests in this codebase, adding specific `///` or `//` docstrings explaining the tested behavior to test functions is considered a strict requirement. Test names must also follow a highly descriptive pattern like `test_[function]_[condition]_[expected_result]`.
 **Action:** When adding tests in Rust code, always include a rustdoc comment explicitly stating what behavior the test verifies and name it following the `test_[target]_[condition]_[expected_result]` format.
+
+## 2024-05-18 - Market Fallback Sorting Tests
+**Learning:** When writing tests to cover `partial_cmp().unwrap_or()` fallback branches for floats (e.g. `f64::NAN`), weak assertions like `.len() < x` are considered anti-patterns. The test must deterministically verify exactly what elements matched and which remained to actually prove the correctness of the sorting logic in edge cases.
+**Action:** When writing tests for collection manipulation (like sorting or order clearing), avoid weak assertions like `.len() < x`. Always assert the exact final state of the collection, such as checking exactly which element IDs remain, to ensure the behavior is properly verified.
