@@ -29,11 +29,11 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 type OrderKey = (i32, bool, f64, u64, i32, i64);
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     let mut markets: HashMap<(i32, i32), (Vec<OrderKey>, Vec<OrderKey>)> =
-        HashMap::with_capacity(32);
+        HashMap::with_capacity(128); // Bolt optimization: Pre-allocate a larger, more realistic capacity
 
     for (&id, order) in &state.market_orders {
-        let is_market = order.order_kind.as_str() == "market";
-        let is_buy = order.order_type.as_str() == "buy";
+        let is_market = order.order_kind == "market"; // Bolt optimization: Avoid explicit .as_str() when PartialEq is available for String and &str
+        let is_buy = order.order_type == "buy";
         let item = (
             id,
             is_market,
@@ -45,7 +45,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         // Bolt optimization: Pre-allocate vectors with capacity to avoid dynamic sizing overhead in tick loop
         let entry = markets
             .entry((order.city_id, order.resource_type_id))
-            .or_insert_with(|| (Vec::with_capacity(4), Vec::with_capacity(4)));
+            .or_insert_with(|| (Vec::with_capacity(16), Vec::with_capacity(16)));
         if is_buy {
             entry.0.push(item);
         } else {
@@ -201,6 +201,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     buy_company_id
                 };
 
+                // Bolt optimization: use or_insert_with instead of or_insert to avoid eager allocation of Inventory
                 let buyer_inv = state
                     .inventories
                     .entry(Inventory::key(
@@ -208,7 +209,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         city_id,
                         resource_type_id,
                     ))
-                    .or_insert(Inventory {
+                    .or_insert_with(|| Inventory {
                         company_id: target_buyer_company_id,
                         city_id,
                         resource_type_id,
