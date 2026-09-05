@@ -169,3 +169,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Market Fallback Sorting Tests
 **Learning:** When writing tests to cover `partial_cmp().unwrap_or()` fallback branches for floats (e.g. `f64::NAN`), weak assertions like `.len() < x` are considered anti-patterns. The test must deterministically verify exactly what elements matched and which remained to actually prove the correctness of the sorting logic in edge cases.
 **Action:** When writing tests for collection manipulation (like sorting or order clearing), avoid weak assertions like `.len() < x`. Always assert the exact final state of the collection, such as checking exactly which element IDs remain, to ensure the behavior is properly verified.
+
+## $(date +%Y-%m-%d) - Struct Field Updates and Coverage Targeting
+**Learning:** When using tests to trigger deep state updates where an `Entry::or_insert` relies on a previous value (like a miner switching targets relying on `old_target.is_none()`), you must also ensure the mock setup explicitly replicates the *before* state. Also, using temporary python scripts to edit Rust tests can leave behind orphaned `.py` files that must be cleaned up before committing to keep the repository clean.
+**Action:** Always clean up generated Python scripts with `rm *.py` after applying complex code substitutions, and verify with `git status` that no untracked artifact files are left behind.
