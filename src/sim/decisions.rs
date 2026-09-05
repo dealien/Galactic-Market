@@ -5216,6 +5216,282 @@ mod tests {
             .unwrap();
         assert_eq!(inv.quantity, 50);
     }
+
+    /// Tests that a miner will switch its target resource if a significantly more
+    /// profitable deposit becomes available and it has sufficient cash to retool.
+
+    #[test]
+    fn test_miner_no_switch_due_to_low_cash() {
+        let mut state = crate::sim::SimState::new();
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        let miner_id = 1;
+        state.companies.insert(
+            miner_id,
+            crate::sim::state::Company {
+                id: miner_id,
+                name: "Miner".into(),
+                company_type: "miner".into(),
+                home_city_id: 1,
+                cash: 10.0, // not enough to retool
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.deposits.insert(
+            1,
+            crate::sim::state::Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1,
+                extraction_cost_per_unit: 10.0,
+                size_total: 1000000,
+                size_remaining: 1000000,
+            },
+        );
+
+        state.deposits.insert(
+            2,
+            crate::sim::state::Deposit {
+                id: 2,
+                body_id: 1,
+                resource_type_id: 2,
+                extraction_cost_per_unit: 10.0,
+                size_total: 1000000,
+                size_remaining: 1000000,
+            },
+        );
+
+        let facility_id = 1;
+        state.facilities.insert(
+            facility_id,
+            crate::sim::state::Facility {
+                id: facility_id,
+                city_id: 1,
+                company_id: miner_id,
+                facility_type: "mine".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(1), // currently mining Ore 1
+                production_ratios: None,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 12.0); // local price for Ore 1 is 12 (margin 2)
+        state.ema_prices.insert((1, 2), 50.0); // local price for Ore 2 is 50 (margin 40)
+
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
+
+        let facility = state.facilities.get(&facility_id).unwrap();
+        assert_eq!(facility.target_resource_id, Some(1));
+    }
+
+    /// Tests that a miner will switch its target resource from None to a profitable deposit.
+    #[test]
+    fn test_miner_switched_target_resource_from_none() {
+        let mut state = crate::sim::SimState::new();
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        let miner_id = 1;
+        state.companies.insert(
+            miner_id,
+            crate::sim::state::Company {
+                id: miner_id,
+                name: "Miner".into(),
+                company_type: "miner".into(),
+                home_city_id: 1,
+                cash: 1000000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.deposits.insert(
+            1,
+            crate::sim::state::Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1,
+                extraction_cost_per_unit: 10.0,
+                size_total: 1000000,
+                size_remaining: 1000000,
+            },
+        );
+
+        let facility_id = 1;
+        state.facilities.insert(
+            facility_id,
+            crate::sim::state::Facility {
+                id: facility_id,
+                city_id: 1,
+                company_id: miner_id,
+                facility_type: "mine".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None, // currently mining None
+                production_ratios: None,
+            },
+        );
+
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
+
+        let facility = state.facilities.get(&facility_id).unwrap();
+        assert_eq!(facility.target_resource_id, Some(1));
+    }
+
+    /// Tests that a miner will switch its target resource if a significantly more
+    /// profitable deposit becomes available and it has sufficient cash to retool.
+    #[test]
+    fn test_miner_switched_target_resource() {
+        let mut state = crate::sim::SimState::new();
+
+        state.cities.insert(
+            1,
+            crate::sim::state::City {
+                id: 1,
+                body_id: 1,
+                name: "City1".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        let miner_id = 1;
+        state.companies.insert(
+            miner_id,
+            crate::sim::state::Company {
+                id: miner_id,
+                name: "Miner".into(),
+                company_type: "miner".into(),
+                home_city_id: 1,
+                cash: 1000000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.deposits.insert(
+            1,
+            crate::sim::state::Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1, // Ore 1
+                extraction_cost_per_unit: 10.0,
+                size_total: 1000000,
+                size_remaining: 1000000,
+            },
+        );
+        state.deposits.insert(
+            2,
+            crate::sim::state::Deposit {
+                id: 2,
+                body_id: 1,
+                resource_type_id: 2, // Ore 2
+                extraction_cost_per_unit: 10.0,
+                size_total: 1000000,
+                size_remaining: 1000000,
+            },
+        );
+
+        let facility_id = 1;
+        state.facilities.insert(
+            facility_id,
+            crate::sim::state::Facility {
+                id: facility_id,
+                city_id: 1,
+                company_id: miner_id,
+                facility_type: "mine".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(1), // currently mining Ore 1
+                production_ratios: None,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 12.0); // local price for Ore 1 is 12 (margin 2)
+        state.ema_prices.insert((1, 2), 50.0); // local price for Ore 2 is 50 (margin 40)
+
+        crate::sim::decisions::run_decisions(&mut state, 1, &mut test_rng());
+
+        // Check if the facility switched its target
+        let facility = state.facilities.get(&facility_id).unwrap();
+        assert_eq!(facility.target_resource_id, Some(2));
+        assert_eq!(facility.setup_ticks_remaining, 5);
+
+        // Cash should be deducted
+        let company = state.companies.get(&miner_id).unwrap();
+        assert!(company.cash < 999951.0); // Retooling fee + potentially other ops
+    }
+
     #[test]
     fn test_company_promotion_freelancer_to_small() {
         let mut state = SimState::new();
