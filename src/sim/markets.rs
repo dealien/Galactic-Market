@@ -32,8 +32,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         HashMap::with_capacity(32);
 
     for (&id, order) in &state.market_orders {
-        let is_market = order.order_kind.as_str() == "market";
-        let is_buy = order.order_type.as_str() == "buy";
+        let is_market = order.order_kind == "market";
+        let is_buy = order.order_type == "buy";
         let item = (
             id,
             is_market,
@@ -208,7 +208,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         city_id,
                         resource_type_id,
                     ))
-                    .or_insert(Inventory {
+                    .or_insert_with(|| Inventory {
                         company_id: target_buyer_company_id,
                         city_id,
                         resource_type_id,
