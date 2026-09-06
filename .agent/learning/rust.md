@@ -173,3 +173,13 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## $(date +%Y-%m-%d) - Struct Field Updates and Coverage Targeting
 **Learning:** When using tests to trigger deep state updates where an `Entry::or_insert` relies on a previous value (like a miner switching targets relying on `old_target.is_none()`), you must also ensure the mock setup explicitly replicates the *before* state. Also, using temporary python scripts to edit Rust tests can leave behind orphaned `.py` files that must be cleaned up before committing to keep the repository clean.
 **Action:** Always clean up generated Python scripts with `rm *.py` after applying complex code substitutions, and verify with `git status` that no untracked artifact files are left behind.
+## 2025-05-24 - Parsing lcov.info Directly
+
+**Learning:** When HTML coverage reports cannot be generated or viewed, and `cargo llvm-cov` output lacks line-by-line detail, parsing the raw `lcov.info` file with a custom script (e.g., in Python) is a highly effective way to identify specific blocks of uncovered code.
+
+**Action:** Write a short Python script using regex or direct string parsing on `lcov.info` to extract and sort the largest uncovered line ranges (`DA:line,0`) to quickly target the most significant coverage gaps.
+## 2025-05-24 - Identifying Test Context from Context Code
+
+**Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
+
+**Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
