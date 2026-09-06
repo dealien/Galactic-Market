@@ -173,3 +173,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## $(date +%Y-%m-%d) - Struct Field Updates and Coverage Targeting
 **Learning:** When using tests to trigger deep state updates where an `Entry::or_insert` relies on a previous value (like a miner switching targets relying on `old_target.is_none()`), you must also ensure the mock setup explicitly replicates the *before* state. Also, using temporary python scripts to edit Rust tests can leave behind orphaned `.py` files that must be cleaned up before committing to keep the repository clean.
 **Action:** Always clean up generated Python scripts with `rm *.py` after applying complex code substitutions, and verify with `git status` that no untracked artifact files are left behind.
+
+## 2024-05-24 - Avoid `.or_insert` in struct building loops
+**Learning:** In hot loops, calling `.entry(...).or_insert(Inventory { ... })` allocates memory and resolves fields strictly regardless of if the entry exists or not, and leads to unnecessary heap/stack allocations.
+**Action:** When a struct (like `Inventory`) or collections are built conditionally inside a tick loop hot path `HashMap::entry()`, always use `.or_insert_with(|| ... )` to defer initialization, reducing memory pressure.
+
+## 2024-05-24 - Avoiding String `.as_str()` Comparisons
+**Learning:** Comparing `String` with literal strings by first doing `order.order_type.as_str() == "buy"` adds a small but unnecessary method call in the loop because Rust's `String` `PartialEq` implementation handles direct `order.order_type == "buy"` seamlessly through `Deref<Target=str>`.
+**Action:** Always compare `String` values to string literals directly (`== "literal"`) rather than calling `.as_str()` first on hot paths.
