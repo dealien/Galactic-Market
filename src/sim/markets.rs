@@ -660,6 +660,68 @@ mod tests {
     }
 
     #[test]
+    fn test_market_history_recorded_on_trades() {
+        let mut state = setup_test_state();
+        state.tick = 42;
+        let city_id = 1;
+        let res_id = 1;
+
+        let buy_order = MarketOrder {
+            id: state.next_order_id(),
+            city_id,
+            company_id: 2, // company 2 has 1000 cash
+            resource_type_id: res_id,
+            order_type: "buy".into(),
+            order_kind: "limit".into(),
+            price: 50.0,
+            quantity: 10,
+            created_tick: 40,
+        };
+
+        let sell_order = MarketOrder {
+            id: state.next_order_id(),
+            city_id,
+            company_id: 1, // company 1 has inventory
+            resource_type_id: res_id,
+            order_type: "sell".into(),
+            order_kind: "limit".into(),
+            price: 50.0,
+            quantity: 10,
+            created_tick: 41,
+        };
+
+        state.market_orders.insert(buy_order.id, buy_order);
+        state.market_orders.insert(sell_order.id, sell_order);
+
+        // Ensure some initial EMA exists to test weighting
+        state.ema_prices.insert((city_id, res_id), 10.0);
+
+        clear_orders(&mut state, 42);
+
+        // Check history buffer
+        assert_eq!(state.market_history_buffer.len(), 1);
+        let history = &state.market_history_buffer[0];
+        assert_eq!(history.city_id, city_id);
+        assert_eq!(history.resource_type_id, res_id);
+        assert_eq!(history.tick, 42);
+        assert_eq!(history.volume, 10);
+        assert_eq!(history.open, 50.0);
+        assert_eq!(history.close, 50.0);
+
+        // Check price cache
+        assert_eq!(
+            state.price_cache.get(&(city_id, res_id)).copied(),
+            Some(50.0)
+        );
+
+        // Check EMA update: alpha=0.2 * 50.0 + 0.8 * 10.0 = 10.0 + 8.0 = 18.0
+        assert_eq!(
+            state.ema_prices.get(&(city_id, res_id)).copied(),
+            Some(18.0)
+        );
+    }
+
+    #[test]
     fn test_price_drift_up_on_high_demand() {
         let mut state = setup_test_state();
         let city_id = 1;
