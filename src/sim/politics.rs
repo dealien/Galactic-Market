@@ -468,8 +468,7 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 }
             }
 
-            let system_contested = calculate_side_strength(state, &aggressor_side, system_id) > 0.0
-                && calculate_side_strength(state, &defender_side, system_id) > 0.0;
+            let system_contested = attacker_str > 0.0 && defender_str > 0.0;
 
             if !system_contested {
                 station_participant_units_in_system(state, &participant_empire_ids, system_id);
