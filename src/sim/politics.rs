@@ -1294,6 +1294,84 @@ mod tests {
     }
 
     #[test]
+    fn test_active_treaty_pairs_multi_member() {
+        let mut state = setup_political_state();
+
+        // Add an active treaty with 3 members: 1, 2, 3
+        state.treaties.insert(
+            2,
+            Treaty {
+                id: 2,
+                alliance_name: "Triumvirate".to_string(),
+                member_empire_ids: vec![1, 2, 3],
+                formed_tick: 0,
+                dissolved_tick: None,
+            },
+        );
+
+        // Add a dissolved treaty
+        state.treaties.insert(
+            3,
+            Treaty {
+                id: 3,
+                alliance_name: "Old Alliance".to_string(),
+                member_empire_ids: vec![4, 5],
+                formed_tick: 0,
+                dissolved_tick: Some(10),
+            },
+        );
+
+        let pairs = active_treaty_pairs(&state);
+
+        assert!(pairs.contains(&(1, 2)));
+        assert!(pairs.contains(&(1, 3)));
+        assert!(pairs.contains(&(2, 3)));
+        assert!(!pairs.contains(&(4, 5)));
+        assert_eq!(pairs.len(), 3);
+    }
+
+    #[test]
+    fn test_allied_tension_decay() {
+        let mut state = setup_political_state();
+
+        // Add an active treaty between empire 1 and 2
+        state.treaties.insert(
+            1,
+            Treaty {
+                id: 1,
+                alliance_name: "Alliance".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 0,
+                dissolved_tick: None,
+            },
+        );
+
+        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 50.0;
+        let initial_tension = state.diplomatic_relations.get(&(1, 2)).unwrap().tension;
+
+        // Add a reverse relation to test line 128
+        state.diplomatic_relations.insert(
+            (3, 2),
+            DiplomaticRelation {
+                empire_a_id: 3,
+                empire_b_id: 2,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                tension: 50.0,
+                neutral_since_tick: 0,
+            },
+        );
+
+        update_tension(&mut state);
+
+        let rel = state.diplomatic_relations.get(&(1, 2)).unwrap();
+        // Tension should decay by ALLIED_TENSION_DECAY_RATE
+        assert_eq!(rel.tension, initial_tension - ALLIED_TENSION_DECAY_RATE);
+
+        let rel2 = state.diplomatic_relations.get(&(3, 2)).unwrap();
+        assert_eq!(rel2.tension, 50.0 - TENSION_DECAY_RATE);
+    }
+
+    #[test]
     fn test_tension_decay() {
         let mut state = setup_political_state();
         state.diplomatic_relations.get_mut(&(1, 2)).unwrap().tension = 50.0;
