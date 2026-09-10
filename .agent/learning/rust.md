@@ -183,3 +183,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
 
 **Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
+
+## 2025-02-27 - Tick Loop Memory Leak Pitfall
+**Learning:** In the `src/sim/markets.rs` tick loop, attempting to optimize out eager `.remove()` calls on `state.market_orders` (for orders where quantity drops to `<= 0`) in favor of a single `.retain()` at the end of the loop creates massive memory leaks. `.retain()` is sometimes bypassed conditionally if no trades happen, leaving "dead" orders in the hot path.
+**Action:** When updating collections inside the tick loop, always remove exhausted/dead items eagerly inside the write-back loops (e.g., `state.market_orders.remove()`) rather than deferring entirely to `.retain()` logic.
