@@ -586,4 +586,103 @@ mod tests {
             "Blockade version should increment"
         );
     }
+
+    #[test]
+    fn test_pick_random_helpers_with_empty_state_and_small_empire_list() {
+        let mut state = SimState::new();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        // These should return None when the state is empty
+        assert!(super::pick_random_lane(&state, &mut rng).is_none());
+        assert!(super::pick_random_city(&state, &mut rng).is_none());
+        assert!(super::pick_random_empire_pair(&state, &mut rng).is_none());
+
+        // Add just one empire to check the < 2 branch
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Lone Empire".to_string(),
+                government_type: "Autocracy".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        assert!(super::pick_random_empire_pair(&state, &mut rng).is_none());
+    }
+
+    #[test]
+    fn test_trigger_random_event_no_valid_defs() {
+        let mut state = SimState::new();
+        // Add a definition with weight 0
+        state
+            .event_definitions
+            .push(crate::sim::state::EventDefinition {
+                id: "zero_weight".to_string(),
+                weight: 0,
+                severity_range: [1.0, 1.0],
+                effects: vec![],
+                flavor_text: "".to_string(),
+            });
+
+        let mut rng = StdRng::seed_from_u64(42);
+        super::trigger_random_event(&mut state, &mut rng);
+        assert!(state.active_events.is_empty(), "No event should be created");
+    }
+
+    #[test]
+    fn test_trigger_random_event_unknown_type() {
+        let mut state = SimState::new();
+        state.next_event_id = 1;
+
+        let mut rng = StdRng::seed_from_u64(42);
+
+        state
+            .event_definitions
+            .push(crate::sim::state::EventDefinition {
+                id: "test_unknown_type".to_string(),
+                weight: 100,
+                severity_range: [1.0, 1.0],
+                effects: vec![crate::sim::state::EventEffectDefinition {
+                    effect_type: "unknown_type_for_coverage".to_string(),
+                    duration_range: [1, 1],
+                }],
+                flavor_text: "Unknown event".to_string(),
+            });
+
+        super::trigger_random_event(&mut state, &mut rng);
+
+        assert_eq!(state.active_events.len(), 1);
+        let event = state.active_events.get(&1).unwrap();
+        assert_eq!(event.event_type, "unknown_type_for_coverage");
+    }
+
+    #[test]
+    fn test_trigger_random_event_empty_targets_flavor_text() {
+        // We already hit empty targets, but we want to make sure flavor_text doesn't panic when we have empty targets.
+        // Also it hits the "if let Some(text) = &event.flavor_text" when it is None.
+        let mut state = SimState::new();
+        state.next_event_id = 1;
+
+        let mut rng = StdRng::seed_from_u64(42);
+
+        state
+            .event_definitions
+            .push(crate::sim::state::EventDefinition {
+                id: "test_empty_city".to_string(),
+                weight: 100,
+                severity_range: [1.0, 1.0],
+                effects: vec![crate::sim::state::EventEffectDefinition {
+                    effect_type: "infrastructure_damage".to_string(),
+                    duration_range: [1, 1],
+                }],
+                flavor_text: "Damage {city_name}".to_string(),
+            });
+
+        super::trigger_random_event(&mut state, &mut rng);
+
+        let event = state.active_events.values().next().unwrap();
+        assert_eq!(event.target_id, None);
+        assert_eq!(event.flavor_text, None);
+    }
 }

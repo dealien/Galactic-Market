@@ -183,3 +183,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
 
 **Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
+## 2024-05-18 - Generating and parsing lcov.info without HTML viewer
+**Learning:** When HTML coverage reports cannot be viewed (e.g. environment restrictions), parsing the generated `lcov.info` file via a simple Python script (filtering for `SF:` and `DA:` lines with count 0) is a robust and fast way to identify exact lines missing coverage.
+**Action:** When finding coverage gaps and HTML is unavailable, write a Python script to parse `lcov.info` instead of trying to manually extract details from CLI output or missing viewers.
