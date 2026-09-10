@@ -32,8 +32,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         HashMap::with_capacity(32);
 
     for (&id, order) in &state.market_orders {
-        let is_market = order.order_kind.as_str() == "market";
-        let is_buy = order.order_type.as_str() == "buy";
+        let is_market = order.order_kind == "market";
+        let is_buy = order.order_type == "buy";
         let item = (
             id,
             is_market,
@@ -102,20 +102,17 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         let mut open = None;
         let mut close = 0.0;
         let mut total_city_tax = 0.0;
-
+        let city_consumer_id_opt = state.city_consumer_ids.get(&city_id).copied();
         let port_fee_per_unit = state
             .cities
             .get(&city_id)
             .map(|c| c.port_fee_per_unit)
             .unwrap_or(0.0);
-        let city_consumer_id_opt = state.city_consumer_ids.get(&city_id).copied();
         // Bolt optimization: Hoist the loop-invariant EMA price lookup outside of the
         // while matching loop to avoid repeated O(1) hashmap lookups for every single trade.
-        let last_ema_price = state
-            .ema_prices
-            .get(&(city_id, resource_type_id))
-            .copied()
-            .unwrap_or(10.0);
+        // We cache this in `ema_opt` to reuse it for price drift fallbacks below.
+        let ema_opt = state.ema_prices.get(&(city_id, resource_type_id)).copied();
+        let last_ema_price = ema_opt.unwrap_or(10.0);
 
         while b_idx < buys.len() && s_idx < sells.len() {
             let (_b_id, buy_is_market, buy_price, _, buy_company_id, buy_qty) = buys[b_idx];
@@ -325,11 +322,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             // EMA alpha 0.2 chosen for Stage 3 to allow faster convergence
             // in a geography-distributed economy where arbitrageurs are active.
             let alpha = 0.2;
-            let current_ema = state
-                .ema_prices
-                .get(&(city_id, resource_type_id))
-                .copied()
-                .unwrap_or(close);
+            let current_ema = ema_opt.unwrap_or(close);
             let next_ema = alpha * close + (1.0 - alpha) * current_ema;
             state
                 .ema_prices
@@ -338,11 +331,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
             // --- Price Discovery Drift (Stage 1.5 Patch) ---
             // If no trades occurred, drift the EMA based on unsatisfied sentiment.
             // This breaks deadlocks where prices are too far apart for merchants to bridge cities.
-            let current_ema = state
-                .ema_prices
-                .get(&(city_id, resource_type_id))
-                .copied()
-                .unwrap_or(20.0);
+            let current_ema = ema_opt.unwrap_or(20.0);
 
             let has_buys = !buys.is_empty();
             let has_sells = !sells.is_empty();
