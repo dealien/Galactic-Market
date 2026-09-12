@@ -183,3 +183,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
 
 **Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
+## 2025-05-18 - Argus: Handled Coverage Improvement for Events Module Edge Cases
+**Learning:** While some unreachable code due to robust typing and filtering in Rust can be difficult to hit (like WeightedIndex errors on filtered slices), edge cases in conditional logic and fallback branches (such as random event generation and empty/fallback states) provide significant coverage opportunities and ensure simulation stability when expected state elements are absent.
+**Action:** We can verify branches involving implicit tuple orderings in iteration or logic by using multi-seeded RNGs or forcing explicit ID combinations to guarantee both evaluation sides of comparators are exercised.

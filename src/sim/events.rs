@@ -196,6 +196,77 @@ fn pick_random_empire_pair(state: &SimState, rng: &mut impl Rng) -> Option<(i32,
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn test_trigger_random_event_no_valid_defs() {
+        let mut state = SimState::new();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        super::trigger_random_event(&mut state, &mut rng);
+        assert!(state.active_events.is_empty());
+
+        state
+            .event_definitions
+            .push(crate::sim::state::EventDefinition {
+                id: "test".to_string(),
+                weight: 0,
+                severity_range: [1.0, 1.0],
+                effects: vec![],
+                flavor_text: "".to_string(),
+            });
+        super::trigger_random_event(&mut state, &mut rng);
+        assert!(state.active_events.is_empty());
+    }
+
+    #[test]
+    fn test_trigger_random_event_effect_branches() {
+        let mut state = SimState::new();
+
+        let emp1 = crate::sim::state::Empire {
+            id: 1,
+            name: "Emp1".into(),
+            government_type: "Gov".into(),
+            tax_rate_base: 0.1,
+            tax_rate: 0.1,
+        };
+        let emp2 = crate::sim::state::Empire {
+            id: 2,
+            name: "Emp2".into(),
+            government_type: "Gov".into(),
+            tax_rate_base: 0.1,
+            tax_rate: 0.1,
+        };
+        state.empires.insert(1, emp1);
+        state.empires.insert(2, emp2);
+
+        let effect1 = crate::sim::state::EventEffectDefinition {
+            effect_type: "tension_increase".to_string(),
+            duration_range: [0, 0],
+        };
+        let effect2 = crate::sim::state::EventEffectDefinition {
+            effect_type: "unknown_effect".to_string(),
+            duration_range: [0, 0],
+        };
+
+        state
+            .event_definitions
+            .push(crate::sim::state::EventDefinition {
+                id: "test_branches".to_string(),
+                weight: 100,
+                severity_range: [1.0, 1.0],
+                effects: vec![effect1, effect2],
+                flavor_text: "Tension between {empire_a} and {empire_b}".to_string(),
+            });
+
+        for seed in 0..50 {
+            let mut rng = StdRng::seed_from_u64(seed);
+            super::trigger_random_event(&mut state, &mut rng);
+        }
+
+        assert!(state.diplomatic_relations.len() == 1);
+        assert!(state.diplomatic_relations.contains_key(&(1, 2)));
+    }
+
     use crate::sim::state::{SimState, StarSystem};
     use rand::SeedableRng;
     use rand::rngs::StdRng;
