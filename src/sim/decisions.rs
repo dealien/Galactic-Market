@@ -1987,13 +1987,9 @@ pub fn compute_merchant_opportunities(
     // Triple-nested loop: all resources × origin cities × destination cities
     for &res_id in state.resource_types.keys() {
         for &origin_city_id in state.cities.keys() {
-            let buy_price = state
-                .ema_prices
-                .get(&(origin_city_id, res_id))
-                .copied()
-                .unwrap_or(1000.0);
-
-            // Skip if no inventory to sell (can't buy)
+            // Bolt optimization: Defer the EMA price hashmap lookup until after we've verified
+            // that the merchant actually has inventory (or a home base) at this origin city.
+            // This prevents an unnecessary O(1) map lookup for every single (resource, city) pair.
             let has_inventory = merchant_home_city_id == Some(origin_city_id)
                 || state
                     .inventories
@@ -2004,6 +2000,12 @@ pub fn compute_merchant_opportunities(
             if !has_inventory {
                 continue; // Can't profitably sell what we don't have
             }
+
+            let buy_price = state
+                .ema_prices
+                .get(&(origin_city_id, res_id))
+                .copied()
+                .unwrap_or(1000.0);
 
             for &dest_city_id in state.cities.keys() {
                 if origin_city_id == dest_city_id {
