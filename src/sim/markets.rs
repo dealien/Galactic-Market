@@ -1594,7 +1594,7 @@ mod tests {
             state
                 .market_orders
                 .get(&2)
-                .map_or(true, |o| o.quantity == 0)
+                .is_none_or(|o| o.quantity == 0)
         );
         // Order 4 should remain since the sell order only had 10 quantity
         assert_eq!(state.market_orders.get(&4).unwrap().quantity, 10);
