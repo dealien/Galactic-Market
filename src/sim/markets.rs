@@ -1590,12 +1590,7 @@ mod tests {
         clear_orders(&mut state, 2);
 
         // Market order 2 should be matched first because it's a market order with the lowest id
-        assert!(
-            state
-                .market_orders
-                .get(&2)
-                .is_none_or(|o| o.quantity == 0)
-        );
+        assert!(state.market_orders.get(&2).is_none_or(|o| o.quantity == 0));
         // Order 4 should remain since the sell order only had 10 quantity
         assert_eq!(state.market_orders.get(&4).unwrap().quantity, 10);
         // Order 6 should also remain

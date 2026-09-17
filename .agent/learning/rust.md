@@ -182,10 +182,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
 **Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
 
-## 2024-05-30 - Test Setup Pitfalls for Market Clearing
-**Learning:** When writing tests that verify order clearing logic in `sim::markets`, it's critical to explicitly populate `state.companies` with the exact `Company` objects corresponding to the orders' `company_id`s, and seed them with sufficient cash. Otherwise, the matching algorithm will silently skip the transaction or void the orders entirely because it defaults missing companies to 0 cash.
-**Action:** When setting up a test state for `clear_orders`, always insert the requisite buyer/seller `Company` structures into `state.companies` and provide them with ample starting cash.
-
 ## 2024-05-24 - Short-circuiting expensive map lookups in arbitrage scan
 **Learning:** In deeply nested `O(N^3)` loops (like evaluating all origin cities × destination cities), checking computationally cheap conditions (like boolean variables, or fast hashmap lookups for inventory) *before* expensive lookups (like EMA prices or transport costs) can drastically reduce loop overhead via short-circuiting.
 **Action:** Order conditions by computational cost in hot loops, executing the cheapest and most restrictive conditions first.
