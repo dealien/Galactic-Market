@@ -468,11 +468,43 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
                 }
             }
 
-            let system_contested = calculate_side_strength(state, &aggressor_side, system_id) > 0.0
-                && calculate_side_strength(state, &defender_side, system_id) > 0.0;
+            let system_contested = attacker_str > 0.0 && defender_str > 0.0;
 
             if !system_contested {
                 station_participant_units_in_system(state, &participant_empire_ids, system_id);
+            }
+        }
+
+        let mut aggressor_occ_strain = 0.0;
+        let mut defender_occ_strain = 0.0;
+        let mut aggressor_total = 0;
+        let mut aggressor_occupied = 0;
+        let mut defender_total = 0;
+        let mut defender_occupied = 0;
+
+        for s in state.star_systems.values() {
+            if let Some(sec) = state.sectors.get(&s.sector_id) {
+                let is_occupied = state.occupied_systems.contains_key(&s.id);
+
+                if is_occupied {
+                    if aggressor_side.contains(&sec.empire_id) {
+                        aggressor_occ_strain += 1.0;
+                    } else if defender_side.contains(&sec.empire_id) {
+                        defender_occ_strain += 1.0;
+                    }
+                }
+
+                if sec.empire_id == aggressor_id {
+                    aggressor_total += 1;
+                    if is_occupied {
+                        aggressor_occupied += 1;
+                    }
+                } else if sec.empire_id == defender_id {
+                    defender_total += 1;
+                    if is_occupied {
+                        defender_occupied += 1;
+                    }
+                }
             }
         }
 
@@ -484,20 +516,6 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
             let base_attrition = 0.2;
             let aggressor_loss_exh = aggressor_losses * 0.1;
             let defender_loss_exh = defender_losses * 0.1;
-
-            let mut aggressor_occ_strain = 0.0;
-            let mut defender_occ_strain = 0.0;
-            for occ in state.occupied_systems.values() {
-                if let Some(system) = state.star_systems.get(&occ.system_id)
-                    && let Some(sector) = state.sectors.get(&system.sector_id)
-                {
-                    if aggressor_side.contains(&sector.empire_id) {
-                        aggressor_occ_strain += 1.0;
-                    } else if defender_side.contains(&sector.empire_id) {
-                        defender_occ_strain += 1.0;
-                    }
-                }
-            }
 
             war.aggressor_exhaustion = (war.aggressor_exhaustion
                 + base_attrition
@@ -532,27 +550,6 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
 
         // Issue #15: Check territory-based capitulation (forced peace if >=50% sectors/systems occupied)
         if !war_concluded {
-            let mut aggressor_total = 0;
-            let mut aggressor_occupied = 0;
-            let mut defender_total = 0;
-            let mut defender_occupied = 0;
-
-            for s in state.star_systems.values() {
-                if let Some(sec) = state.sectors.get(&s.sector_id) {
-                    if sec.empire_id == aggressor_id {
-                        aggressor_total += 1;
-                        if state.occupied_systems.contains_key(&s.id) {
-                            aggressor_occupied += 1;
-                        }
-                    } else if sec.empire_id == defender_id {
-                        defender_total += 1;
-                        if state.occupied_systems.contains_key(&s.id) {
-                            defender_occupied += 1;
-                        }
-                    }
-                }
-            }
-
             let aggressor_loss_ratio = if aggressor_total > 0 {
                 aggressor_occupied as f64 / aggressor_total as f64
             } else {

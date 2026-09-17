@@ -183,3 +183,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When writing tests for complex interactions like market clearing (`markets::clear_orders`), if the production code logic behaves differently based on whether trades occurred or not (e.g. updating EMA and recording history vs executing a price drift), tests must explicitly stage the conditions required to trigger the specific branch (like ensuring a buy order matches a sell order for `total_volume > 0`).
 
 **Action:** Before writing a test targeting an uncovered block, analyze the preceding conditional logic to understand the specific state required to enter that block.
+
+## 2026-09-15 - Avoid redundant O(N) map scans in active war resolution tick loop
+**Learning:** In `src/sim/politics.rs`'s `resolve_active_wars`, calculating capitulation metrics and war exhaustion required multiple separate O(N) iteration passes over `state.star_systems.values()` and `state.occupied_systems.values()`. Consolidating them into a single pass and re-using pre-computed `attacker_str` and `defender_str` values to evaluate `system_contested` eliminates redundant O(N) map lookups and computation.
+**Action:** When working in tick loop hot paths, avoid repeating identical operations and look for opportunities to combine multiple O(N) iteration passes over the same large maps into a single pass that tallies multiple metrics concurrently.
