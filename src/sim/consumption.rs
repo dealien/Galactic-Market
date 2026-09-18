@@ -213,11 +213,8 @@ fn update_population_dynamics(state: &mut SimState) {
             }
         }
 
-        let food_fulfillment = if food_required > 0.0 {
-            (food_consumed / food_required).min(2.0) // Cap at 200%
-        } else {
-            1.0
-        };
+        // food_required is guaranteed > 0.0 due to .max(1.0) on population/demand
+        let food_fulfillment = (food_consumed / food_required).min(2.0); // Cap at 200%
 
         let growth_rate = if food_fulfillment >= FOOD_FULFILLMENT_GROWTH_THRESHOLD {
             POPULATION_GROWTH_RATE
