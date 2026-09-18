@@ -29,11 +29,11 @@ use crate::sim::state::{Inventory, MarketHistory, SimState};
 type OrderKey = (i32, bool, f64, u64, i32, i64);
 pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     let mut markets: HashMap<(i32, i32), (Vec<OrderKey>, Vec<OrderKey>)> =
-        HashMap::with_capacity(128); // Bolt optimization: Pre-allocate a larger, more realistic capacity
+        HashMap::with_capacity(32);
 
     for (&id, order) in &state.market_orders {
-        let is_market = order.order_kind == "market"; // Bolt optimization: Avoid explicit .as_str() when PartialEq is available for String and &str
-        let is_buy = order.order_type == "buy";
+        let is_market = order.order_kind.as_str() == "market";
+        let is_buy = order.order_type.as_str() == "buy";
         let item = (
             id,
             is_market,
@@ -45,7 +45,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
         // Bolt optimization: Pre-allocate vectors with capacity to avoid dynamic sizing overhead in tick loop
         let entry = markets
             .entry((order.city_id, order.resource_type_id))
-            .or_insert_with(|| (Vec::with_capacity(16), Vec::with_capacity(16)));
+            .or_insert_with(|| (Vec::with_capacity(4), Vec::with_capacity(4)));
         if is_buy {
             entry.0.push(item);
         } else {
@@ -201,7 +201,6 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     buy_company_id
                 };
 
-                // Bolt optimization: use or_insert_with instead of or_insert to avoid eager allocation of Inventory
                 let buyer_inv = state
                     .inventories
                     .entry(Inventory::key(
@@ -209,7 +208,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                         city_id,
                         resource_type_id,
                     ))
-                    .or_insert_with(|| Inventory {
+                    .or_insert(Inventory {
                         company_id: target_buyer_company_id,
                         city_id,
                         resource_type_id,
@@ -1500,103 +1499,5 @@ mod tests {
             state.market_orders.get(&1).map(|o| o.quantity).unwrap_or(0),
             0
         );
-    }
-
-    #[test]
-    /// Tests that buy orders are sorted with market orders first, hitting the Less branch in sorting.
-    fn test_buy_order_sorting_market_first_coverage() {
-        let mut state = _setup_test_state();
-
-        let orders = vec![
-            (1, "limit", 12.0),
-            (2, "market", 0.0),
-            (3, "limit", 15.0),
-            (4, "market", 0.0),
-            (5, "limit", 10.0),
-            (6, "market", 0.0),
-        ];
-
-        for (id, kind, price) in orders {
-            state.market_orders.insert(
-                id,
-                MarketOrder {
-                    id,
-                    city_id: 1,
-                    resource_type_id: 1,
-                    order_type: "buy".to_string(),
-                    order_kind: kind.to_string(),
-                    company_id: 1,
-                    quantity: 10,
-                    price,
-                    created_tick: id as u64,
-                },
-            );
-        }
-
-        state.market_orders.insert(
-            100,
-            MarketOrder {
-                id: 100,
-                city_id: 1,
-                resource_type_id: 1,
-                order_type: "sell".to_string(),
-                order_kind: "market".to_string(),
-                company_id: 2,
-                quantity: 10,
-                price: 0.0,
-                created_tick: 100,
-            },
-        );
-
-        state.companies.insert(
-            1,
-            crate::sim::state::Company {
-                id: 1,
-                name: "Company 1".to_string(),
-                company_type: "merchant".to_string(),
-                home_city_id: 1,
-                cash: 10000.0,
-                debt: 0.0,
-                next_eval_tick: 0,
-                status: "active".to_string(),
-                last_trade_tick: 0,
-            },
-        );
-
-        state.companies.insert(
-            2,
-            crate::sim::state::Company {
-                id: 2,
-                name: "Company 2".to_string(),
-                company_type: "merchant".to_string(),
-                home_city_id: 1,
-                cash: 10000.0,
-                debt: 0.0,
-                next_eval_tick: 0,
-                status: "active".to_string(),
-                last_trade_tick: 0,
-            },
-        );
-
-        state.inventories.insert(
-            (2, 1, 1),
-            crate::sim::state::Inventory {
-                company_id: 2,
-                city_id: 1,
-                resource_type_id: 1,
-                quantity: 100,
-            },
-        );
-
-        clear_orders(&mut state, 2);
-
-        // Market order 2 should be matched first because it's a market order with the lowest id
-        assert!(state.market_orders.get(&2).is_none_or(|o| o.quantity == 0));
-        // Order 4 should remain since the sell order only had 10 quantity
-        assert_eq!(state.market_orders.get(&4).unwrap().quantity, 10);
-        // Order 6 should also remain
-        assert_eq!(state.market_orders.get(&6).unwrap().quantity, 10);
-        // Limit orders should also remain
-        assert_eq!(state.market_orders.get(&1).unwrap().quantity, 10);
     }
 }

@@ -51,11 +51,7 @@
             "type": "node",
             "request": "launch",
             "preLaunchTask": "Check All (lint, format, test)",
-            "runtimeExecutable": "node",
-            "args": [
-                "-e",
-                "console.log('All checks completed successfully!')"
-            ]
+            "runtimeExecutable": "node"
         }
     ]
 }
