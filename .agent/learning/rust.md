@@ -205,3 +205,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-15 - Avoid redundant O(N) map scans in active war resolution tick loop
 **Learning:** In `src/sim/politics.rs`'s `resolve_active_wars`, calculating capitulation metrics and war exhaustion required multiple separate O(N) iteration passes over `state.star_systems.values()` and `state.occupied_systems.values()`. Consolidating them into a single pass and re-using pre-computed `attacker_str` and `defender_str` values to evaluate `system_contested` eliminates redundant O(N) map lookups and computation.
 **Action:** When working in tick loop hot paths, avoid repeating identical operations and look for opportunities to combine multiple O(N) iteration passes over the same large maps into a single pass that tallies multiple metrics concurrently.
+
+## 2026-09-18 - Unreachable code coverage due to math bounds
+**Learning:** In Rust simulation code, using `.max(1.0)` on `f64` calculations to ensure positive bounds can unintentionally make downstream conditional branches (like `if val > 0.0 else`) completely unreachable in test coverage, since the value can never physically be zero.
+**Action:** When seeing uncovered `else` blocks handling zero-values for variables bounded by `.max(>0.0)`, recognize that the block is dead code and cannot be reached through normal unit tests.

@@ -213,11 +213,8 @@ fn update_population_dynamics(state: &mut SimState) {
             }
         }
 
-        let food_fulfillment = if food_required > 0.0 {
-            (food_consumed / food_required).min(2.0) // Cap at 200%
-        } else {
-            1.0
-        };
+        // food_required is guaranteed > 0.0 due to .max(1.0) on population/demand
+        let food_fulfillment = (food_consumed / food_required).min(2.0); // Cap at 200%
 
         let growth_rate = if food_fulfillment >= FOOD_FULFILLMENT_GROWTH_THRESHOLD {
             POPULATION_GROWTH_RATE
@@ -1127,5 +1124,346 @@ mod tests {
             city.population, 1_000_500,
             "Population should grow to 1,000,500 based on 100% fulfillment"
         );
+    }
+
+    #[test]
+    fn update_population_dynamics_skips_when_population_is_zero_or_negative() {
+        let mut state = SimState::new();
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "Dead City".into(),
+                population: 0,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 1,
+                name: "Negative City".into(),
+                population: -100,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        update_population_dynamics(&mut state);
+
+        assert_eq!(state.cities.get(&1).unwrap().population, 0);
+        assert_eq!(state.cities.get(&2).unwrap().population, -100);
+    }
+
+    #[test]
+    fn test_update_population_dynamics_linear_interpolation() {
+        let pop = 1_000_000;
+        let food_required = (pop as f64 / 1000.0) * DEMAND_PER_1K_POPULATION as f64;
+
+        // Target fulfillment in the middle of DECLINE_MIN (0.4) and STABLE_MIN (0.7)
+        let target_fulfillment = 0.55;
+        let food = (food_required * target_fulfillment) as i64;
+        let mut state = setup_population_dynamics_state(pop, food);
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+
+        // Manual interpolation calculation:
+        // t = (0.55 - 0.4) / (0.7 - 0.4) = 0.15 / 0.3 = 0.5
+        // expected_rate = STABLE (0.0) * 0.5 + DECLINE (-0.001) * (1.0 - 0.5) = -0.0005
+        let expected_growth_rate = -0.0005;
+
+        // Add some tolerance for floating point comparisons
+        assert!(
+            (city.population_growth_rate - expected_growth_rate).abs() < 1e-6,
+            "Growth rate was {}, expected {}",
+            city.population_growth_rate,
+            expected_growth_rate
+        );
+    }
+
+    #[test]
+    fn run_migration_skips_when_not_migration_interval() {
+        let mut state = SimState::new();
+        state.tick = MIGRATION_INTERVAL - 1; // Not a multiple
+
+        // Setup some basic state that would normally trigger migration
+        state.sectors.insert(
+            1,
+            crate::sim::state::Sector {
+                id: 1,
+                empire_id: 1,
+                name: "S1".into(),
+            },
+        );
+        state.star_systems.insert(
+            1,
+            crate::sim::state::StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "Sys1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            crate::sim::state::CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "B1".into(),
+                fertility: 1.0,
+            },
+        );
+
+        let pop1 = 10_000;
+        let pop2 = 10_000;
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "City 1".into(),
+                population: pop1,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 1,
+                name: "City 2".into(),
+                population: pop2,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        state.city_food_balance.insert(
+            1,
+            crate::sim::state::CityFoodBalance {
+                city_id: 1,
+                food_surplus: 0,
+                fulfillment_ratio: 0.1,
+                needs_relief: true,
+                has_surplus: false,
+            },
+        );
+        state.city_food_balance.insert(
+            2,
+            crate::sim::state::CityFoodBalance {
+                city_id: 2,
+                food_surplus: 0,
+                fulfillment_ratio: 1.0,
+                needs_relief: false,
+                has_surplus: false,
+            },
+        );
+
+        run_migration(&mut state);
+
+        // Populations should be unchanged because migration didn't run
+        assert_eq!(state.cities.get(&1).unwrap().population, pop1);
+        assert_eq!(state.cities.get(&2).unwrap().population, pop2);
+    }
+
+    #[test]
+    fn update_population_dynamics_handles_missing_consumer_co() {
+        let mut state = SimState::new();
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "No Consumer Co City".into(),
+                population: 1_000_000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food".into(),
+                category: "Food".into(),
+                is_vital: true,
+            },
+        );
+
+        // Missing from city_consumer_ids intentionally
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        // Zero food means starvation rate
+        assert_eq!(city.population_growth_rate, POPULATION_STARVATION_RATE);
+    }
+
+    #[test]
+    fn update_population_dynamics_handles_missing_inventory() {
+        let mut state = SimState::new();
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "No Inventory City".into(),
+                population: 1_000_000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Food".into(),
+                category: "Food".into(),
+                is_vital: true,
+            },
+        );
+
+        state.city_consumer_ids.insert(1, 999);
+        // Missing inventory entry intentionally
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        assert_eq!(city.population_growth_rate, POPULATION_STARVATION_RATE);
+    }
+
+    #[test]
+    fn update_population_dynamics_handles_no_food_resource() {
+        let mut state = SimState::new();
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1,
+                name: "No Food Resource City".into(),
+                population: 1_000_000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.resource_types.insert(
+            1,
+            crate::sim::state::ResourceType {
+                id: 1,
+                name: "Ore".into(), // Not food
+                category: "Raw Material".into(),
+                is_vital: false,
+            },
+        );
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        assert_eq!(city.population_growth_rate, POPULATION_STARVATION_RATE);
+    }
+
+    #[test]
+    fn update_population_dynamics_exact_decline_min() {
+        let pop = 1_000_000;
+        let food_required = (pop as f64 / 1000.0) * DEMAND_PER_1K_POPULATION as f64;
+
+        let target_fulfillment = FOOD_FULFILLMENT_DECLINE_MIN;
+        let food = (food_required * target_fulfillment) as i64;
+        let mut state = setup_population_dynamics_state(pop, food);
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        // Since t = 0 when fulfillment == DECLINE_MIN, growth rate is exactly DECLINE_RATE
+        assert_eq!(city.population_growth_rate, POPULATION_DECLINE_RATE);
+    }
+
+    #[test]
+    fn update_population_dynamics_exact_growth_threshold() {
+        let pop = 1_000_000;
+        let food_required = (pop as f64 / 1000.0) * DEMAND_PER_1K_POPULATION as f64;
+
+        let target_fulfillment = FOOD_FULFILLMENT_GROWTH_THRESHOLD;
+        let food = (food_required * target_fulfillment) as i64;
+        let mut state = setup_population_dynamics_state(pop, food);
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        assert_eq!(city.population_growth_rate, POPULATION_GROWTH_RATE);
+    }
+
+    #[test]
+    fn update_population_dynamics_exact_stable_min() {
+        let pop = 1_000_000;
+        let food_required = (pop as f64 / 1000.0) * DEMAND_PER_1K_POPULATION as f64;
+
+        let target_fulfillment = FOOD_FULFILLMENT_STABLE_MIN;
+        let food = (food_required * target_fulfillment) as i64;
+        let mut state = setup_population_dynamics_state(pop, food);
+
+        update_population_dynamics(&mut state);
+
+        let city = state.cities.get(&1).unwrap();
+        assert_eq!(city.population_growth_rate, POPULATION_STABLE_RATE);
+    }
+
+    #[test]
+    fn run_migration_skips_when_hierarchy_lookups_fail() {
+        let mut state = SimState::new();
+        state.tick = MIGRATION_INTERVAL;
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 1, // Missing celestial body
+                name: "Orphan City".into(),
+                population: 10_000,
+                infrastructure_lvl: 5,
+                port_tier: 1,
+                port_fee_per_unit: 0.1,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        run_migration(&mut state);
+
+        // No crash, and nothing happened
+        assert_eq!(state.cities.get(&1).unwrap().population, 10_000);
     }
 }
