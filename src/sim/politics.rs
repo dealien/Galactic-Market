@@ -187,10 +187,7 @@ fn station_participant_units_in_theaters(
 // strength (strength × morale) in a system for all units belonging to the
 // provided side empires.
 fn calculate_side_strength(state: &SimState, side_empire_ids: &[i32], system_id: i32) -> f64 {
-    side_empire_ids
-        .iter()
-        .map(|empire_id| military::calculate_military_strength(state, *empire_id, system_id))
-        .sum()
+    military::calculate_military_strength_for_empires(state, side_empire_ids, system_id)
 }
 
 // Helper for occupation ownership: picks the strongest empire from a side in a
@@ -201,14 +198,8 @@ fn strongest_empire_in_system(
     side_empire_ids: &[i32],
     system_id: i32,
 ) -> Option<i32> {
-    side_empire_ids
-        .iter()
-        .map(|empire_id| {
-            (
-                *empire_id,
-                military::calculate_military_strength(state, *empire_id, system_id),
-            )
-        })
+    military::calculate_military_strength_for_empires_map(state, side_empire_ids, system_id)
+        .into_iter()
         .filter(|(_, strength)| *strength > 0.0)
         .max_by(|(_, a), (_, b)| a.total_cmp(b))
         .map(|(empire_id, _)| empire_id)
