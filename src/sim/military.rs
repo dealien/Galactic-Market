@@ -387,6 +387,39 @@ pub fn spawn_initial_units(state: &mut SimState) {
     );
 }
 
+pub fn calculate_military_strength_for_empires(
+    state: &SimState,
+    empire_ids: &[i32],
+    system_id: i32,
+) -> f64 {
+    state
+        .military_units
+        .values()
+        .filter(|u| u.system_id == system_id && empire_ids.contains(&u.empire_id))
+        .map(|u| u.strength * u.morale)
+        .sum()
+}
+
+pub fn calculate_military_strength_for_empires_map(
+    state: &SimState,
+    empire_ids: &[i32],
+    system_id: i32,
+) -> Vec<(i32, f64)> {
+    let mut strengths = Vec::with_capacity(empire_ids.len());
+    for &id in empire_ids {
+        strengths.push((id, 0.0_f64));
+    }
+    for u in state.military_units.values() {
+        if u.system_id == system_id {
+            let pos = empire_ids.iter().position(|&id| id == u.empire_id);
+            if let Some(p) = pos {
+                strengths[p].1 += u.strength * u.morale;
+            }
+        }
+    }
+    strengths
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
