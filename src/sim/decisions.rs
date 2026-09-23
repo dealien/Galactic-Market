@@ -300,7 +300,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             }
         };
 
-        let mut orders_to_post = Vec::new();
+        let mut orders_to_post = Vec::with_capacity(4);
 
         // --- Central Bank AI (Monetary Policy) ──────────────────────────────
         if company_type == "central_bank" {
@@ -456,7 +456,7 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             let bank_cash_updated = state.companies[&company_id].cash;
             if bank_cash_updated > min_reserve * 2.0 {
                 // Find Central Bank loans for this bank
-                let mut emergency_loans = Vec::new();
+                let mut emergency_loans = Vec::with_capacity(4);
                 for loan in state.loans.values() {
                     if loan.company_id == company_id
                         && let Some(lender_id) = loan.lender_company_id
@@ -1979,7 +1979,7 @@ pub fn compute_merchant_opportunities(
 ) -> Vec<crate::sim::state::MerchantOpportunity> {
     use crate::sim::state::MerchantOpportunity;
 
-    let mut opportunities = Vec::new();
+    let mut opportunities = Vec::with_capacity(32);
 
     // Optimization: Precompute the home_city_id for the merchant
     let merchant_home_city_id = state.companies.get(&merchant_id).map(|c| c.home_city_id);

@@ -140,7 +140,7 @@ fn update_tension(state: &mut SimState) {
 }
 
 fn active_treaty_pairs(state: &SimState) -> HashSet<(i32, i32)> {
-    let mut allied_pairs = HashSet::new();
+    let mut allied_pairs = HashSet::with_capacity(state.treaties.len() * 2);
 
     for treaty in state.treaties.values() {
         if treaty.dissolved_tick.is_none() {
@@ -759,11 +759,11 @@ pub fn compute_sector_control(state: &mut SimState) {
     let allied_pairs = active_treaty_pairs(state);
 
     let mut sector_systems: std::collections::HashMap<i32, Vec<i32>> =
-        std::collections::HashMap::new();
+        std::collections::HashMap::with_capacity(32);
     for system in state.star_systems.values() {
         sector_systems
             .entry(system.sector_id)
-            .or_default()
+            .or_insert_with(|| Vec::with_capacity(4))
             .push(system.id);
     }
 
@@ -775,7 +775,7 @@ pub fn compute_sector_control(state: &mut SimState) {
             .unwrap_or(0);
 
         let mut empire_system_counts: std::collections::HashMap<i32, usize> =
-            std::collections::HashMap::new();
+            std::collections::HashMap::with_capacity(4);
 
         for &sys_id in systems {
             let effective_controller = if let Some(occ) = state.occupied_systems.get(&sys_id) {
