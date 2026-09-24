@@ -424,6 +424,61 @@ pub fn calculate_military_strength_for_empires_map(
 mod tests {
     use super::*;
 
+    // Tests that military strength is correctly calculated and aggregated for given empires in a specific system.
+    #[test]
+    fn test_calculate_military_strength_for_empires_returns_correct_strength() {
+        let mut state = SimState::new();
+
+        let unit1 = crate::sim::state::MilitaryUnit {
+            id: 1,
+            empire_id: 10,
+            system_id: 100,
+            unit_type: "Fleet".to_string(),
+            strength: 10.0,
+            morale: 1.0,
+            status: "Stationed".to_string(),
+        };
+        state.military_units.insert(unit1.id, unit1);
+
+        let unit2 = crate::sim::state::MilitaryUnit {
+            id: 2,
+            empire_id: 20,
+            system_id: 100,
+            unit_type: "Fleet".to_string(),
+            strength: 15.0,
+            morale: 1.0,
+            status: "Stationed".to_string(),
+        };
+        state.military_units.insert(unit2.id, unit2);
+
+        let unit3 = crate::sim::state::MilitaryUnit {
+            id: 3,
+            empire_id: 30,
+            system_id: 200,
+            unit_type: "Fleet".to_string(),
+            strength: 10.0,
+            morale: 1.0,
+            status: "Stationed".to_string(),
+        };
+        state.military_units.insert(unit3.id, unit3);
+
+        let strength = calculate_military_strength_for_empires(&state, &[10, 20], 100);
+        assert_eq!(strength, 25.0);
+
+        let strength2 = calculate_military_strength_for_empires(&state, &[10], 100);
+        assert_eq!(strength2, 10.0);
+
+        let map = calculate_military_strength_for_empires_map(&state, &[10, 20], 100);
+        assert_eq!(map.len(), 2);
+        assert_eq!(map[0], (10, 10.0));
+        assert_eq!(map[1], (20, 15.0));
+
+        let map2 = calculate_military_strength_for_empires_map(&state, &[10, 30], 100);
+        assert_eq!(map2.len(), 2);
+        assert_eq!(map2[0], (10, 10.0));
+        assert_eq!(map2[1], (30, 0.0));
+    }
+
     #[test]
     fn test_resolve_combat_zero_strength() {
         use rand::SeedableRng;
