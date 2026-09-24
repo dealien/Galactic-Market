@@ -209,9 +209,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-18 - Unreachable code coverage due to math bounds
 **Learning:** In Rust simulation code, using `.max(1.0)` on `f64` calculations to ensure positive bounds can unintentionally make downstream conditional branches (like `if val > 0.0 else`) completely unreachable in test coverage, since the value can never physically be zero.
 **Action:** When seeing uncovered `else` blocks handling zero-values for variables bounded by `.max(>0.0)`, recognize that the block is dead code and cannot be reached through normal unit tests.
-## 2026-09-19 - Maintain Encapsulation while Optimizing O(N) Hot Loops\n**Learning:** In the Galactic Market Simulator codebase, do not bypass domain-specific calculation functions (like `military::calculate_military_strength` in `military.rs`) by inlining raw state accesses (e.g., `strength * morale`) into other modules like `politics.rs` for performance. Doing so breaks encapsulation and creates silent bugs if the logic later changes. Additionally, when resolving occupation or liberation of systems, strictly differentiate between an individual empire's military strength and the combined strength of their entire alliance side. Conflating the two breaks simulation correctness.\n**Action:** Maintain encapsulation by adding batch-processing helper functions to the domain module instead. Ensure state edits carefully respect whether logic requires individual or combined values.
+
 ## 2024-05-15 - Vector and HashSet Pre-allocation in Iterators
-
 **Learning:** When repeatedly constructing structures like `HashSet` or `Vec` inside an iterator or hot loop (such as in `compute_sector_control` or `active_treaty_pairs`), using `.new()` leads to unnecessary allocations and memory copying as they dynamically scale up.
-
 **Action:** Always pre-allocate vectors (`Vec::with_capacity(capacity)`) and `HashMap`/`HashSet` (`HashMap::with_capacity(capacity)`) where the approximate capacity is reasonably known or predictable, particularly inside simulation hot path iterations where allocations build up quickly. Specifically, `HashSet::with_capacity(state.treaties.len() * 2)` and explicit allocations for grouped sub-collections using `.or_insert_with(|| Vec::with_capacity(capacity))` significantly boost hot loop performance.
+
+## 2026-09-23 - Struct initialization in tests
+**Learning:** When writing tests that initialize complex simulation structs (like `MilitaryUnit`), always read the exact struct definitions in `src/sim/state.rs` first rather than guessing fields (like assuming `target_system` exists) or assuming `#[derive(Default)]` is implemented, to prevent compilation errors caused by mismatched or outdated field names.
+**Action:** Before initializing structs in test files, always run `cat src/sim/state.rs | grep -A 20 "pub struct [Name]"` to verify fields and trait implementations.
