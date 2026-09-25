@@ -213,3 +213,8 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-23 - Struct initialization in tests
 **Learning:** When writing tests that initialize complex simulation structs (like `MilitaryUnit`), always read the exact struct definitions in `src/sim/state.rs` first rather than guessing fields (like assuming `target_system` exists) or assuming `#[derive(Default)]` is implemented, to prevent compilation errors caused by mismatched or outdated field names.
 **Action:** Before initializing structs in test files, always run `cat src/sim/state.rs | grep -A 20 "pub struct [Name]"` to verify fields and trait implementations.
+## $(date +%Y-%m-%d) - Uncovered tuple logic and map getters
+
+**Learning:** When searching for coverage gaps in simulation loop modules (like `sim/alliances.rs` or `sim/production.rs`), implicit tuple ordering fallback branches (`if empire_a < empire_b` vs `else`) and missing hashmap entities (`state.diplomatic_relations.get_mut`) often go untested because standard seeding naturally aligns IDs and instantiates entities cleanly.
+
+**Action:** When writing tests to cover iteration structures and missing relations, intentionally inject out-of-order entity IDs (`empire_a_id: 3`, `empire_b_id: 2`) and explicitly remove or skip creating related simulation entities (like not adding an empire) to force execution into the missing branch and unwrap fallbacks. Use deterministic RNG mocks (`LocalAlwaysFormRng`) to isolate the test from unpredictable event execution.
