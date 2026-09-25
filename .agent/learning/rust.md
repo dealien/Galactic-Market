@@ -213,3 +213,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-23 - Struct initialization in tests
 **Learning:** When writing tests that initialize complex simulation structs (like `MilitaryUnit`), always read the exact struct definitions in `src/sim/state.rs` first rather than guessing fields (like assuming `target_system` exists) or assuming `#[derive(Default)]` is implemented, to prevent compilation errors caused by mismatched or outdated field names.
 **Action:** Before initializing structs in test files, always run `cat src/sim/state.rs | grep -A 20 "pub struct [Name]"` to verify fields and trait implementations.
+
+## 2026-09-25 - Vector pre-allocation and continuous indexing in hot paths
+**Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
+**Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).

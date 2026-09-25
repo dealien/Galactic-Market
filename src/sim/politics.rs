@@ -758,54 +758,70 @@ pub fn compute_sector_control(state: &mut SimState) {
     state.sector_control.clear();
     let allied_pairs = active_treaty_pairs(state);
 
-    let mut sector_systems: std::collections::HashMap<i32, Vec<i32>> =
-        std::collections::HashMap::new();
-    for system in state.star_systems.values() {
-        sector_systems
-            .entry(system.sector_id)
-            .or_default()
-            .push(system.id);
-    }
-
-    for (&sector_id, systems) in &sector_systems {
-        let sector_owner = state
-            .sectors
-            .get(&sector_id)
-            .map(|s| s.empire_id)
-            .unwrap_or(0);
-
-        let mut empire_system_counts: std::collections::HashMap<i32, usize> =
-            std::collections::HashMap::new();
-
-        for &sys_id in systems {
-            let effective_controller = if let Some(occ) = state.occupied_systems.get(&sys_id) {
-                occ.occupier_empire_id
-            } else {
-                sector_owner
-            };
-            *empire_system_counts
-                .entry(effective_controller)
-                .or_insert(0) += 1;
+    // Bolt optimization: Pre-calculate sector owners to avoid redundant O(1) lookups during system iteration.
+    // Instead of using a HashMap, use a continuous vector array to use fast index lookups if we are 0-indexed or low numbered.
+    let mut sector_owners_vec = Vec::new();
+    let max_sector_id = state.sectors.keys().copied().max().unwrap_or(0);
+    if max_sector_id > 0 && max_sector_id < 10_000 {
+        sector_owners_vec.resize((max_sector_id + 1) as usize, 0);
+        for (&sector_id, sector) in &state.sectors {
+            sector_owners_vec[sector_id as usize] = sector.empire_id;
         }
-
-        let is_split = empire_system_counts.len() > 1;
-        let total_systems = systems.len();
-
-        state.sector_control.insert(
-            sector_id,
-            SectorControl {
-                sector_id,
-                empire_system_counts,
-                total_systems,
-                is_split,
-            },
-        );
     }
 
+    let mut sector_owners: std::collections::HashMap<i32, i32> =
+        std::collections::HashMap::with_capacity(state.sectors.len());
+    if sector_owners_vec.is_empty() {
+        for (&sector_id, sector) in &state.sectors {
+            sector_owners.insert(sector_id, sector.empire_id);
+        }
+    }
+
+    // Bolt optimization: Directly construct SectorControl from star_systems iteration
+    // Avoids creating an intermediate HashMap of vectors (sector_systems).
+    for system in state.star_systems.values() {
+        let sector_id = system.sector_id;
+
+        // Find owner, avoiding redundant lookups by using pre-calculated owners
+        let effective_controller = if let Some(occ) = state.occupied_systems.get(&system.id) {
+            occ.occupier_empire_id
+        } else if !sector_owners_vec.is_empty()
+            && sector_id >= 0
+            && (sector_id as usize) < sector_owners_vec.len()
+        {
+            sector_owners_vec[sector_id as usize]
+        } else {
+            sector_owners.get(&sector_id).copied().unwrap_or(0)
+        };
+
+        // Bolt optimization: Avoid eager default allocation for SectorControl using or_insert_with
+        let control = state
+            .sector_control
+            .entry(sector_id)
+            .or_insert_with(|| SectorControl {
+                sector_id,
+                empire_system_counts: std::collections::HashMap::with_capacity(4),
+                total_systems: 0,
+                is_split: false,
+            });
+
+        control.total_systems += 1;
+        *control
+            .empire_system_counts
+            .entry(effective_controller)
+            .or_insert(0) += 1;
+
+        if control.empire_system_counts.len() > 1 {
+            control.is_split = true;
+        }
+    }
+
+    // Bolt optimization: Pre-allocate vector and reuse it for tension calculation
+    let mut empires_in_sector = Vec::with_capacity(4);
     for control in state.sector_control.values() {
         if control.is_split {
-            let empires_in_sector: Vec<i32> =
-                control.empire_system_counts.keys().cloned().collect();
+            empires_in_sector.clear();
+            empires_in_sector.extend(control.empire_system_counts.keys().copied());
             for i in 0..empires_in_sector.len() {
                 for j in (i + 1)..empires_in_sector.len() {
                     let (a, b) = if empires_in_sector[i] < empires_in_sector[j] {
