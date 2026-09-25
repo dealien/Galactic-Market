@@ -389,6 +389,108 @@ mod tests {
     }
 
     #[test]
+    fn test_dissolution_ordering_and_missing_relations() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        state.empires.insert(
+            3,
+            crate::sim::state::Empire {
+                id: 3,
+                name: "Empire C".to_string(),
+                government_type: "republic".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        state.diplomatic_relations.insert(
+            (2, 3),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: 80.0,
+                status: DIPLOMATIC_STATUS_ALLIANCE.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        state.treaties.insert(
+            100,
+            Treaty {
+                id: 100,
+                alliance_name: "Test Alliance".to_string(),
+                member_empire_ids: vec![3, 2],
+                formed_tick: 0,
+                dissolved_tick: None,
+            },
+        );
+
+        check_alliance_dissolution(&mut state);
+
+        // Assert that alliance dissolved
+        assert!(state.treaties.get(&100).unwrap().dissolved_tick.is_some());
+        assert_eq!(
+            state.diplomatic_relations.get(&(2, 3)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+    }
+    #[test]
+    fn test_alliance_ordering_and_missing_relations() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Add a relationship where empire_a > empire_b by using different IDs, e.g., 3 and 2.
+        state.empires.insert(
+            3,
+            crate::sim::state::Empire {
+                id: 3,
+                name: "Empire C".to_string(),
+                government_type: "republic".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        state.diplomatic_relations.insert(
+            (2, 3),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: 0.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        // Remove name from empire 3 to hit the unwrap_or_default() branch
+
+        state.empires.remove(&3);
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        // Assert that an alliance formed with the removed empire!
+        assert_eq!(state.treaties.len(), 2);
+    }
+    #[test]
     fn test_alliance_requires_neutral_cooldown_per_relation() {
         let mut state = setup_alliance_state();
         state.tick = ALLIANCE_FORMATION_COOLDOWN + 1;
