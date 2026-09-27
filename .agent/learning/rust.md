@@ -225,3 +225,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-25 - Vector pre-allocation and continuous indexing in hot paths
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
+## 2024-05-15 - Testing Zero-Quantity Market Orders
+**Learning:** In the `clear_orders` market logic, when a buyer's cash is sufficient but an order is placed with a quantity of zero, it hits a catch-all safety block (`affordable_by_buyer != 0` and `actual_buyer_cash >= clearing_price` but `qty == 0`). This behavior requires a carefully constructed state with 0-quantity orders to trigger successfully.
+**Action:** When writing tests for complex simulation matching loops, specifically evaluate inputs of zero (e.g. 0 quantity, 0 cash) alongside standard positive bounds to ensure fallback paths are correctly executed and do not cause infinite loops.
