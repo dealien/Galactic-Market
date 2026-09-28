@@ -1588,4 +1588,85 @@ mod tests {
         // Limit orders should also remain
         assert_eq!(state.market_orders.get(&1).unwrap().quantity, 10);
     }
+
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                cash: 1000.0,
+                name: "".to_string(),
+                company_type: "merchant".to_string(),
+                home_city_id: 1,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".to_string(),
+                last_trade_tick: 1,
+            },
+        );
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                cash: 1000.0,
+                name: "".to_string(),
+                company_type: "merchant".to_string(),
+                home_city_id: 1,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".to_string(),
+                last_trade_tick: 1,
+            },
+        );
+
+        state.inventories.insert(
+            Inventory::key(2, 1, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 0,
+                price: 10.0,
+                created_tick: 1,
+            },
+        );
+
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: 10.0,
+                created_tick: 1,
+            },
+        );
+
+        clear_orders(&mut state, 1);
+
+        assert!(
+            !state.market_orders.contains_key(&1),
+            "Zero quantity order should be removed"
+        );
+    }
 }
