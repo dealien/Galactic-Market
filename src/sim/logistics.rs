@@ -40,7 +40,7 @@ pub fn run_logistics(state: &mut SimState, current_tick: u64) {
         // Inventory is already removed from origin when the route is created (Phase 6).
         // Here we just add it to the destination.
         let key = Inventory::key(route.company_id, route.dest_city_id, route.resource_type_id);
-        let entry = state.inventories.entry(key).or_insert(Inventory {
+        let entry = state.inventories.entry(key).or_insert_with(|| Inventory {
             company_id: route.company_id,
             city_id: route.dest_city_id,
             resource_type_id: route.resource_type_id,

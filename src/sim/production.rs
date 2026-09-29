@@ -190,12 +190,15 @@ pub fn run_production(state: &mut SimState) {
 
             // Produce outputs
             let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
-            let entry = state.inventories.entry(out_key).or_insert(Inventory {
-                company_id,
-                city_id,
-                resource_type_id: recipe.output_resource_id,
-                quantity: 0,
-            });
+            let entry = state
+                .inventories
+                .entry(out_key)
+                .or_insert_with(|| Inventory {
+                    company_id,
+                    city_id,
+                    resource_type_id: recipe.output_resource_id,
+                    quantity: 0,
+                });
             entry.quantity += recipe.output_qty as i64 * runs;
 
             debug!(
@@ -274,12 +277,15 @@ pub fn run_production(state: &mut SimState) {
 
             // Produce outputs
             let out_key = Inventory::key(company_id, city_id, recipe.output_resource_id);
-            let entry = state.inventories.entry(out_key).or_insert(Inventory {
-                company_id,
-                city_id,
-                resource_type_id: recipe.output_resource_id,
-                quantity: 0,
-            });
+            let entry = state
+                .inventories
+                .entry(out_key)
+                .or_insert_with(|| Inventory {
+                    company_id,
+                    city_id,
+                    resource_type_id: recipe.output_resource_id,
+                    quantity: 0,
+                });
             entry.quantity += recipe.output_qty as i64 * adjusted_capacity;
 
             debug!(
