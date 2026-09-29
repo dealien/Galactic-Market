@@ -169,7 +169,7 @@ pub fn run_extraction(state: &mut SimState) {
 
         // Add to company inventory at its home city
         let key = Inventory::key(company_id, city_id, target_resource_id);
-        let entry = state.inventories.entry(key).or_insert(Inventory {
+        let entry = state.inventories.entry(key).or_insert_with(|| Inventory {
             company_id,
             city_id,
             resource_type_id: target_resource_id,

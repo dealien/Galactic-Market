@@ -348,6 +348,15 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         .map(|w| (w.id, w.aggressor_id, w.defender_id, w.theaters.clone()))
         .collect();
 
+    // Bolt optimization: Pre-compute system ownership to avoid redundant O(N) sector map lookups.
+    // We cannot pre-compute is_occupied because it might change during war resolution.
+    let mut system_owners: Vec<(i32, i32)> = Vec::with_capacity(state.star_systems.len());
+    for s in state.star_systems.values() {
+        if let Some(sec) = state.sectors.get(&s.sector_id) {
+            system_owners.push((s.id, sec.empire_id));
+        }
+    }
+
     for (war_id, aggressor_id, defender_id, theaters) in active_wars {
         let (participant_empire_ids, aggressor_side, defender_side): (
             HashSet<i32>,
@@ -473,28 +482,26 @@ fn resolve_active_wars(state: &mut SimState, rng: &mut impl Rng) {
         let mut defender_total = 0;
         let mut defender_occupied = 0;
 
-        for s in state.star_systems.values() {
-            if let Some(sec) = state.sectors.get(&s.sector_id) {
-                let is_occupied = state.occupied_systems.contains_key(&s.id);
-
-                if is_occupied {
-                    if aggressor_side.contains(&sec.empire_id) {
-                        aggressor_occ_strain += 1.0;
-                    } else if defender_side.contains(&sec.empire_id) {
-                        defender_occ_strain += 1.0;
-                    }
+        // Bolt optimization: Use pre-computed system_owners avoiding O(N) sector lookups
+        for &(sys_id, empire_id) in &system_owners {
+            let is_occupied = state.occupied_systems.contains_key(&sys_id);
+            if is_occupied {
+                if aggressor_side.contains(&empire_id) {
+                    aggressor_occ_strain += 1.0;
+                } else if defender_side.contains(&empire_id) {
+                    defender_occ_strain += 1.0;
                 }
+            }
 
-                if sec.empire_id == aggressor_id {
-                    aggressor_total += 1;
-                    if is_occupied {
-                        aggressor_occupied += 1;
-                    }
-                } else if sec.empire_id == defender_id {
-                    defender_total += 1;
-                    if is_occupied {
-                        defender_occupied += 1;
-                    }
+            if empire_id == aggressor_id {
+                aggressor_total += 1;
+                if is_occupied {
+                    aggressor_occupied += 1;
+                }
+            } else if empire_id == defender_id {
+                defender_total += 1;
+                if is_occupied {
+                    defender_occupied += 1;
                 }
             }
         }
