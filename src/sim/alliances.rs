@@ -490,6 +490,467 @@ mod tests {
         // Assert that an alliance formed with the removed empire!
         assert_eq!(state.treaties.len(), 2);
     }
+
+    /// Tests that the check_alliance_formation fallback logic works correctly for handling missing empire records.
+    /// This targets the fallback logic for `.unwrap_or_default()` when evaluating empire names.
+    #[test]
+    fn test_alliance_ordering_and_missing_relations_coverage() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Make an empire relation but delete the source empire to trigger unwrap_or_default() fallback
+        state.empires.remove(&1);
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1);
+        let first_treaty = state.treaties.values().next().unwrap();
+        // Since we removed empire 1, name_a defaults to empty string, leading to "-Empire B Accord"
+        assert_eq!(first_treaty.alliance_name, "-Syndicate Accord");
+    }
+
+    #[test]
+    fn test_dissolution_missing_relations_coverage() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Force a multi-member treaty where a relation is missing
+        state.treaties.insert(
+            101,
+            crate::sim::state::Treaty {
+                id: 101,
+                alliance_name: "Test Accord".to_string(),
+                member_empire_ids: vec![1, 2, 3],
+                formed_tick: 1,
+                dissolved_tick: None,
+            },
+        );
+
+        // Intentionally do NOT insert the relation between 2 and 3.
+        // It will trigger the missing `let Some(rel)` case when evaluating should_dissolve.
+        // It should also hit the nested loop block when resetting diplomatic statuses.
+        check_alliance_dissolution(&mut state);
+
+        assert!(state.treaties.get(&101).unwrap().dissolved_tick.is_none());
+    }
+
+    #[test]
+    fn test_dissolution_resets_diplomatic_status_nested_loop_coverage() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        state.treaties.insert(
+            102,
+            crate::sim::state::Treaty {
+                id: 102,
+                alliance_name: "Test Accord 2".to_string(),
+                member_empire_ids: vec![1, 2, 3],
+                formed_tick: 1,
+                dissolved_tick: None,
+            },
+        );
+
+        state.diplomatic_relations.insert(
+            (2, 3),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: ALLIANCE_DISSOLUTION_TENSION + 10.0,
+                status: DIPLOMATIC_STATUS_ALLIANCE.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+        state.diplomatic_relations.get_mut(&(1, 2)).unwrap().status =
+            DIPLOMATIC_STATUS_ALLIANCE.to_string();
+
+        check_alliance_dissolution(&mut state);
+
+        // The high tension between 2 and 3 dissolves the treaty.
+        assert!(state.treaties.get(&102).unwrap().dissolved_tick.is_some());
+
+        // This verifies the reset logic works correctly across multiple members
+        assert_eq!(
+            state.diplomatic_relations.get(&(1, 2)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+        assert_eq!(
+            state.diplomatic_relations.get(&(2, 3)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_tension_too_high() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+        rel.tension = ALLIANCE_MAX_TENSION + 1.0;
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert!(
+            state.treaties.is_empty(),
+            "High tension should prevent alliance formation"
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_status_not_neutral() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+        rel.status = "hostile".to_string();
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert!(
+            state.treaties.is_empty(),
+            "Non-neutral status should prevent alliance formation"
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_already_allied() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+        let rel = state.diplomatic_relations.get_mut(&(1, 2)).unwrap();
+        rel.neutral_since_tick = 0;
+
+        state.treaties.insert(
+            103,
+            crate::sim::state::Treaty {
+                id: 103,
+                alliance_name: "Test Accord 3".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 1,
+                dissolved_tick: None,
+            },
+        );
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(
+            state.treaties.len(),
+            1,
+            "Should not form duplicate alliance"
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_missing_relation_key() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Remove the existing relation (1, 2)
+        state.diplomatic_relations.remove(&(1, 2));
+
+        // Add a relation (2, 1) where empire_a > empire_b to test the key swapping logic
+        // Because eligible_pairs extracts (empire_a, empire_b) = (2, 1)
+        // Then line 110-112 swaps it to (1, 2)
+        // Then it tries to get_mut(&(1, 2)), which we deleted.
+        // This hits the missing branch `if let Some(rel)`!
+
+        state.diplomatic_relations.insert(
+            (2, 1),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 1,
+                tension: 0.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1, "Should form an alliance");
+        // The relation status for (2, 1) should remain neutral because it tried to update (1, 2)
+        assert_eq!(
+            state.diplomatic_relations.get(&(2, 1)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+    }
+
+    #[test]
+    fn test_alliance_formation_opposite_key_ordering() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Setup diplomatic relation for (2, 3) and (3, 2) properly
+        state.empires.insert(
+            3,
+            crate::sim::state::Empire {
+                id: 3,
+                name: "Empire C".to_string(),
+                government_type: "republic".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+
+        state.diplomatic_relations.insert(
+            (2, 3),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 2,
+                empire_b_id: 3,
+                tension: 0.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        // Force a relation key the other way around. Wait, `state.diplomatic_relations` has tuples as keys, which implies we only need the proper order because of line 109.
+        // If we add `(3, 2)` to eligible_pairs, it'll swap it to `(2, 3)` before accessing `diplomatic_relations`.
+        // To do this we have to bypass `eligible_pairs` gathering in `run_alliances` or just mock the input. But we can't because `eligible_pairs` is built by iterating `state.diplomatic_relations.values()`.
+        // If we insert the key as `(3, 2)`, then `rel.empire_a_id` = 3, `rel.empire_b_id` = 2.
+        state.diplomatic_relations.remove(&(1, 2));
+        state.diplomatic_relations.remove(&(2, 3));
+
+        state.diplomatic_relations.insert(
+            (3, 2),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 3,
+                empire_b_id: 2,
+                tension: 0.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+        // Then when updating, it'll sort the key to (2, 3) which doesn't exist! So the if let Some(rel) evaluates to false. This hits the missing branch.
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1, "Should form an alliance");
+        // Status of (3, 2) remains unchanged because it tried to update (2, 3)
+        assert_eq!(
+            state.diplomatic_relations.get(&(3, 2)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+    }
+
+    #[test]
+    fn test_dissolution_no_members_fallthrough() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        // Treaty with 0 members. The i and j loops will be empty, should_dissolve will remain false.
+        state.treaties.insert(
+            104,
+            crate::sim::state::Treaty {
+                id: 104,
+                alliance_name: "Empty Accord".to_string(),
+                member_empire_ids: vec![],
+                formed_tick: 1,
+                dissolved_tick: None,
+            },
+        );
+
+        check_alliance_dissolution(&mut state);
+
+        assert!(state.treaties.get(&104).unwrap().dissolved_tick.is_none());
+    }
+
+    #[test]
+    fn test_dissolution_skips_already_dissolved() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        state.treaties.insert(
+            105,
+            crate::sim::state::Treaty {
+                id: 105,
+                alliance_name: "Dissolved Accord".to_string(),
+                member_empire_ids: vec![1, 2],
+                formed_tick: 1,
+                dissolved_tick: Some(10),
+            },
+        );
+
+        check_alliance_dissolution(&mut state);
+
+        // It should still have the dissolved tick from before, not the current state.tick
+        assert_eq!(state.treaties.get(&105).unwrap().dissolved_tick, Some(10));
+    }
+
+    #[test]
+    fn test_alliance_formation_missing_relation_key_misses_update() {
+        let mut state = setup_alliance_state();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN;
+
+        state.empires.insert(
+            3,
+            crate::sim::state::Empire {
+                id: 3,
+                name: "Empire C".to_string(),
+                government_type: "republic".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+
+        // Remove (1, 2) and add (3, 2). It iterates and finds (3, 2).
+        // pair=(3, 2). It's not already allied. Add to eligible_pairs.
+        // RNG fires. Name fetched. Alliance formed!
+        // Then `let key = if 3 < 2 { (3, 2) } else { (2, 3) }` => `(2, 3)`
+        // `get_mut(&(2, 3))` returns None because the map has `(3, 2)`.
+
+        state.diplomatic_relations.remove(&(1, 2));
+        state.diplomatic_relations.insert(
+            (3, 2),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 3,
+                empire_b_id: 2,
+                tension: 0.0,
+                status: DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                for byte in dest {
+                    *byte = 0;
+                }
+            }
+            fn try_fill_bytes(&mut self, _dest: &mut [u8]) -> Result<(), rand::Error> {
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1, "Should form an alliance");
+        // Because of the key mismatch, it couldn't update the status! So it stays neutral.
+        assert_eq!(
+            state.diplomatic_relations.get(&(3, 2)).unwrap().status,
+            DIPLOMATIC_STATUS_NEUTRAL
+        );
+    }
+
     #[test]
     fn test_alliance_requires_neutral_cooldown_per_relation() {
         let mut state = setup_alliance_state();
