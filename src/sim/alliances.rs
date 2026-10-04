@@ -888,7 +888,6 @@ mod tests {
         assert_eq!(state.treaties.get(&105).unwrap().dissolved_tick, Some(10));
     }
 
-
     #[test]
     fn test_alliance_formation_missing_relation_key_misses_update() {
         let mut state = setup_alliance_state();
