@@ -225,3 +225,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-25 - Vector pre-allocation and continuous indexing in hot paths
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
+## $(date +%Y-%m-%d) - Pre-allocating nested structures inside tick loops
+**Learning:** Initializing an empty `HashMap::new()` to group items during a tick loop adds reallocation overhead. However, even if the parent map is pre-allocated, eagerly populating `.or_default()` on its entries (like nested `Vec`s) still incurs zero-to-nonzero reallocation overhead on every `.push()`.
+**Action:** When grouping or accumulating items into a `HashMap<Key, Vec<Value>>` inside a hot loop, use `HashMap::with_capacity(known_max)` for the parent map, and always replace `.or_default()` with `.or_insert_with(|| Vec::with_capacity(expected_avg_size))` for the inner collections to completely eliminate dynamic reallocation during insertion.

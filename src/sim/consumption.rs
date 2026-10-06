@@ -283,7 +283,7 @@ pub fn run_migration(state: &mut SimState) {
     }
 
     // Group cities by empire (via sector → empire mapping)
-    let mut empire_cities: HashMap<i32, Vec<i32>> = HashMap::new();
+    let mut empire_cities: HashMap<i32, Vec<i32>> = HashMap::with_capacity(state.empires.len());
     for (&city_id, city) in &state.cities {
         // Look up empire via: city → body → system → sector → empire
         let empire_id = state
@@ -294,7 +294,10 @@ pub fn run_migration(state: &mut SimState) {
             .map(|sec| sec.empire_id);
 
         if let Some(emp_id) = empire_id {
-            empire_cities.entry(emp_id).or_default().push(city_id);
+            empire_cities
+                .entry(emp_id)
+                .or_insert_with(|| Vec::with_capacity(4))
+                .push(city_id);
         }
     }
 
