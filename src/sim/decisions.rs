@@ -3661,6 +3661,23 @@ mod tests {
         let mut state = make_state_with_bank();
         state.companies.get_mut(&2).unwrap().home_city_id = 999;
         assert!(!request_loan(&mut state, 1, 5000.0));
+
+        // 6. Missing bank's city's body_id
+        let mut state = make_state_with_bank();
+        let bank_city = state.companies.get(&2).unwrap().home_city_id;
+        state.cities.get_mut(&bank_city).unwrap().body_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
+
+        // 7. Missing bank's body's system_id
+        let mut state = make_state_with_bank();
+        let bank_city = state.companies.get(&2).unwrap().home_city_id;
+        let bank_body = state.cities.get(&bank_city).unwrap().body_id;
+        state
+            .celestial_bodies
+            .get_mut(&bank_body)
+            .unwrap()
+            .system_id = 999;
+        assert!(!request_loan(&mut state, 1, 5000.0));
     }
 
     #[test]
