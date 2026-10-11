@@ -1580,12 +1580,7 @@ mod tests {
         clear_orders(&mut state, 2);
 
         // Market order 2 should be matched first because it's a market order with the lowest id
-        assert!(
-            state
-                .market_orders
-                .get(&2)
-                .map_or(true, |o| o.quantity == 0)
-        );
+        assert!(state.market_orders.get(&2).map_or(true, |o| o.quantity == 0));
         // Order 4 should remain since the sell order only had 10 quantity
         assert_eq!(state.market_orders.get(&4).unwrap().quantity, 10);
         // Order 6 should also remain
@@ -1596,7 +1591,7 @@ mod tests {
 
     #[test]
     /// Tests that sell orders are sorted with market orders first, hitting the Greater branch in sorting.
-    fn test_sell_order_sorting_market_first() {
+    fn test_sell_order_sorting_market_first_coverage() {
         let mut state = _setup_test_state();
 
         let orders = vec![
@@ -1683,12 +1678,7 @@ mod tests {
         clear_orders(&mut state, 2);
 
         // Market order 2 should be matched first because it's a market order with the lowest id
-        assert!(
-            state
-                .market_orders
-                .get(&2)
-                .map_or(true, |o| o.quantity == 0)
-        );
+        assert!(state.market_orders.get(&2).map_or(true, |o| o.quantity == 0));
         // Order 4 should remain since the buy order only had 10 quantity
         assert_eq!(state.market_orders.get(&4).unwrap().quantity, 10);
         // Order 6 should also remain
@@ -1696,4 +1686,5 @@ mod tests {
         // Limit orders should also remain
         assert_eq!(state.market_orders.get(&1).unwrap().quantity, 10);
     }
+
 }
