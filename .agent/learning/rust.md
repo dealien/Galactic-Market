@@ -226,6 +226,10 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
 
+## 2026-10-04 - Tick Loop Sorting Performance
+**Learning:** In the `src/sim/markets.rs` market clearing logic, replacing `f64::partial_cmp(...).unwrap_or(...)` with `f64::total_cmp(...)` inside sorting closures degrades tick loop performance under benchmark and should be avoided.
+**Action:** When micro-optimizing comparator closures in sorting hot paths, always benchmark mathematically equivalent methods like `total_cmp` versus `partial_cmp`, as they compile to different instruction sizes.
+
 ## 2024-05-24 - Avoid scratchpad script pollution in repository
 **Learning:** Writing and leaving behind multiple Python scratchpad scripts (e.g., `fix_alliance_test.py`) and loose Rust test files (e.g., `test_alliances_gap.rs` in root) pollutes the git repository and triggers code review rejections, because the scripts and uncompiled test files become part of the commit.
 **Action:** Always delete temporary scratchpad files (like `.py` scripts or temporary root `.rs` files) immediately after they have served their purpose, and before requesting code reviews or executing `submit`.
