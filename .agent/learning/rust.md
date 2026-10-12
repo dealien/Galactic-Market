@@ -226,6 +226,10 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
 
+## 2025-02-23 - Argus: Full test suite verification with cargo test
+**Learning:** When verifying test coverage improvements as Argus, running a targeted test command like `cargo test -- sim::decisions` is insufficient for the final verification step. A complete run is required to ensure no regressions occurred in other modules. Also, when passing arguments to the underlying test binary alongside cargo flags (such as `--lib`), ensure the cargo flags precede the `--` separator (e.g., `cargo test --lib -- --test-threads=1` instead of `cargo test -- --test-threads=1 --lib`) to avoid "Unrecognized option" errors.
+**Action:** Always ensure the final verification step in the execution plan runs the full test suite (e.g., `cargo test` or `cargo test -- --test-threads=1`) rather than targeting a single module, to guarantee no regressions were introduced across the broader codebase. Pay attention to argument ordering for `cargo test`.
+
 ## 2024-05-18 - petgraph connected_components and UnGraphMap nodes
 **Learning:** When writing tests that verify the number of connected components in a `petgraph::UnGraphMap` constructed purely from edges, nodes that have no edges at all will be entirely excluded from the graph. If you blockade edges to isolate a node completely, it won't count as a 1-node component—it just won't exist.
 **Action:** When testing `petgraph`'s `UnGraphMap` for multiple connected components (e.g., using `connected_components`), construct disjoint subgraphs where every node retains at least one active edge to correctly simulate fragmented components.
