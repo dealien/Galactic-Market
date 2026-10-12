@@ -1408,7 +1408,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             }
 
             if total_positive_margin > 0.0 {
-                let mut new_ratios = std::collections::HashMap::new();
+                let mut new_ratios =
+                    std::collections::HashMap::with_capacity(recipes_evaluated.len());
                 for (id, margin, _, _, _) in &recipes_evaluated {
                     new_ratios.insert(id.to_string(), margin / total_positive_margin);
                 }
