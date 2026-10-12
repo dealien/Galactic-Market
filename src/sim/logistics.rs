@@ -589,4 +589,65 @@ mod tests {
         let inv = state.inventories.get(&key).unwrap();
         assert_eq!(inv.quantity, 75);
     }
+
+    #[test]
+    fn test_network_fragmentation_logging_branches() {
+        let mut state = SimState::new();
+
+        state.system_lanes.insert(
+            (1, 2),
+            crate::sim::state::SystemLane {
+                system_a_id: 1,
+                system_b_id: 2,
+                distance_ly: 1.0,
+                lane_type: "test".to_string(),
+            },
+        );
+        state.system_lanes.insert(
+            (3, 4),
+            crate::sim::state::SystemLane {
+                system_a_id: 3,
+                system_b_id: 4,
+                distance_ly: 1.0,
+                lane_type: "test".to_string(),
+            },
+        );
+        state.system_lanes.insert(
+            (2, 3),
+            crate::sim::state::SystemLane {
+                system_a_id: 2,
+                system_b_id: 3,
+                distance_ly: 1.0,
+                lane_type: "test".to_string(),
+            },
+        );
+
+        state.last_connected_components = 1;
+        state.blockade_version = 1;
+        state.distances_blockade_version = 0; // trigger rebuild
+
+        state.active_events.insert(
+            1,
+            crate::sim::state::ActiveEvent {
+                id: 1,
+                event_type: "blockade_lane".to_string(),
+                target_id: Some((2, 3)),
+                severity: 1.0,
+                start_tick: 0,
+                end_tick: 10,
+                flavor_text: None,
+            },
+        );
+
+        super::build_system_distances(&mut state);
+        assert_eq!(state.last_connected_components, 2);
+
+        // Now remove the blockade to reconnect
+        state.active_events.remove(&1);
+        state.blockade_version = 2; // trigger rebuild
+
+        // This will hit the `state.last_connected_components > 1` info branch
+        super::build_system_distances(&mut state);
+        assert_eq!(state.last_connected_components, 1);
+    }
 }

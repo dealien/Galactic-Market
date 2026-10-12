@@ -226,6 +226,14 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
 
+## 2024-05-18 - petgraph connected_components and UnGraphMap nodes
+**Learning:** When writing tests that verify the number of connected components in a `petgraph::UnGraphMap` constructed purely from edges, nodes that have no edges at all will be entirely excluded from the graph. If you blockade edges to isolate a node completely, it won't count as a 1-node component—it just won't exist.
+**Action:** When testing `petgraph`'s `UnGraphMap` for multiple connected components (e.g., using `connected_components`), construct disjoint subgraphs where every node retains at least one active edge to correctly simulate fragmented components.
+
+## 2024-05-18 - Unreachable rand WeightedIndexError
+**Learning:** In the `rand` crate, `WeightedIndex::new` panics on overflow and only returns an error (`InvalidWeight`) if all weights are exactly zero. If the production code explicitly filters out zero weights before creating the index (e.g., `filter(|d| d.weight > 0)`), the `Err` branch of a `match WeightedIndex::new(...)` is functionally unreachable and attempting to cover it will lead to wasted effort or panicking tests.
+**Action:** Deprioritize covering `WeightedIndex::new` error paths if zero weights are preemptively filtered.
+
 ## 2026-10-12 - Pre-allocating nested structures inside tick loops
 **Learning:** Initializing an empty `HashMap::new()` to group items during a tick loop adds reallocation overhead. However, even if the parent map is pre-allocated, eagerly populating `.or_default()` on its entries (like nested `Vec`s) still incurs zero-to-nonzero reallocation overhead on every `.push()`.
 **Action:** When grouping or accumulating items into a `HashMap<Key, Vec<Value>>` inside a hot loop, use `HashMap::with_capacity(known_max)` for the parent map, and always replace `.or_default()` with `.or_insert_with(|| Vec::with_capacity(expected_avg_size))` for the inner collections to completely eliminate dynamic reallocation during insertion.
