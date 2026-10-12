@@ -225,3 +225,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2026-09-25 - Vector pre-allocation and continuous indexing in hot paths
 **Learning:** Using `Vec` with indexed reads/writes instead of `HashMap` for loop invariants where IDs are sequential (or bounded and dense, like `sector_id`) provides a measurable performance boost by eliminating `O(1)` hashing overhead.
 **Action:** When optimizing heavily iterated operations (like `compute_sector_control` in `politics.rs`), consider pre-calculating state into a `Vec` using domain IDs as indices if the ID space is relatively dense and small (e.g. < 10,000).
+
+## 2024-05-24 - Avoid scratchpad script pollution in repository
+**Learning:** Writing and leaving behind multiple Python scratchpad scripts (e.g., `fix_alliance_test.py`) and loose Rust test files (e.g., `test_alliances_gap.rs` in root) pollutes the git repository and triggers code review rejections, because the scripts and uncompiled test files become part of the commit.
+**Action:** Always delete temporary scratchpad files (like `.py` scripts or temporary root `.rs` files) immediately after they have served their purpose, and before requesting code reviews or executing `submit`.
