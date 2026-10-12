@@ -727,6 +727,17 @@ fn make_migration_state(num_cities: usize) -> SimState {
     let mut state = SimState::new();
     state.tick = 50;
 
+    state.empires.insert(
+        1,
+        galactic_market::sim::state::Empire {
+            id: 1,
+            name: "Empire 1".to_string(),
+            government_type: "Democracy".to_string(),
+            tax_rate_base: 0.1,
+            tax_rate: 0.05,
+        },
+    );
+
     state.sectors.insert(
         1,
         Sector {
