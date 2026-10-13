@@ -249,3 +249,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-24 - Avoid scratchpad script pollution in repository
 **Learning:** Writing and leaving behind multiple Python scratchpad scripts (e.g., `fix_alliance_test.py`) and loose Rust test files (e.g., `test_alliances_gap.rs` in root) pollutes the git repository and triggers code review rejections, because the scripts and uncompiled test files become part of the commit.
 **Action:** Always delete temporary scratchpad files (like `.py` scripts or temporary root `.rs` files) immediately after they have served their purpose, and before requesting code reviews or executing `submit`.
+
+## $(date +%Y-%m-%d) - Appending tests programmatically avoids unclosed delimiters
+**Learning:** When programmatically injecting new tests into an existing `#[cfg(test)] mod tests` block using Python scripts, you must ensure the new functions are inserted *before* the final closing brace `}` of the module to avoid "unclosed delimiter" compiler errors. A simple `.replace("}\n", ...)` might match an inner function's closing brace if not careful.
+**Action:** When appending tests to a file automatically, construct a short Python script that iterates backwards to safely identify the final module-closing brace, or utilize string manipulation like `content.rfind('}')` to guarantee correct insertion placement.
+
+## $(date +%Y-%m-%d) - Test helper scopes
+**Learning:** In the test suites for `sim::*` modules, test setup helpers like `make_state()` are often defined locally within each module's `mod tests` block rather than globally.
+**Action:** Do not assume `make_state()` is automatically available or correctly imported from other modules. Always verify its existence in the target module or define it locally when writing new tests.

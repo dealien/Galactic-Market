@@ -848,4 +848,173 @@ mod tests {
         let runs = compute_max_runs(&state, 1, 1, &recipe);
         assert_eq!(runs, 0);
     }
+
+    #[test]
+    fn test_refinery_setup_ticks_delays_production() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.setup_ticks_remaining = 1;
+
+        run_production(&mut state);
+
+        let facility = state.facilities.get(&1).unwrap();
+        assert_eq!(facility.setup_ticks_remaining, 0); // Decremented
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_plantation_setup_ticks_delays_production() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.facility_type = "plantation".into();
+        facility.setup_ticks_remaining = 1;
+
+        run_production(&mut state);
+
+        let facility = state.facilities.get(&1).unwrap();
+        assert_eq!(facility.setup_ticks_remaining, 0); // Decremented
+
+        let food_key = Inventory::key(1, 1, 3);
+        assert!(
+            !state.inventories.contains_key(&food_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_refinery_skips_if_company_inactive() {
+        let mut state = make_state();
+        let company = state.companies.get_mut(&1).unwrap();
+        company.status = "bankrupt".into();
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_plantation_skips_if_company_inactive() {
+        let mut state = make_state();
+        let company = state.companies.get_mut(&1).unwrap();
+        company.status = "bankrupt".into();
+
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.facility_type = "plantation".into();
+
+        run_production(&mut state);
+
+        let food_key = Inventory::key(1, 1, 3);
+        assert!(
+            !state.inventories.contains_key(&food_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_refinery_skips_without_production_ratios() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.production_ratios = None;
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_refinery_skips_invalid_recipe_id() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.production_ratios = Some(std::collections::HashMap::from([(
+            "invalid".to_string(),
+            1.0,
+        )]));
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_refinery_skips_recipe_not_found() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.production_ratios =
+            Some(std::collections::HashMap::from([("999".to_string(), 1.0)]));
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_refinery_skips_zero_allocated_capacity() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.production_ratios =
+            Some(std::collections::HashMap::from([("1".to_string(), 0.0)]));
+
+        run_production(&mut state);
+
+        let ingot_key = Inventory::key(1, 1, 2);
+        assert!(
+            !state.inventories.contains_key(&ingot_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_plantation_skips_city_not_found() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.facility_type = "plantation".into();
+        facility.city_id = 999; // Non-existent city
+
+        run_production(&mut state);
+
+        let food_key = Inventory::key(1, 1, 3);
+        assert!(
+            !state.inventories.contains_key(&food_key),
+            "Should not have produced anything"
+        );
+    }
+
+    #[test]
+    fn test_plantation_skips_body_not_found() {
+        let mut state = make_state();
+        let facility = state.facilities.get_mut(&1).unwrap();
+        facility.facility_type = "plantation".into();
+
+        let city = state.cities.get_mut(&1).unwrap();
+        city.body_id = 999; // Non-existent body
+
+        run_production(&mut state);
+
+        let food_key = Inventory::key(1, 1, 3);
+        assert!(
+            !state.inventories.contains_key(&food_key),
+            "Should not have produced anything"
+        );
+    }
 }
