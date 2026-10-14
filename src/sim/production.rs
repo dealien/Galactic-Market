@@ -88,8 +88,8 @@ pub fn run_production(state: &mut SimState) {
     // Collect the recipes by facility_type up front to avoid borrow conflicts
     let recipes: Vec<Recipe> = state.recipes.values().cloned().collect();
 
-    let mut active_refineries = Vec::new();
-    let mut active_plantations = Vec::new();
+    let mut active_refineries = Vec::with_capacity(state.facilities.len());
+    let mut active_plantations = Vec::with_capacity(state.facilities.len());
 
     for facility in state.facilities.values_mut() {
         if facility.facility_type == "refinery" {
