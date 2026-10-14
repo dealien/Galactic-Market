@@ -1317,4 +1317,67 @@ mod tests {
         run_alliances(&mut state, &mut rng);
         assert_eq!(state.treaties.len(), 1, "Should have formed an alliance");
     }
+
+    #[test]
+    fn test_formation_default_names_when_empires_missing() {
+        let mut state = SimState::new();
+        state.tick = ALLIANCE_FORMATION_COOLDOWN + 1;
+        state.empires.insert(
+            1,
+            crate::sim::state::Empire {
+                id: 1,
+                name: "Emp1".to_string(),
+                government_type: "Test".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        state.empires.insert(
+            2,
+            crate::sim::state::Empire {
+                id: 2,
+                name: "Emp2".to_string(),
+                government_type: "Test".to_string(),
+                tax_rate_base: 0.1,
+                tax_rate: 0.1,
+            },
+        );
+        state.diplomatic_relations.insert(
+            (1, 2),
+            crate::sim::state::DiplomaticRelation {
+                empire_a_id: 1,
+                empire_b_id: 2,
+                tension: 0.0,
+                status: crate::db::seed::DIPLOMATIC_STATUS_NEUTRAL.to_string(),
+                neutral_since_tick: 0,
+            },
+        );
+
+        state.empires.remove(&1);
+        state.empires.remove(&2);
+
+        struct LocalAlwaysFormRng;
+        impl rand::RngCore for LocalAlwaysFormRng {
+            fn next_u32(&mut self) -> u32 {
+                0
+            }
+            fn next_u64(&mut self) -> u64 {
+                0
+            }
+            fn fill_bytes(&mut self, dest: &mut [u8]) {
+                dest.fill(0);
+            }
+            fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand::Error> {
+                self.fill_bytes(dest);
+                Ok(())
+            }
+        }
+
+        let mut rng = LocalAlwaysFormRng;
+        check_alliance_formation(&mut state, &mut rng);
+
+        assert_eq!(state.treaties.len(), 1);
+        let treaty = state.treaties.values().next().unwrap();
+        assert_eq!(treaty.alliance_name, "- Accord");
+    }
 }
