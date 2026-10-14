@@ -71,7 +71,7 @@ fn deploy_fleets_to_theaters(state: &mut SimState) {
         if unit.unit_type == "fleet" && unit.status == "stationed" {
             stationed_fleets_by_empire
                 .entry(unit.empire_id)
-                .or_default()
+                .or_insert_with(|| Vec::with_capacity(4))
                 .push(unit.id);
         }
     }

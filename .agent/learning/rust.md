@@ -257,3 +257,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## $(date +%Y-%m-%d) - Test helper scopes
 **Learning:** In the test suites for `sim::*` modules, test setup helpers like `make_state()` are often defined locally within each module's `mod tests` block rather than globally.
 **Action:** Do not assume `make_state()` is automatically available or correctly imported from other modules. Always verify its existence in the target module or define it locally when writing new tests.
+## 2024-05-23 - Bolt Constraint and File Patching Risk
+**Learning:** The prompt constraint "ONE small performance improvement" is strictly enforced during code review. Attempting to bundle multiple disparate optimizations across several files into a single PR will be rejected for violating this constraint. Additionally, when using Python scripts to dynamically patch files (e.g. `replace()`), insufficient search string uniqueness or using global replacements can silently truncate or delete massive blocks of unrelated code, such as unit tests at the bottom of the file.
+**Action:** When acting as Bolt, pick exactly one optimization pattern (or a tightly coupled set in one file) and submit that. Ensure Python patching scripts use highly specific, contextual search blocks to guarantee only the intended code is modified without collateral damage.
