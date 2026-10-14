@@ -272,7 +272,8 @@ async fn test_db_flush_persists_closed_loop_economy_fields(
 
     let reloaded_state = galactic_market::db::load::load(&pool).await?;
 
-    assert!((reloaded_state.get_wage_pool(1) - 180.23).abs() < 0.001); // add_city_tax added to wage_pool in memory
+    assert!((reloaded_state.get_wage_pool(1) - 123.45).abs() < 0.001); // add_city_tax no longer adds to wage_pool
+    assert!((reloaded_state.get_city_tax_pool(1) - 56.78).abs() < 0.001); // newly added tax pool
 
     let city = reloaded_state.cities.get(&1).unwrap();
     assert_eq!(city.tax_collected_this_tick, 56.78);
