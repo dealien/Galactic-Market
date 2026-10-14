@@ -79,6 +79,7 @@ pub async fn load(pool: &PgPool) -> Result<SimState, sqlx::Error> {
             },
         );
         state.city_wage_pools.insert(id, wage_pool);
+        state.city_tax_pools.insert(id, tax_collected_this_tick);
     }
 
     info!(count = state.cities.len(), "Loaded cities.");
