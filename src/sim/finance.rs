@@ -101,6 +101,9 @@ pub fn run_finance(state: &mut SimState) {
     // Companies pay income tax based on their cash holdings each tick
     process_corporate_taxes(state);
 
+    // Issue #9: Transfer accumulated city taxes (port fees, local taxes) to Empire Treasury
+    process_city_taxes(state);
+
     // --- Bankruptcy Detection & Debt Repayment ---
     let bankrupt_ids: Vec<i32> = state
         .companies
@@ -258,10 +261,96 @@ fn process_corporate_taxes(state: &mut SimState) {
     }
 }
 
+/// Transfer accumulated city taxes (port fees, local taxes) to the empire treasury.
+fn process_city_taxes(state: &mut SimState) {
+    let mut transfers = Vec::new();
+
+    for (&city_id, &amount) in state.city_tax_pools.iter() {
+        if amount <= 0.0 {
+            continue;
+        }
+
+        let Some(city) = state.cities.get(&city_id) else {
+            continue;
+        };
+        let Some(body) = state.celestial_bodies.get(&city.body_id) else {
+            continue;
+        };
+        let Some(system) = state.star_systems.get(&body.system_id) else {
+            continue;
+        };
+        let Some(sector) = state.sectors.get(&system.sector_id) else {
+            continue;
+        };
+
+        transfers.push((sector.empire_id, amount));
+    }
+
+    for (empire_id, amount) in transfers {
+        state.add_to_empire_treasury(empire_id, amount);
+    }
+
+    state.reset_city_tax_pools();
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::sim::state::{BankAccount, Company, Loan, SimState};
+
+    #[test]
+    fn test_process_city_taxes_transfers_to_treasury() {
+        use crate::sim::state::{CelestialBody, City, Sector, StarSystem};
+        let mut state = SimState::new();
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                body_id: 2,
+                name: "City".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 10,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            CelestialBody {
+                id: 2,
+                system_id: 3,
+                name: "Body".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            3,
+            StarSystem {
+                id: 3,
+                sector_id: 4,
+                name: "System".into(),
+            },
+        );
+        state.sectors.insert(
+            4,
+            Sector {
+                id: 4,
+                empire_id: 5,
+                name: "Sector".into(),
+            },
+        );
+
+        state.add_city_tax(1, 100.0);
+
+        run_finance(&mut state);
+
+        assert_eq!(state.get_empire_treasury(5), 100.0);
+        assert_eq!(state.get_city_tax_pool(1), 0.0); // Should be reset
+    }
 
     #[test]
     fn finance_charges_interest_and_deducts_cash() {

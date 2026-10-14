@@ -606,6 +606,9 @@ pub struct SimState {
     /// Keyed by city_id; represents total wages earned this tick.
     pub city_wage_pools: HashMap<i32, f64>,
 
+    /// Separate tax pool for cities to accumulate port fees and local taxes during the tick.
+    pub city_tax_pools: HashMap<i32, f64>,
+
     /// Issue #9: Empire treasury balances (tax revenue accumulator).
     /// Keyed by empire_id; represents accumulated taxes minus spending.
     pub empire_treasuries: HashMap<i32, f64>,
@@ -693,6 +696,7 @@ impl SimState {
             blockade_version: 0,
             distances_blockade_version: u64::MAX, // Force initial computation
             city_wage_pools: HashMap::new(),
+            city_tax_pools: HashMap::new(),
             empire_treasuries: HashMap::new(),
             company_to_empire: HashMap::new(),
             city_food_balance: HashMap::new(),
@@ -993,6 +997,36 @@ impl SimState {
         }
     }
 
+    /// Get the current tax pool balance for a city.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let state = SimState::new();
+    /// assert_eq!(state.get_city_tax_pool(1), 0.0);
+    /// ```
+    pub fn get_city_tax_pool(&self, city_id: i32) -> f64 {
+        self.city_tax_pools.get(&city_id).copied().unwrap_or(0.0)
+    }
+
+    /// Reset all city tax pools to 0.0.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use galactic_market::sim::state::SimState;
+    ///
+    /// let mut state = SimState::new();
+    /// state.add_city_tax(1, 100.0);
+    /// state.reset_city_tax_pools();
+    /// assert_eq!(state.get_city_tax_pool(1), 0.0);
+    /// ```
+    pub fn reset_city_tax_pools(&mut self) {
+        self.city_tax_pools.clear();
+    }
+
     /// Issue #9: Accumulate port fees and local taxes for a city (flows to empire treasury later).
     /// For now, we track this separate from wage pools to maintain accounting clarity.
     /// Cities have a separate tax_collected_this_tick field in the database.
@@ -1010,14 +1044,11 @@ impl SimState {
     ///     tax_collected_this_tick: 0.0, population_growth_rate: 0.0
     /// });
     /// state.add_city_tax(1, 50.0);
-    /// assert_eq!(state.get_wage_pool(1), 50.0);
+    /// assert_eq!(state.get_city_tax_pool(1), 50.0);
     /// assert_eq!(state.cities.get(&1).unwrap().tax_collected_this_tick, 50.0);
     /// ```
     pub fn add_city_tax(&mut self, city_id: i32, amount: f64) {
-        // In Phase 7 (Finance), these accumulated taxes are transferred to empire treasury.
-        // For now, we'll add to wage pools as a temporary holding area.
-        // TODO: In a future iteration, maintain separate city_tax_pools HashMap
-        *self.city_wage_pools.entry(city_id).or_insert(0.0) += amount;
+        *self.city_tax_pools.entry(city_id).or_insert(0.0) += amount;
 
         if let Some(city) = self.cities.get_mut(&city_id) {
             city.tax_collected_this_tick += amount;
@@ -1342,8 +1373,8 @@ mod tests {
 
         state.add_city_tax(city_id, 50.0);
 
-        // add_city_tax adds to the wage pool and updates tax_collected_this_tick
-        assert_eq!(state.get_wage_pool(city_id), 50.0);
+        // add_city_tax adds to the tax pool and updates tax_collected_this_tick
+        assert_eq!(state.get_city_tax_pool(city_id), 50.0);
         assert_eq!(
             state.cities.get(&city_id).unwrap().tax_collected_this_tick,
             50.0
