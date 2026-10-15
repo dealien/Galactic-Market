@@ -67,11 +67,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                b_price
-                    .partial_cmp(&a_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: inline comparison avoids Option/Result unwraps
+                if a_price < b_price {
+                    std::cmp::Ordering::Greater
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Less
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 
@@ -84,11 +87,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                a_price
-                    .partial_cmp(&b_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: inline comparison avoids Option/Result unwraps
+                if a_price < b_price {
+                    std::cmp::Ordering::Less
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 

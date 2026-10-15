@@ -2044,10 +2044,8 @@ pub fn compute_merchant_opportunities(
         }
     }
     // Sort by profit margin (highest first)
-    opportunities.sort_by(|a, b| {
-        b.profit_margin
-            .partial_cmp(&a.profit_margin)
-            .unwrap_or(std::cmp::Ordering::Equal)
+    opportunities.sort_unstable_by(|a, b| {
+        b.profit_margin.total_cmp(&a.profit_margin)
     });
 
     debug!(
