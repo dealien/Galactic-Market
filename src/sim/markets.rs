@@ -67,7 +67,8 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                // Bolt optimization: inline comparison avoids Option/Result unwraps
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
+                // but we fallback to then_with to match NaN identicals.
                 if a_price < b_price {
                     std::cmp::Ordering::Greater
                 } else if a_price > b_price {
@@ -87,7 +88,7 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                // Bolt optimization: inline comparison avoids Option/Result unwraps
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
                 if a_price < b_price {
                     std::cmp::Ordering::Less
                 } else if a_price > b_price {

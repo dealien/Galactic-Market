@@ -265,11 +265,3 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Uncovering missing empire name tests
 **Learning:** Testing logic involving `state.empires.get(...).unwrap_or_default()` when creating new entities requires forcing `state.empires` to drop the empire after initial diplomatic relations were established but before the logic runs, effectively triggering the default name behavior.
 **Action:** When testing fallback logic for struct fields fetched from hashmaps (like names in `SimState::empires`), explicitly `remove` the keys from the hashmap after satisfying earlier state dependencies instead of trying to pass invalid states from the beginning.
-
-## 2026-10-15 - [Algorithmic Scaling Regression Trap in Nested Loops]
-**Learning:** Replacing an O(Resources * Cities) nested loop with a direct iteration over `state.inventories.values()` introduces a critical O(N^2) scaling regression if the function is called per-merchant. `state.inventories` scales with the total number of companies in the simulation. While a global table scan might benchmark faster locally for a tiny number of simulated entities, it severely degrades tick loop performance at scale.
-**Action:** When optimizing per-entity decision loops, avoid iterating over global state collections that scale with the number of entities (like `inventories`, `market_orders`, or `companies`). Instead, use targeted lookups keyed by the entity's known scope or iterate only over structurally bounded collections (like `resource_types` or `cities`).
-
-## 2026-10-15 - [Unintended O(N) Shifting Operations in Hot Loops]
-**Learning:** Using `Vec::retain()` immediately after sorting a large vector inside a tick loop introduces an unnecessary O(N) linear shift. In hot paths like market clearing, it is computationally cheaper to eagerly filter elements (e.g., ignoring items with zero quantity) *before* pushing them to the intermediate vector for sorting, rather than allocating them, sorting them, and then sequentially filtering them.
-**Action:** Always filter invalid or empty elements before accumulating them into vectors that will be subsequently sorted or processed in a hot loop to save memory allocation, sorting overhead, and avoid extra O(N) passes.

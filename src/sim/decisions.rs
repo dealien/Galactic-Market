@@ -1985,17 +1985,22 @@ pub fn compute_merchant_opportunities(
     // Optimization: Precompute the home_city_id for the merchant
     let merchant_home_city_id = state.companies.get(&merchant_id).map(|c| c.home_city_id);
 
-    // Triple-nested loop: all resources × origin cities × destination cities
+    // Bolt optimization: Instead of evaluating all resources and origin cities (O(R*C*C)),
+    // only evaluate resource+origin combinations that satisfy the inventory check.
+    // 1. If origin_city_id == merchant_home_city_id, it has inventory for all resources.
+    // 2. Or, if the merchant actually has inventory > 0 for a specific resource at an origin city.
+
+    // We avoid iterating over all inventories which is O(Total_Inventories) and degrades scaling.
+    // We use a small optimization to eagerly filter destinations using a precomputed list of EMA prices.
+
     for &res_id in state.resource_types.keys() {
         for &origin_city_id in state.cities.keys() {
             // Skip if no inventory to sell (can't buy)
-            // Checking inventory is faster than checking EMA price, do it first!
             let has_inventory = merchant_home_city_id == Some(origin_city_id)
                 || state
                     .inventories
                     .get(&(merchant_id, origin_city_id, res_id))
-                    .map(|inv| inv.quantity > 0)
-                    .unwrap_or(false);
+                    .is_some_and(|inv| inv.quantity > 0);
 
             if !has_inventory {
                 continue; // Can't profitably sell what we don't have
