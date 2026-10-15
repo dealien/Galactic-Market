@@ -1686,4 +1686,61 @@ mod tests {
         // Limit orders should also remain
         assert_eq!(state.market_orders.get(&1).unwrap().quantity, 10);
     }
+
+    #[test]
+    fn test_ema_drift_no_trades() {
+        let mut state = setup_test_state();
+
+        // Initial state of EMA for city 1, resource 1
+        state.ema_prices.insert((1, 1), 10.0);
+
+        // Scenario 1: Buy orders only (Demand without supply) -> Price should go up
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        super::clear_orders(&mut state, 1);
+
+        let ema_up = *state.ema_prices.get(&(1, 1)).unwrap();
+        assert!(ema_up > 10.0, "EMA should drift up when there are buys but no sells (got {})", ema_up);
+        assert_eq!(ema_up, 10.0 * 1.01);
+
+        // Clear orders
+        state.market_orders.clear();
+
+        // Scenario 2: Sell orders only (Supply without demand) -> Price should go down
+        state.ema_prices.insert((1, 1), 10.0);
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 15.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        super::clear_orders(&mut state, 2);
+
+        let ema_down = *state.ema_prices.get(&(1, 1)).unwrap();
+        assert!(ema_down < 10.0, "EMA should drift down when there are sells but no buys (got {})", ema_down);
+        assert_eq!(ema_down, 10.0 * 0.99);
+    }
+
 }
