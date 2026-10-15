@@ -862,7 +862,7 @@ mod tests {
             1,
             Loan {
                 id: 1,
-                company_id: 99, // Missing borrower
+                company_id: 99,               // Missing borrower
                 lender_company_id: Some(100), // Missing lender
                 principal: 1040.0,
                 balance: 1040.0,
@@ -874,7 +874,10 @@ mod tests {
         super::run_finance(&mut state);
 
         let loan = state.loans.get(&1).unwrap();
-        assert_eq!(loan.balance, 1040.0, "Balance should not change if borrower is missing");
+        assert_eq!(
+            loan.balance, 1040.0,
+            "Balance should not change if borrower is missing"
+        );
 
         // Add borrower but missing lender, and borrower pays full interest
         state.companies.insert(
@@ -895,10 +898,12 @@ mod tests {
         super::run_finance(&mut state);
 
         let borrower = state.companies.get(&99).unwrap();
-        assert_eq!(borrower.cash, 30.0, "Borrower should pay interest even if lender is missing");
+        assert_eq!(
+            borrower.cash, 30.0,
+            "Borrower should pay interest even if lender is missing"
+        );
         // Lender is missing, so it just vanishes into void
     }
-
 
     #[test]
     fn test_loan_interest_shortfall_lender_missing() {
@@ -940,5 +945,4 @@ mod tests {
         let loan = state.loans.get(&1).unwrap();
         assert_eq!(loan.balance, 1050.0); // 1040 + 10 shortfall
     }
-
 }

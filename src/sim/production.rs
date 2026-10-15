@@ -1083,14 +1083,20 @@ mod tests {
                 city_id: 1,
                 resource_type_id: 1,
                 quantity: 10,
-            }
+            },
         );
 
         super::run_production(&mut s);
 
-        let end_qty = s.inventories.get(&Inventory::key(1, 1, 2)).map_or(0, |i| i.quantity);
+        let end_qty = s
+            .inventories
+            .get(&Inventory::key(1, 1, 2))
+            .map_or(0, |i| i.quantity);
 
-        assert!(end_qty > 0 && end_qty < 10, "Should produce but with penalty, got {}", end_qty);
+        assert!(
+            end_qty > 0 && end_qty < 10,
+            "Should produce but with penalty, got {}",
+            end_qty
+        );
     }
-
 }

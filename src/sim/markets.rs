@@ -1713,7 +1713,11 @@ mod tests {
         super::clear_orders(&mut state, 1);
 
         let ema_up = *state.ema_prices.get(&(1, 1)).unwrap();
-        assert!(ema_up > 10.0, "EMA should drift up when there are buys but no sells (got {})", ema_up);
+        assert!(
+            ema_up > 10.0,
+            "EMA should drift up when there are buys but no sells (got {})",
+            ema_up
+        );
         assert_eq!(ema_up, 10.0 * 1.01);
 
         // Clear orders
@@ -1739,8 +1743,11 @@ mod tests {
         super::clear_orders(&mut state, 2);
 
         let ema_down = *state.ema_prices.get(&(1, 1)).unwrap();
-        assert!(ema_down < 10.0, "EMA should drift down when there are sells but no buys (got {})", ema_down);
+        assert!(
+            ema_down < 10.0,
+            "EMA should drift down when there are sells but no buys (got {})",
+            ema_down
+        );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
-
 }
