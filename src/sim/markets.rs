@@ -34,6 +34,10 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     for (&id, order) in &state.market_orders {
         let is_market = order.order_kind == "market"; // Bolt optimization: Avoid explicit .as_str() when PartialEq is available for String and &str
         let is_buy = order.order_type == "buy";
+        // Bolt optimization: Ignore 0-quantity orders early.
+        if order.quantity == 0 {
+            continue;
+        }
         let item = (
             id,
             is_market,
