@@ -34,6 +34,10 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     for (&id, order) in &state.market_orders {
         let is_market = order.order_kind == "market"; // Bolt optimization: Avoid explicit .as_str() when PartialEq is available for String and &str
         let is_buy = order.order_type == "buy";
+        // Bolt optimization: Ignore 0-quantity orders early.
+        if order.quantity == 0 {
+            continue;
+        }
         let item = (
             id,
             is_market,
@@ -67,11 +71,15 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                b_price
-                    .partial_cmp(&a_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
+                // but we fallback to then_with to match NaN identicals.
+                if a_price < b_price {
+                    std::cmp::Ordering::Greater
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Less
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 
@@ -84,11 +92,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                a_price
-                    .partial_cmp(&b_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
+                if a_price < b_price {
+                    std::cmp::Ordering::Less
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 
