@@ -265,3 +265,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - Uncovering missing empire name tests
 **Learning:** Testing logic involving `state.empires.get(...).unwrap_or_default()` when creating new entities requires forcing `state.empires` to drop the empire after initial diplomatic relations were established but before the logic runs, effectively triggering the default name behavior.
 **Action:** When testing fallback logic for struct fields fetched from hashmaps (like names in `SimState::empires`), explicitly `remove` the keys from the hashmap after satisfying earlier state dependencies instead of trying to pass invalid states from the beginning.
+## $(date +%Y-%m-%d) - Optimize loop conditions by short circuiting expensive ops
+**Learning:** When optimizing heavily nested loops (e.g., O(N^3) arbitrage scans), you can order your condition checks by computational expense (lazy evaluation). Short-circuit execution early using simple mathematical bounds before performing expensive calculations like transport cost lookups.
+**Action:** When evaluating profit margins or conditions derived from multi-step calculations, algebraically isolate simple bounds (like `sell_price <= buy_price * 1.001`) to short-circuit the loop *before* expensive lookups (like transport or map getters) are made.
