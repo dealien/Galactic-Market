@@ -864,7 +864,7 @@ mod tests {
     /// (e.g. missing City, Body, System, or Sector) while still resetting the tax pool.
     #[test]
     fn test_process_city_taxes_skips_missing_entities() {
-        use crate::sim::state::{CelestialBody, City, Sector, StarSystem};
+        use crate::sim::state::{CelestialBody, City, StarSystem};
         let mut state = SimState::new();
 
         // Setup incomplete chain
