@@ -853,4 +853,96 @@ mod tests {
         // Company shouldn't be taxed because it has no empire
         assert_eq!(state.companies[&1].cash, 1000.0);
     }
+
+    #[test]
+    fn test_loan_interest_missing_borrower_or_lender() {
+        let mut state = SimState::new();
+
+        state.loans.insert(
+            1,
+            Loan {
+                id: 1,
+                company_id: 99,               // Missing borrower
+                lender_company_id: Some(100), // Missing lender
+                principal: 1040.0,
+                balance: 1040.0,
+                interest_rate: 1.0, // 20 per tick
+            },
+        );
+
+        // Run finance, missing borrower should skip logic
+        super::run_finance(&mut state);
+
+        let loan = state.loans.get(&1).unwrap();
+        assert_eq!(
+            loan.balance, 1040.0,
+            "Balance should not change if borrower is missing"
+        );
+
+        // Add borrower but missing lender, and borrower pays full interest
+        state.companies.insert(
+            99,
+            Company {
+                id: 99,
+                name: "Borrower".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 50.0, // Has 50, interest is 20
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        super::run_finance(&mut state);
+
+        let borrower = state.companies.get(&99).unwrap();
+        assert_eq!(
+            borrower.cash, 30.0,
+            "Borrower should pay interest even if lender is missing"
+        );
+        // Lender is missing, so it just vanishes into void
+    }
+
+    #[test]
+    fn test_loan_interest_shortfall_lender_missing() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Borrower".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 10.0, // Has 10, interest is 20 -> shortfall 10
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+        // Note: No lender company in state.companies
+
+        state.loans.insert(
+            1,
+            Loan {
+                id: 1,
+                company_id: 1,
+                lender_company_id: Some(2), // Lender does not exist
+                principal: 1040.0,
+                balance: 1040.0,
+                interest_rate: 1.0, // 20 per tick
+            },
+        );
+
+        super::run_finance(&mut state);
+
+        let borrower = state.companies.get(&1).unwrap();
+        assert_eq!(borrower.cash, 0.0);
+
+        let loan = state.loans.get(&1).unwrap();
+        assert_eq!(loan.balance, 1050.0); // 1040 + 10 shortfall
+    }
 }

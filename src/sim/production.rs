@@ -1017,4 +1017,86 @@ mod tests {
             "Should not have produced anything"
         );
     }
+
+    #[test]
+    fn test_production_war_theater_penalty() {
+        let mut s = make_state();
+
+        // Remove ALL existing facilities
+        s.facilities.clear();
+        s.recipes.clear();
+        s.inventories.clear();
+
+        // Add war theater logic
+        s.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                status: "active".into(),
+                start_tick: 0,
+                end_tick: None,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+                theaters: vec![1], // System 1 is a war theater
+                participants: vec![],
+                cumulative_losses: 0.0,
+            },
+        );
+
+        // Add a refinery facility
+        s.facilities.insert(
+            1,
+            Facility {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                facility_type: "refinery".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: Some(2),
+                production_ratios: Some(std::collections::HashMap::from([("1".to_string(), 1.0)])),
+            },
+        );
+
+        s.recipes.insert(
+            1,
+            Recipe {
+                id: 1,
+                name: "Refining".into(),
+                output_resource_id: 2,
+                output_qty: 1,
+                facility_type: "refinery".into(),
+                inputs: vec![RecipeInput {
+                    resource_type_id: 1,
+                    quantity: 1,
+                }],
+                labor_cost_per_run: 1.0,
+            },
+        );
+
+        s.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+
+        super::run_production(&mut s);
+
+        let end_qty = s
+            .inventories
+            .get(&Inventory::key(1, 1, 2))
+            .map_or(0, |i| i.quantity);
+
+        assert!(
+            end_qty > 0 && end_qty < 10,
+            "Should produce but with penalty, got {}",
+            end_qty
+        );
+    }
 }

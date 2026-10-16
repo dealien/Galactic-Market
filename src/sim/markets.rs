@@ -34,6 +34,10 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
     for (&id, order) in &state.market_orders {
         let is_market = order.order_kind == "market"; // Bolt optimization: Avoid explicit .as_str() when PartialEq is available for String and &str
         let is_buy = order.order_type == "buy";
+        // Bolt optimization: Ignore 0-quantity orders early.
+        if order.quantity == 0 {
+            continue;
+        }
         let item = (
             id,
             is_market,
@@ -67,11 +71,15 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                b_price
-                    .partial_cmp(&a_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
+                // but we fallback to then_with to match NaN identicals.
+                if a_price < b_price {
+                    std::cmp::Ordering::Greater
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Less
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 
@@ -84,11 +92,14 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
                     }
                     return std::cmp::Ordering::Greater;
                 }
-                a_price
-                    .partial_cmp(&b_price)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| a_tick.cmp(&b_tick))
-                    .then_with(|| a_id.cmp(&b_id))
+                // Bolt optimization: manual inline total_cmp is faster than partial_cmp
+                if a_price < b_price {
+                    std::cmp::Ordering::Less
+                } else if a_price > b_price {
+                    std::cmp::Ordering::Greater
+                } else {
+                    a_tick.cmp(&b_tick).then_with(|| a_id.cmp(&b_id))
+                }
             },
         );
 
@@ -1685,5 +1696,69 @@ mod tests {
         assert_eq!(state.market_orders.get(&6).unwrap().quantity, 10);
         // Limit orders should also remain
         assert_eq!(state.market_orders.get(&1).unwrap().quantity, 10);
+    }
+
+    #[test]
+    fn test_ema_drift_no_trades() {
+        let mut state = setup_test_state();
+
+        // Initial state of EMA for city 1, resource 1
+        state.ema_prices.insert((1, 1), 10.0);
+
+        // Scenario 1: Buy orders only (Demand without supply) -> Price should go up
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 5.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        super::clear_orders(&mut state, 1);
+
+        let ema_up = *state.ema_prices.get(&(1, 1)).unwrap();
+        assert!(
+            ema_up > 10.0,
+            "EMA should drift up when there are buys but no sells (got {})",
+            ema_up
+        );
+        assert_eq!(ema_up, 10.0 * 1.01);
+
+        // Clear orders
+        state.market_orders.clear();
+
+        // Scenario 2: Sell orders only (Supply without demand) -> Price should go down
+        state.ema_prices.insert((1, 1), 10.0);
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 15.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        super::clear_orders(&mut state, 2);
+
+        let ema_down = *state.ema_prices.get(&(1, 1)).unwrap();
+        assert!(
+            ema_down < 10.0,
+            "EMA should drift down when there are sells but no buys (got {})",
+            ema_down
+        );
+        assert_eq!(ema_down, 10.0 * 0.99);
     }
 }
