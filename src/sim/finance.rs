@@ -711,6 +711,8 @@ mod tests {
         assert_eq!(lender.cash, 100.0 + interest);
     }
 
+    /// Verifies that when a borrower cannot fully pay loan interest and the lender is not a company,
+    /// the borrower's cash is zeroed and the shortfall is correctly added to the loan balance.
     #[test]
     fn test_loan_interest_shortfall_lender_not_company() {
         let mut state = SimState::new();
@@ -719,10 +721,10 @@ mod tests {
             1,
             Company {
                 id: 1,
-                name: "Broke Borrower".into(),
+                name: "Bankrupt Co".into(),
                 company_type: "freelancer".into(),
                 home_city_id: 1,
-                cash: 5.0,
+                cash: 5.0, // Only has 5.0 cash
                 debt: 0.0,
                 next_eval_tick: 1,
                 status: "active".into(),
@@ -730,20 +732,24 @@ mod tests {
             },
         );
 
-        // Lender is not a company, cash > 0
-        state.add_loan(Loan {
-            id: 1,
-            company_id: 1,
-            lender_company_id: None,
-            principal: 1040.0, // interest will be 10.4
-            interest_rate: 0.52,
-            balance: 1040.0,
-        });
+        state.loans.insert(
+            1,
+            Loan {
+                id: 1,
+                company_id: 1,
+                lender_company_id: None, // Lender is not a company
+                principal: 1000.0,
+                balance: 1000.0,
+                interest_rate: 0.52, // 52% per year -> 1% per tick -> 10.0 interest
+            },
+        );
 
         run_finance(&mut state);
 
+        // Company 1 pays 5.0 towards 10.0 interest and has 0.0 cash left.
         assert_eq!(state.companies[&1].cash, 0.0);
-        assert_eq!(state.loans[&1].balance, 1045.4); // 1040.0 + 5.4 shortfall
+        // The remaining 5.0 interest is added to balance
+        assert_eq!(state.loans[&1].balance, 1005.0);
     }
 
     #[test]
@@ -852,5 +858,186 @@ mod tests {
         run_finance(&mut state);
         // Company shouldn't be taxed because it has no empire
         assert_eq!(state.companies[&1].cash, 1000.0);
+    }
+
+    /// Verifies that city tax processing gracefully skips any incomplete location entity chains
+    /// (e.g. missing City, Body, System, or Sector) while still resetting the tax pool.
+    #[test]
+    fn test_process_city_taxes_skips_missing_entities() {
+        use crate::sim::state::{CelestialBody, City, Sector, StarSystem};
+        let mut state = SimState::new();
+
+        // Setup incomplete chain
+        state.add_city_tax(1, 100.0);
+        state.add_city_tax(2, 100.0);
+        state.add_city_tax(3, 100.0);
+        state.add_city_tax(4, 100.0);
+
+        // Missing City
+        // City 1 is completely missing
+
+        // Missing Body
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                body_id: 2,
+                name: "City".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 10,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        // Body 2 is missing
+
+        // Missing System
+        state.cities.insert(
+            3,
+            City {
+                id: 3,
+                body_id: 3,
+                name: "City".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 10,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            3,
+            CelestialBody {
+                id: 3,
+                system_id: 3,
+                name: "Body".into(),
+                fertility: 1.0,
+            },
+        );
+        // System 3 is missing
+
+        // Missing Sector
+        state.cities.insert(
+            4,
+            City {
+                id: 4,
+                body_id: 4,
+                name: "City".into(),
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 10,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+        state.celestial_bodies.insert(
+            4,
+            CelestialBody {
+                id: 4,
+                system_id: 4,
+                name: "Body".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            4,
+            StarSystem {
+                id: 4,
+                sector_id: 4,
+                name: "System".into(),
+            },
+        );
+        // Sector 4 is missing
+
+        run_finance(&mut state);
+
+        // Ensure no taxes were processed
+        assert_eq!(state.get_empire_treasury(5), 0.0);
+        assert_eq!(state.get_city_tax_pool(1), 0.0); // Reset still happens
+    }
+
+    /// Verifies that city tax processing skips entries with zero or negative tax pools,
+    /// but ensures the pool is still reset appropriately.
+    #[test]
+    fn test_process_city_taxes_skips_zero_or_negative_amount() {
+        let mut state = SimState::new();
+
+        // City tax amounts 0.0 or negative
+        state.add_city_tax(1, 0.0);
+        state.add_city_tax(2, -10.0);
+
+        // Run the finance step which processes city taxes
+        run_finance(&mut state);
+
+        // State treasury shouldn't change
+        assert_eq!(state.get_empire_treasury(5), 0.0);
+        // Tax pools should be reset regardless
+        assert_eq!(state.get_city_tax_pool(1), 0.0);
+        assert_eq!(state.get_city_tax_pool(2), 0.0);
+    }
+
+    /// Verifies that when a company cannot fully pay loan interest, the borrower uses all remaining cash,
+    /// the shortfall is added to the loan balance, and the lender company only receives the amount actually paid.
+    #[test]
+    fn test_loan_interest_shortfall_lender_is_company() {
+        let mut state = SimState::new();
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Bankrupt Co".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 5.0, // Only has 5.0 cash
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Bank".into(),
+                company_type: "bank".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.loans.insert(
+            1,
+            Loan {
+                id: 1,
+                company_id: 1,
+                lender_company_id: Some(2), // Lender is Company 2
+                principal: 1000.0,
+                balance: 1000.0,
+                interest_rate: 0.52, // 52% per year -> 1% per tick -> 10.0 interest
+            },
+        );
+
+        run_finance(&mut state);
+
+        // Company 1 pays 5.0 towards 10.0 interest and has 0.0 cash left.
+        assert_eq!(state.companies[&1].cash, 0.0);
+        // The remaining 5.0 interest is added to balance
+        assert_eq!(state.loans[&1].balance, 1005.0);
+        // The bank gets the 5.0 cash that Company 1 managed to pay
+        assert_eq!(state.companies[&2].cash, 1005.0);
     }
 }
