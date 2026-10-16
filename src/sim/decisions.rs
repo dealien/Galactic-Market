@@ -2024,7 +2024,8 @@ pub fn compute_merchant_opportunities(
                     .unwrap_or(0.0);
 
                 // Bolt optimization: Only compute transport costs if there's a potential profit
-                if sell_price <= buy_price {
+                // Also check if profit margin > buy_price * 0.001 before computing transport costs!
+                if sell_price <= buy_price * 1.001 {
                     continue;
                 }
 
