@@ -273,3 +273,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+
+## 2024-10-17 - Avoid cloning maps inside tick loops
+**Learning:** In the `run_decisions` tick loop hot path, caching mechanism elements such as `state.price_cache` should not be aggressively cloned via `let last_prices = last_known_prices(state);` on every tick. The state is only modified at the very end of the tick (or sequentially after other phases), so directly fetching from the pre-existing structure (`state.price_cache.get(&k)`) maintains semantic correctness while eliminating significant memory allocation overhead.
+**Action:** When working in tick loops, if you need to reference historical or semi-static data structures (like price caches) inside the hot path, do not clone them; instead, use direct references or `.get()` lookups from the existing state struct to avoid O(N) memory allocations per loop iteration.
