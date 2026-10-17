@@ -1428,6 +1428,440 @@ mod tests {
     }
 
     #[test]
+    fn test_clear_orders_negative_cash_catch_all() {
+        let mut state = _setup_test_state();
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Poor Buyer".to_string(),
+                company_type: "consumer".to_string(),
+                home_city_id: 1,
+                cash: -50.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "producer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: 10.0,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: 10.0,
+                created_tick: 1,
+            },
+        );
+        clear_orders(&mut state, 2);
+        // The catch-all skips the buyer but does NOT void the order quantity (it just increments b_idx).
+        // Let's assert the catch-all was hit by seeing that order was processed but nothing traded.
+        assert_eq!(
+            state.market_orders.get(&1).map(|o| o.quantity).unwrap_or(0),
+            10
+        );
+    }
+
+    #[test]
+    fn test_clear_orders_affordable_zero_clearing_zero() {
+        let mut state = _setup_test_state();
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Buyer".to_string(),
+                company_type: "consumer".to_string(),
+                home_city_id: 1,
+                cash: 0.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "producer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: 0.0,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: 0.0,
+                created_tick: 1,
+            },
+        );
+        clear_orders(&mut state, 2);
+        // At 0.0 price, the item is free, so affordable_by_buyer is buy_qty.
+        // It should match 10 quantity at 0.0 price. Buyer gets 10 inventory, seller gets 0 cash.
+        assert_eq!(
+            state
+                .inventories
+                .get(&crate::sim::state::Inventory::key(1, 1, 1))
+                .map(|i| i.quantity)
+                .unwrap_or(0),
+            10
+        );
+        assert_eq!(
+            state.companies.get(&1).map(|c| c.cash).unwrap_or(0.0),
+            0.0 // No cash deducted since price was 0
+        );
+        assert_eq!(
+            state.companies.get(&2).map(|c| c.cash).unwrap_or(0.0),
+            1000.0 // No cash added
+        );
+    }
+
+    #[test]
+    fn test_clear_orders_nan_clearing_price() {
+        let mut state = _setup_test_state();
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Buyer".to_string(),
+                company_type: "consumer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "producer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 1,
+            },
+        );
+        clear_orders(&mut state, 2);
+        // For NaN prices, clearing_price becomes NaN.
+        // `clearing_price > 0.0` is false.
+        // `affordable_by_buyer = buy_qty` (which is 10).
+        // `cash_transferred = NaN * 10 = NaN`.
+        // `port_fee = NaN`.
+        // Seller cash += NaN - NaN -> NaN. Buyer cash -= NaN -> NaN.
+        // Target buyer gets the inventory, seller loses inventory.
+        // The quantity matched is 10, so it's fully cleared!
+        assert_eq!(
+            state.market_orders.get(&1).map(|o| o.quantity).unwrap_or(0),
+            0
+        );
+    }
+
+    #[test]
+    fn test_clear_orders_infinity_clearing_price() {
+        let mut state = _setup_test_state();
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Buyer".to_string(),
+                company_type: "consumer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "producer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: f64::INFINITY,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: f64::INFINITY,
+                created_tick: 1,
+            },
+        );
+        clear_orders(&mut state, 2);
+        // For Infinity price: clearing_price is INF.
+        assert_eq!(
+            state.market_orders.get(&1).map(|o| o.quantity).unwrap_or(0),
+            0
+        );
+    }
+
+    #[test]
+    fn test_clear_orders_nan_sorting_coverage() {
+        let mut state = _setup_test_state();
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Buyer".to_string(),
+                company_type: "consumer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "producer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+        // We want two buys and two sells where price is NAN to hit the `then_with` fallback
+        // when a_price < b_price and a_price > b_price are both false.
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 2,
+            },
+        );
+        state.market_orders.insert(
+            3,
+            MarketOrder {
+                id: 3,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            4,
+            MarketOrder {
+                id: 4,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: f64::NAN,
+                created_tick: 2,
+            },
+        );
+        clear_orders(&mut state, 2);
+        // The market orders are fully resolved because they match against the NaN sell orders.
+        // Actually, order 1 buys from order 3 or 4. They all have NaN prices.
+        // NaN price results in full match just like test_clear_orders_nan_clearing_price.
+        // Both buy orders will clear completely.
+        assert_eq!(
+            state.market_orders.get(&1).map(|o| o.quantity).unwrap_or(0),
+            0
+        );
+    }
+
+    #[test]
     fn test_clear_orders_zero_quantity_catch_all() {
         let mut state = _setup_test_state();
         state.companies.insert(
