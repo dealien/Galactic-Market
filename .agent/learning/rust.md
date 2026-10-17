@@ -273,3 +273,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+## 2024-05-24 - [Strict Requirements for Meaningful Test Assertions]
+**Learning:** Adding test coverage by executing previously un-exercised code paths is insufficient; test functions that lack assertions will be rejected in code review.
+**Action:** When adding tests as Argus, ensure every test verifies actual correctness and state changes (e.g., using `assert_eq!`) rather than just ensuring the code doesn't panic.
