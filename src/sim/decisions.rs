@@ -135,7 +135,6 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
     // Snapshot the last known clearing prices for decision-making
 
     // Snapshot the last known clearing prices for decision-making
-    // last_prices removed
 
     // Collect company IDs that are due for re-evaluation
     let mut due: Vec<i32> = state
@@ -965,7 +964,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
             if cash > 10.0 && !target_ids.is_empty() {
                 let budget_per_product = (cash * 0.5) / target_ids.len() as f64;
                 for &r_id in &target_ids {
-                    let target_price = state.price_cache
+                    let target_price = state
+                        .price_cache
                         .get(&(home_city_id, r_id))
                         .copied()
                         .unwrap_or(20.0);
@@ -1163,7 +1163,8 @@ pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng
                         }
 
                         let base_ask = cost * 1.15;
-                        let market_price = state.price_cache
+                        let market_price = state
+                            .price_cache
                             .get(&(home_city_id, res_id))
                             .copied()
                             .unwrap_or(base_ask * 1.5);
@@ -1868,9 +1869,6 @@ pub fn run_empire_relief(state: &mut SimState, _current_tick: u64) {
         );
     }
 }
-
-
-
 
 /// Phase 5a (precompute): Analyze food balance per city for merchant routing priority.
 /// Computes surplus/deficit and fulfillment ratio, enabling merchants to route food to starving cities.
