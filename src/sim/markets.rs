@@ -1761,4 +1761,116 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    #[test]
+    fn test_market_clearing_zero_qty_catchall() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        // Setup City
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                name: "Test City".into(),
+                body_id: 1,
+                population: 100,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 0.0,
+                port_max_throughput: 100,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.0,
+            },
+        );
+
+        // Buyer Company
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Buyer".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Seller Company
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Seller".into(),
+                company_type: "freelancer".into(),
+                home_city_id: 1,
+                cash: 0.0,
+                debt: 0.0,
+                next_eval_tick: 1,
+                status: "active".into(),
+                last_trade_tick: 0,
+            },
+        );
+
+        // Give seller plenty of inventory
+        state.inventories.insert(
+            Inventory::key(2, 1, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        // Add a Buy order with ZERO quantity
+        state.market_orders.insert(
+            100,
+            MarketOrder {
+                id: 100,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "market".into(),
+                quantity: 0, // ZERO QUANTITY
+                price: 0.0,
+                created_tick: 1,
+            },
+        );
+
+        // Add a Sell order
+        state.market_orders.insert(
+            101,
+            MarketOrder {
+                id: 101,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "market".into(),
+                quantity: 10,
+                price: 0.0,
+                created_tick: 1,
+            },
+        );
+
+        // Give a realistic EMA to avoid fallback zero pricing issues
+        state.ema_prices.insert((1, 1), 10.0);
+
+        // Run clear_orders
+        super::clear_orders(&mut state, 1);
+
+        // Assert the catch-all branch avoided a hang and correctly skipped the buyer,
+        // and because b.5 == 0, b_idx incremented and loop finished.
+        // And the buy order with zero quantity is removed from state.
+        assert!(
+            !state.market_orders.contains_key(&100),
+            "Zero-quantity buy order should be removed"
+        );
+    }
 }
