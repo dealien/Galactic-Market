@@ -1761,4 +1761,56 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = setup_test_state();
+
+        state.companies.insert(3, make_company(3, 100.0));
+        state.inventories.insert(
+            Inventory::key(3, 1, 1),
+            Inventory {
+                company_id: 3,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 10,
+            },
+        );
+
+        state.companies.insert(2, make_company(2, 50.0));
+
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_kind: "sell".into(),
+                order_type: "limit".into(),
+                price: 20.0,
+                company_id: 3,
+                quantity: 10,
+                created_tick: 1,
+            },
+        );
+
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_kind: "buy".into(),
+                order_type: "limit".into(),
+                price: 25.0,
+                company_id: 2,
+                quantity: 0, // This is the key: quantity 0 triggers the catch-all
+                created_tick: 1,
+            },
+        );
+
+        super::clear_orders(&mut state, 1);
+
+        assert_eq!(state.market_orders.len(), 1);
+    }
 }

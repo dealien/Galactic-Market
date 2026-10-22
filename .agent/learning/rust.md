@@ -273,3 +273,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+
+## 2024-05-18 - SimState Market Order Catch-All Verification
+**Learning:** In the `markets.rs` module, testing the `Zero quantity match catch-all; skipping buyer` block (where `actual_buyer_cash >= clearing_price`, `affordable_by_buyer > 0`, `actual_seller_inventory > 0` but `qty == 0`) requires creating a scenario where the `buy_qty` itself is strictly `0`. This is the only way for the minimum function to yield 0 without triggering the other deterministic void cases for lack of cash or inventory.
+**Action:** When testing defensive fallback blocks intended to prevent infinite loops (like `warn!("Zero quantity match catch-all...")`), explicitly trace the logic leading up to it to see what combinations of states can force the outer conditional loop to evaluate `qty == 0` without matching explicit check paths, which usually means injecting `0` values directly into the input entities.
