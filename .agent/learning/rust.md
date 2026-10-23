@@ -273,3 +273,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+## 2024-05-18 - Inventory Key Generation in Tests
+**Learning:** In the Galactic Market Simulator `state::Inventory` struct, `key()` is an associated function, not a method. When deriving the key for an inventory, use `Inventory::key(company_id, city_id, resource_type_id)` rather than calling `.key()` on an `Inventory` instance.
+**Action:** When writing tests that manipulate `state.inventories` in `SimState`, use the static `Inventory::key` associated function to correctly insert and lookup entries in the HashMap.
