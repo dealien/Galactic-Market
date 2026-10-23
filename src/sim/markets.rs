@@ -1761,4 +1761,74 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = SimState::new();
+        state.tick = 1;
+
+        let city = City {
+            id: 1,
+            name: "Test City".into(),
+            body_id: 1,
+            population: 1000,
+            infrastructure_lvl: 1,
+            port_tier: 1,
+            port_max_throughput: 100,
+            port_fee_per_unit: 0.0,
+            tax_collected_this_tick: 0.0,
+            population_growth_rate: 0.0,
+        };
+        state.cities.insert(1, city);
+
+        let buyer = make_company(1, 1000.0);
+        let seller = make_company(2, 1000.0);
+        state.companies.insert(1, buyer);
+        state.companies.insert(2, seller);
+
+        let inv = Inventory {
+            company_id: 2,
+            city_id: 1,
+            resource_type_id: 1,
+            quantity: 100,
+        };
+        state.inventories.insert(Inventory::key(2, 1, 1), inv);
+
+        // Inject buy order with strictly 0 quantity
+        let buy_order = MarketOrder {
+            id: 1,
+            city_id: 1,
+            resource_type_id: 1,
+            company_id: 1,
+            order_kind: "limit".into(),
+            order_type: "buy".into(),
+            price: 10.0,
+            quantity: 0,
+            created_tick: 1,
+        };
+        state.market_orders.insert(1, buy_order);
+
+        // Inject sell order with 10 quantity
+        let sell_order = MarketOrder {
+            id: 2,
+            city_id: 1,
+            resource_type_id: 1,
+            company_id: 2,
+            order_kind: "limit".into(),
+            order_type: "sell".into(),
+            price: 10.0,
+            quantity: 10,
+            created_tick: 1,
+        };
+        state.market_orders.insert(2, sell_order);
+
+        // Run market clearing logic
+        clear_orders(&mut state, 1);
+
+        // Should skip buyer and not panic, and since buyer pointer increments, no trade happens
+        assert_eq!(state.companies.get(&1).unwrap().cash, 1000.0);
+        assert_eq!(state.companies.get(&2).unwrap().cash, 1000.0);
+        assert_eq!(state.inventories.get(&(2, 1, 1)).unwrap().quantity, 100);
+        assert_eq!(state.market_orders.len(), 1); // Only the unfulfilled seller remains, zero qty is filtered
+    }
 }
