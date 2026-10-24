@@ -273,3 +273,11 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+
+## 2024-10-24 - Zero-Cost Iterators
+**Learning:** In Rust, replacing idiomatic iterator chaining (e.g., `.filter().map().sum()`) with manual `for` loops is an anti-pattern for micro-optimization. Standard iterators are zero-cost abstractions that compile to highly optimized loops and often outperform manual loops by eliminating unnecessary bounds checks. Do not 'optimize' iterators out of code unless profilers specifically flag closure overhead.
+**Action:** Always measure before replacing idiomatic Rust iterators with manual loops, and recognize that `for` loops are rarely a performance fix for standard collection processing.
+
+## 2024-10-24 - Unnecessary Allocation Regressions
+**Learning:** When attempting to optimize functions returning complex types (like `Vec<(i32, f64)>`), do not substitute in-place modification of the target type with an intermediate allocation (like a separate `Vec<f64>` followed by zipping/merging). The secondary allocation and iteration loop introduces measurable performance regressions compared to modifying the pre-allocated final structure directly.
+**Action:** When pre-allocating memory for optimizations, ensure you are directly constructing the final return type, rather than an intermediate buffer that requires a subsequent allocation and mapping step.
