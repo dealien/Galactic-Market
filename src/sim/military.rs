@@ -410,10 +410,10 @@ pub fn calculate_military_strength_for_empires_map(
     // Bolt optimization: Pre-allocate vector and map by index for O(1) lookups in O(U) loop
     let mut strengths = vec![0.0_f64; empire_ids.len()];
     for u in state.military_units.values() {
-        if u.system_id == system_id {
-            if let Some(p) = empire_ids.iter().position(|&id| id == u.empire_id) {
-                strengths[p] += u.strength * u.morale;
-            }
+        if u.system_id == system_id
+            && let Some(p) = empire_ids.iter().position(|&id| id == u.empire_id)
+        {
+            strengths[p] += u.strength * u.morale;
         }
     }
     let mut result = Vec::with_capacity(empire_ids.len());
