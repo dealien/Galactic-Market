@@ -6256,7 +6256,7 @@ mod tests {
         // Make inventory large enough to ship
         let inv_key = Inventory::key(1, 1, 1);
         state.inventories.insert(
-            inv_key.clone(),
+            inv_key,
             Inventory {
                 company_id: 1,
                 city_id: 1,
@@ -6322,7 +6322,7 @@ mod tests {
         // Make inventory small enough not to ship, but enough to trigger sell order
         let inv_key = Inventory::key(1, 1, 1);
         state.inventories.insert(
-            inv_key.clone(),
+            inv_key,
             Inventory {
                 company_id: 1,
                 city_id: 1,
@@ -6396,7 +6396,7 @@ mod tests {
 
         let inv_key = Inventory::key(1, 1, 1);
         state.inventories.insert(
-            inv_key.clone(),
+            inv_key,
             Inventory {
                 company_id: 1,
                 city_id: 1,
