@@ -392,12 +392,14 @@ pub fn calculate_military_strength_for_empires(
     empire_ids: &[i32],
     system_id: i32,
 ) -> f64 {
-    state
-        .military_units
-        .values()
-        .filter(|u| u.system_id == system_id && empire_ids.contains(&u.empire_id))
-        .map(|u| u.strength * u.morale)
-        .sum()
+    // Bolt optimization: Avoid map/filter closures and use direct iteration.
+    let mut total_strength = 0.0;
+    for u in state.military_units.values() {
+        if u.system_id == system_id && empire_ids.contains(&u.empire_id) {
+            total_strength += u.strength * u.morale;
+        }
+    }
+    total_strength
 }
 
 pub fn calculate_military_strength_for_empires_map(
@@ -405,19 +407,20 @@ pub fn calculate_military_strength_for_empires_map(
     empire_ids: &[i32],
     system_id: i32,
 ) -> Vec<(i32, f64)> {
-    let mut strengths = Vec::with_capacity(empire_ids.len());
-    for &id in empire_ids {
-        strengths.push((id, 0.0_f64));
-    }
+    // Bolt optimization: Pre-allocate vector and map by index for O(1) lookups in O(U) loop
+    let mut strengths = vec![0.0_f64; empire_ids.len()];
     for u in state.military_units.values() {
         if u.system_id == system_id {
-            let pos = empire_ids.iter().position(|&id| id == u.empire_id);
-            if let Some(p) = pos {
-                strengths[p].1 += u.strength * u.morale;
+            if let Some(p) = empire_ids.iter().position(|&id| id == u.empire_id) {
+                strengths[p] += u.strength * u.morale;
             }
         }
     }
-    strengths
+    let mut result = Vec::with_capacity(empire_ids.len());
+    for (i, &id) in empire_ids.iter().enumerate() {
+        result.push((id, strengths[i]));
+    }
+    result
 }
 
 #[cfg(test)]
