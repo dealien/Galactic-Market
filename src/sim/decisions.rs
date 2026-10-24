@@ -6211,12 +6211,27 @@ mod tests {
 
     #[test]
     fn test_miner_ships_ore_to_higher_price_city() {
-        use crate::sim::state::{City, CelestialBody, StarSystem, Inventory};
+        use crate::sim::state::{CelestialBody, City, Inventory, StarSystem};
         let mut state = make_state_with_miner();
         let mut rng = test_rng();
 
-        state.star_systems.insert(1, StarSystem { id: 1, sector_id: 1, name: "System 1".into() });
-        state.celestial_bodies.insert(1, CelestialBody { id: 1, system_id: 1, name: "Body 1".into(), fertility: 1.0 });
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body 1".into(),
+                fertility: 1.0,
+            },
+        );
 
         // Origin city body
         state.cities.get_mut(&1).unwrap().body_id = 1;
@@ -6269,22 +6284,39 @@ mod tests {
 
         // Check if cash was deducted for transport
         let company = state.companies.get(&1).unwrap();
-        assert!(company.cash < 500.0, "Company cash should be deducted for shipping");
+        assert!(
+            company.cash < 500.0,
+            "Company cash should be deducted for shipping"
+        );
 
         // Check if inventory was reduced
         let inv = state.inventories.get(&inv_key).unwrap();
         assert_eq!(inv.quantity, 0, "Inventory should be moved into transit");
     }
 
-
     #[test]
     fn test_miner_sells_ore_at_home_city() {
-        use crate::sim::state::{CelestialBody, StarSystem, Inventory};
+        use crate::sim::state::{CelestialBody, Inventory, StarSystem};
         let mut state = make_state_with_miner();
         let mut rng = test_rng();
 
-        state.star_systems.insert(1, StarSystem { id: 1, sector_id: 1, name: "System 1".into() });
-        state.celestial_bodies.insert(1, CelestialBody { id: 1, system_id: 1, name: "Body 1".into(), fertility: 1.0 });
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body 1".into(),
+                fertility: 1.0,
+            },
+        );
         state.cities.get_mut(&1).unwrap().body_id = 1;
 
         // Make inventory small enough not to ship, but enough to trigger sell order
@@ -6322,12 +6354,27 @@ mod tests {
 
     #[test]
     fn test_miner_ships_ore_fails_insufficient_cash() {
-        use crate::sim::state::{City, CelestialBody, StarSystem, Inventory};
+        use crate::sim::state::{CelestialBody, City, Inventory, StarSystem};
         let mut state = make_state_with_miner();
         let mut rng = test_rng();
 
-        state.star_systems.insert(1, StarSystem { id: 1, sector_id: 1, name: "System 1".into() });
-        state.celestial_bodies.insert(1, CelestialBody { id: 1, system_id: 1, name: "Body 1".into(), fertility: 1.0 });
+        state.star_systems.insert(
+            1,
+            StarSystem {
+                id: 1,
+                sector_id: 1,
+                name: "System 1".into(),
+            },
+        );
+        state.celestial_bodies.insert(
+            1,
+            CelestialBody {
+                id: 1,
+                system_id: 1,
+                name: "Body 1".into(),
+                fertility: 1.0,
+            },
+        );
         state.cities.get_mut(&1).unwrap().body_id = 1;
 
         // Target city
@@ -6369,7 +6416,11 @@ mod tests {
 
         // Trade route should NOT be created
         let routes: Vec<_> = state.trade_routes.values().collect();
-        assert_eq!(routes.len(), 0, "Miner should NOT have created trade route due to cash");
+        assert_eq!(
+            routes.len(),
+            0,
+            "Miner should NOT have created trade route due to cash"
+        );
 
         // Inventory should still be there
         let inv = state.inventories.get(&inv_key).unwrap();
