@@ -273,3 +273,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+
+## $(date +%Y-%m-%d) - Sorting Logic Tests Must Verify Order
+**Learning:** Writing tests for sorting comparators (e.g. `sort_unstable_by`) that only invoke the sort and assert the collection length remains unchanged is an anti-pattern. These "theater tests" fail to verify actual behavior and will be rejected because they pass even if the sorting logic is broken or reversed.
+**Action:** When testing sorting logic, always establish a scenario with competing priorities (e.g., competing buy and sell orders), trigger the sort, and then write explicit assertions to verify that the items were processed in the exact expected order (e.g. verifying which specific order gets filled when supply is limited).

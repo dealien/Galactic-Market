@@ -1761,4 +1761,107 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    /// Tests that the matching loop correctly detects and handles zero-quantity orders
+    /// without entering an infinite loop, ensuring that cash and inventory remain unchanged.
+    /// Tests that the matching loop correctly detects and handles zero-quantity orders
+    /// without entering an infinite loop, ensuring that cash and inventory remain unchanged.
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = setup_test_state();
+
+        // Ensure buyer has plenty of cash and seller has plenty of inventory
+        // so that affordable_by_buyer and actual_seller_inventory are > 0.
+        // If qty becomes 0, it must be because the order itself had 0 quantity.
+
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                name: "Seller".to_string(),
+                company_type: "merchant".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                name: "Buyer".to_string(),
+                company_type: "merchant".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            Inventory::key(1, 1, 1),
+            Inventory {
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        // Inject 0 quantity order
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 10.0,
+                quantity: 10,
+                created_tick: 0,
+            },
+        );
+
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 10.0,
+                quantity: 0, // Strictly 0 quantity
+                created_tick: 0,
+            },
+        );
+
+        // Run clear_orders
+        super::clear_orders(&mut state, 1);
+
+        // The logic safety catch should be hit, and the orders should be handled
+        // without panicking or entering an infinite loop.
+
+        // Assert the order wasn't fully processed with normal trades (since qty was 0)
+        // Seller inventory should be untouched
+        assert_eq!(
+            state
+                .inventories
+                .get(&Inventory::key(1, 1, 1))
+                .unwrap()
+                .quantity,
+            100
+        );
+        // Buyer cash should be untouched
+        assert_eq!(state.companies.get(&2).unwrap().cash, 1000.0);
+    }
 }
