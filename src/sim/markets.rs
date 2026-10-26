@@ -1761,4 +1761,59 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = setup_test_state();
+        // Buyer has enough cash, seller has enough inventory.
+        // But the order itself has 0 quantity.
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                company_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "market".into(),
+                price: 10.0,
+                quantity: 0, // IMPORTANT: force the catch-all
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                company_id: 2,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "market".into(),
+                price: 10.0,
+                quantity: 0, // Match with 0 qty
+                created_tick: 1,
+            },
+        );
+
+        // Run clearing loop
+        clear_orders(&mut state, 2);
+
+        // Since it was skipped via the catch-all, orders should be handled safely
+        // without crashing, and eventually pruned because their qty is 0.
+        // Let's verify no inventory was moved and no cash was exchanged.
+        assert_eq!(state.companies.get(&1).unwrap().cash, 1000.0);
+        assert_eq!(state.companies.get(&2).unwrap().cash, 1000.0);
+        assert_eq!(
+            state
+                .inventories
+                .get(&Inventory::key(1, 1, 1))
+                .unwrap()
+                .quantity,
+            100
+        );
+
+        // Orders should be removed since they hit 0
+        assert_eq!(state.market_orders.len(), 0);
+    }
 }
