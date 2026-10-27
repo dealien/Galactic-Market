@@ -273,3 +273,8 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+## 2024-05-18 - Facility Expansion Logic Testing
+
+**Learning:** When testing facility expansion logic (e.g., building mines or refineries) in `sim::decisions`, ensure the `Company`'s `company_type` is either `"small_company"` or `"corporation"`. Types like `"conglomerate"` are intentionally excluded from the new facility scouting block and will silently bypass the branch, causing tests to mysteriously fail if you're not paying attention to the exact allowed enum/string types.
+
+**Action:** When setting up state structs for AI decision branches, explicitly double-check the allowed type string conditions at the start of the block, rather than assuming standard setup values will pass through.

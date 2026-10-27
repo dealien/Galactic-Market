@@ -2717,6 +2717,210 @@ mod tests {
         );
     }
 
+    /// Verifies that a corporation with sufficient cash and profitable margins will successfully build new mine and refinery facilities.
+    #[test]
+    fn test_company_constructs_new_mine_and_refinery() {
+        let mut state = SimState::default();
+
+        let cid = 100;
+        state.companies.insert(
+            cid,
+            Company {
+                id: cid,
+                name: "MegaCorp".into(),
+                company_type: "corporation".into(),
+                home_city_id: 1,
+                cash: 100000.0,
+                status: "active".into(),
+                debt: 0.0,
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                name: "Test City".into(),
+                body_id: 1,
+                population: 1000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
+
+        state.deposits.insert(
+            1,
+            crate::sim::state::Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1,
+                size_total: 10000,
+                size_remaining: 10000,
+                extraction_cost_per_unit: 5.0,
+            },
+        );
+
+        // For mining: ema - extraction_cost_per_unit = 10.0 - 5.0 = 5.0 ( > 1.0)
+        state.ema_prices.insert((1, 1), 10.0);
+
+        // For refinery: margin = out_price - 10.0 = 50.0 - 10.0 = 40.0 ( > 10.0)
+        state.ema_prices.insert((1, 2), 50.0);
+
+        state.recipes.insert(
+            1,
+            crate::sim::state::Recipe {
+                id: 1,
+                name: "Refining".into(),
+                facility_type: "refinery".into(),
+                output_resource_id: 2,
+                output_qty: 1,
+                labor_cost_per_run: 1.0,
+                inputs: vec![],
+            },
+        );
+
+        state.tick = 0;
+
+        let mut rng = rand::thread_rng();
+        super::run_decisions(&mut state, 0, &mut rng);
+
+        let mine_exists = state
+            .facilities
+            .values()
+            .any(|f| f.company_id == cid && f.facility_type == "mine" && f.city_id == 1);
+        let refinery_exists = state
+            .facilities
+            .values()
+            .any(|f| f.company_id == cid && f.facility_type == "refinery" && f.city_id == 1);
+
+        assert!(mine_exists, "Corporation did not build a mine");
+        assert!(refinery_exists, "Corporation did not build a refinery");
+
+        let company = state.companies.get(&cid).unwrap();
+        // 100000.0 - 5000.0 (mine) - 15000.0 (refinery) = 80000.0
+        assert_eq!(
+            company.cash, 80000.0,
+            "Cash should be deducted for construction"
+        );
+    }
+
+    /// Verifies that a corporation will skip building new mine and refinery facilities if it already owns them in the target city, even with sufficient cash and margins.
+    #[test]
+    fn test_company_skips_building_when_facility_exists() {
+        let mut state = SimState::default();
+
+        let cid = 100;
+        state.companies.insert(
+            cid,
+            Company {
+                id: cid,
+                name: "MegaCorp".into(),
+                company_type: "corporation".into(),
+                home_city_id: 1,
+                cash: 100000.0,
+                status: "active".into(),
+                debt: 0.0,
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                name: "Test City".into(),
+                body_id: 1,
+                population: 1000,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_fee_per_unit: 1.0,
+                port_max_throughput: 1000,
+                tax_collected_this_tick: 0.0,
+                population_growth_rate: 0.01,
+            },
+        );
+
+        state.deposits.insert(
+            1,
+            crate::sim::state::Deposit {
+                id: 1,
+                body_id: 1,
+                resource_type_id: 1,
+                size_total: 10000,
+                size_remaining: 10000,
+                extraction_cost_per_unit: 5.0,
+            },
+        );
+
+        state.ema_prices.insert((1, 1), 10.0);
+        state.ema_prices.insert((1, 2), 50.0);
+
+        state.recipes.insert(
+            1,
+            crate::sim::state::Recipe {
+                id: 1,
+                name: "Refining".into(),
+                facility_type: "refinery".into(),
+                output_resource_id: 2,
+                output_qty: 1,
+                labor_cost_per_run: 1.0,
+                inputs: vec![],
+            },
+        );
+
+        state.facilities.insert(
+            1,
+            crate::sim::state::Facility {
+                id: 1,
+                city_id: 1,
+                company_id: cid,
+                facility_type: "mine".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        state.facilities.insert(
+            2,
+            crate::sim::state::Facility {
+                id: 2,
+                city_id: 1,
+                company_id: cid,
+                facility_type: "refinery".into(),
+                capacity: 10,
+                setup_ticks_remaining: 0,
+                target_resource_id: None,
+                production_ratios: None,
+            },
+        );
+
+        state.tick = 0;
+
+        let mut rng = rand::thread_rng();
+        super::run_decisions(&mut state, 0, &mut rng);
+
+        let company = state.companies.get(&cid).unwrap();
+        // Since facilities already exist, it shouldn't deduct any cash
+        assert_eq!(
+            company.cash, 100000.0,
+            "Cash should not be deducted because facilities already exist"
+        );
+        assert_eq!(
+            state.facilities.len(),
+            2,
+            "No new facilities should be built"
+        );
+    }
+
     #[test]
     fn test_compute_merchant_opportunities_empty() {
         // Stage 2d: Verify opportunity computation works with minimal setup
