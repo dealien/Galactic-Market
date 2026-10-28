@@ -1761,4 +1761,63 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    /// Tests that orders with exactly 0 quantity trigger the 'Zero quantity match catch-all'
+    /// path and are successfully removed from the state to prevent infinite loops.
+    #[test]
+    fn test_clear_orders_with_zero_quantity_removes_orders() {
+        let mut state = setup_test_state();
+
+        // Setup buyer and seller with sufficient funds/inventory
+        state.companies.insert(1, make_company(1, 1000.0));
+        state.companies.insert(2, make_company(2, 1000.0));
+
+        state.inventories.insert(
+            Inventory::key(2, 1, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        // Buyer order: 0 quantity
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".into(),
+                order_kind: "limit".into(),
+                price: 15.0,
+                quantity: 0,
+                created_tick: 0,
+            },
+        );
+
+        // Seller order: 0 quantity
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".into(),
+                order_kind: "limit".into(),
+                price: 10.0,
+                quantity: 0,
+                created_tick: 0,
+            },
+        );
+
+        super::clear_orders(&mut state, 1);
+
+        // Assert orders were properly removed since zero quantity orders are eagerness-removed by `retain`
+        assert!(state.market_orders.get(&1).is_none());
+        assert!(state.market_orders.get(&2).is_none());
+    }
 }
