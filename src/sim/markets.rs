@@ -1817,7 +1817,7 @@ mod tests {
         super::clear_orders(&mut state, 1);
 
         // Assert orders were properly removed since zero quantity orders are eagerness-removed by `retain`
-        assert!(state.market_orders.get(&1).is_none());
-        assert!(state.market_orders.get(&2).is_none());
+        assert!(!state.market_orders.contains_key(&1));
+        assert!(!state.market_orders.contains_key(&2));
     }
 }
