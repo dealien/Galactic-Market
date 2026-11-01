@@ -371,6 +371,84 @@ pub fn clear_orders(state: &mut SimState, current_tick: u64) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_clear_orders_removes_zero_quantity_orders() {
+        let mut state = crate::sim::state::SimState::new();
+
+        state.companies.insert(
+            1,
+            crate::sim::state::Company {
+                id: 1,
+                name: "Buyer".to_string(),
+                company_type: "small_company".to_string(),
+                cash: 1000.0,
+                home_city_id: 1,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+
+        state.companies.insert(
+            2,
+            crate::sim::state::Company {
+                id: 2,
+                name: "Seller".to_string(),
+                company_type: "small_company".to_string(),
+                cash: 1000.0,
+                home_city_id: 1,
+                debt: 0.0,
+                next_eval_tick: 0,
+                status: "active".to_string(),
+                last_trade_tick: 0,
+            },
+        );
+        state.inventories.insert(
+            crate::sim::state::Inventory::key(2, 1, 1),
+            crate::sim::state::Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 1000,
+            },
+        );
+
+        // Ensure zero-quantity orders are cleanly removed by the catch-all defensive branch without panic
+        state.market_orders.insert(
+            1,
+            crate::sim::state::MarketOrder {
+                id: 1,
+                company_id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 0,
+                price: 10.0,
+                created_tick: 0,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            crate::sim::state::MarketOrder {
+                id: 2,
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "market".to_string(),
+                quantity: 0,
+                price: 10.0,
+                created_tick: 0,
+            },
+        );
+
+        crate::sim::markets::clear_orders(&mut state, 0);
+
+        assert!(state.market_orders.is_empty());
+    }
+
     use super::*;
     use crate::sim::state::{City, Company, Inventory, MarketOrder, SimState};
 
