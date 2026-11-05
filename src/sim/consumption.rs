@@ -42,6 +42,7 @@ const POPULATION_STARVATION_RATE: f64 = -0.005; // -0.5% per tick
 /// run_consumption(&mut state, 1);
 /// ```
 pub fn run_consumption(state: &mut SimState, current_tick: u64) {
+    // Snapshot last known prices for budgeting
 
     // ⚡ Bolt: Using direct immutable borrows on state.price_cache instead of cloning the entire HashMap to avoid O(N) allocation overhead in the hot path.
     // Identify target resource types (Refined and Consumer Goods)
