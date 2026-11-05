@@ -374,6 +374,92 @@ mod tests {
     use super::*;
     use crate::sim::state::{City, Company, Inventory, MarketOrder, SimState};
 
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = _setup_test_state();
+
+        // Setup companies in state explicitly so unwrap doesn't panic
+        state.companies.insert(
+            1,
+            Company {
+                id: 1,
+                company_type: "trade".to_string(),
+                name: "Buyer".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                status: "active".to_string(),
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            2,
+            Company {
+                id: 2,
+                company_type: "trade".to_string(),
+                name: "Seller".to_string(),
+                home_city_id: 1,
+                cash: 1000.0,
+                debt: 0.0,
+                status: "active".to_string(),
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+
+        state.inventories.insert(
+            Inventory::key(2, 1, 1),
+            Inventory {
+                company_id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                quantity: 100,
+            },
+        );
+
+        // Explicitly inject a MarketOrder with 0 quantity
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "buy".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 1,
+                quantity: 0, // This is the crucial part
+                price: 10.0,
+                created_tick: 1,
+            },
+        );
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                city_id: 1,
+                resource_type_id: 1,
+                order_type: "sell".to_string(),
+                order_kind: "limit".to_string(),
+                company_id: 2,
+                quantity: 10,
+                price: 5.0,
+                created_tick: 1,
+            },
+        );
+
+        clear_orders(&mut state, 2);
+
+        // Verify the 0 quantity buy order was processed and removed
+        assert!(!state.market_orders.contains_key(&1));
+        // Verify the sell order was not matched and remains fully in the order book.
+        let sell_order = state
+            .market_orders
+            .get(&2)
+            .expect("sell order should remain");
+        assert_eq!(sell_order.quantity, 10);
+    }
+
     fn make_company(id: i32, cash: f64) -> Company {
         Company {
             id,
