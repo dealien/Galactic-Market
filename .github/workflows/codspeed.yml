@@ -16,7 +16,7 @@ permissions:
 jobs:
   codspeed:
     name: Run benchmarks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - uses: actions/checkout@v4
@@ -32,7 +32,7 @@ jobs:
         run: cargo codspeed build
 
       - name: Run the benchmarks
-        uses: CodSpeedHQ/action@v2
+        uses: CodSpeedHQ/action@v3
         with:
           mode: simulation
           run: cargo codspeed run
