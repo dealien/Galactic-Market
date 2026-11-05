@@ -451,7 +451,7 @@ mod tests {
         clear_orders(&mut state, 2);
 
         // Verify the 0 quantity buy order was processed and removed
-        assert!(state.market_orders.get(&1).is_none());
+        assert!(!state.market_orders.contains_key(&1));
         // Verify the sell order was not matched and remains fully in the order book.
         let sell_order = state
             .market_orders
