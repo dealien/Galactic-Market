@@ -1848,7 +1848,7 @@ mod tests {
 
         // Verify the 0-quantity buy order was removed / processed
         assert!(
-            state.market_orders.get(&1).is_none(),
+            !state.market_orders.contains_key(&1),
             "0-quantity buy order should be removed"
         );
     }
