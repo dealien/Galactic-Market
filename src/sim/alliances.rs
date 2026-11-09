@@ -1380,4 +1380,86 @@ mod tests {
         let treaty = state.treaties.values().next().unwrap();
         assert_eq!(treaty.alliance_name, "- Accord");
     }
+
+    #[test]
+    fn test_has_conflicting_alliances_same_side() {
+        let mut state = setup_alliance_state();
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 3,
+                defender_id: 4,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![
+                    (3, "aggressor".to_string()),
+                    (1, "aggressor_ally".to_string()),
+                    (2, "aggressor_ally".to_string()),
+                ],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        assert!(
+            !has_conflicting_alliances(&state, 1, 2),
+            "Should not detect conflict when both are on the same side"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_opposite_sides() {
+        let mut state = setup_alliance_state();
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![(1, "aggressor".to_string()), (2, "defender".to_string())],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        assert!(
+            has_conflicting_alliances(&state, 1, 2),
+            "Should detect conflict when empires are on opposite sides of a war"
+        );
+    }
+
+    #[test]
+    fn test_has_conflicting_alliances_same_active_war() {
+        let mut state = setup_alliance_state();
+        state.wars.insert(
+            1,
+            crate::sim::state::War {
+                id: 1,
+                aggressor_id: 1,
+                defender_id: 2,
+                status: "active".to_string(),
+                start_tick: 0,
+                end_tick: None,
+                participants: vec![(1, "ally".to_string()), (2, "ally".to_string())],
+                theaters: vec![],
+                cumulative_losses: 0.0,
+                aggressor_exhaustion: 0.0,
+                defender_exhaustion: 0.0,
+            },
+        );
+
+        assert!(
+            has_conflicting_alliances(&state, 1, 2),
+            "Should detect conflict when empires are in same active war with unknown roles"
+        );
+    }
 }
