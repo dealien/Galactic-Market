@@ -278,6 +278,10 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** When testing facility expansion logic (e.g., building mines or refineries) in `sim::decisions`, ensure the `Company`'s `company_type` is either `"small_company"` or `"corporation"`. Types like `"conglomerate"` are intentionally excluded from the new facility scouting block and will silently bypass the branch, causing tests to mysteriously fail if you're not paying attention to the exact allowed enum/string types.
 **Action:** When setting up state structs for AI decision branches, explicitly double-check the allowed type string conditions at the start of the block, rather than assuming standard setup values will pass through.
 
+## 2025-01-20 - Ensure valid location hierarchies for logistics
+**Learning:** The `get_transport_info` function expects the origin and target cities to belong to existing celestial bodies and star systems, otherwise it panics or fails to return a valid route cost. Tests involving inter-city logistics must fully stub out `StarSystem` and `CelestialBody` entries and link `City.body_id` appropriately.
+**Action:** When testing shipping/logistics behavior, mock the complete entity chain (System -> Body -> City) for both origin and destination before invoking the simulation phase.
+
 ## 2024-10-24 - Zero-Cost Iterators
 **Learning:** In Rust, replacing idiomatic iterator chaining (e.g., `.filter().map().sum()`) with manual `for` loops is an anti-pattern for micro-optimization. Standard iterators are zero-cost abstractions that compile to highly optimized loops and often outperform manual loops by eliminating unnecessary bounds checks. Do not 'optimize' iterators out of code unless profilers specifically flag closure overhead.
 **Action:** Always measure before replacing idiomatic Rust iterators with manual loops, and recognize that `for` loops are rarely a performance fix for standard collection processing.
