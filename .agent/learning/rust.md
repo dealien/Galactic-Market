@@ -278,6 +278,14 @@ This journal tracks specific, architectural, and systemic learnings from working
 **Learning:** In the `run_decisions` tick loop hot path, caching mechanism elements such as `state.price_cache` should not be aggressively cloned via `let last_prices = last_known_prices(state);` on every tick. The state is only modified at the very end of the tick (or sequentially after other phases), so directly fetching from the pre-existing structure (`state.price_cache.get(&k)`) maintains semantic correctness while eliminating significant memory allocation overhead.
 **Action:** When working in tick loops, if you need to reference historical or semi-static data structures (like price caches) inside the hot path, do not clone them; instead, use direct references or `.get()` lookups from the existing state struct to avoid O(N) memory allocations per loop iteration.
 
+## 2024-10-24 - Zero-Cost Iterators
+**Learning:** In Rust, replacing idiomatic iterator chaining (e.g., `.filter().map().sum()`) with manual `for` loops is an anti-pattern for micro-optimization. Standard iterators are zero-cost abstractions that compile to highly optimized loops and often outperform manual loops by eliminating unnecessary bounds checks. Do not 'optimize' iterators out of code unless profilers specifically flag closure overhead.
+**Action:** Always measure before replacing idiomatic Rust iterators with manual loops, and recognize that `for` loops are rarely a performance fix for standard collection processing.
+
+## 2024-10-24 - Unnecessary Allocation Regressions
+**Learning:** When attempting to optimize functions returning complex types (like `Vec<(i32, f64)>`), do not substitute in-place modification of the target type with an intermediate allocation (like a separate `Vec<f64>` followed by zipping/merging). The secondary allocation and iteration loop introduces measurable performance regressions compared to modifying the pre-allocated final structure directly.
+**Action:** When pre-allocating memory for optimizations, ensure you are directly constructing the final return type, rather than an intermediate buffer that requires a subsequent allocation and mapping step.
+
 ## 2025-02-14 - Tested city tax missing hierarchy continue statements
 **Learning:** Testing the defensive `continue` checks inside the `process_city_taxes` loop required creating sparse entity hierarchy setups in `SimState` (e.g. City exists but Body/System/Sector doesn't), verifying that iteration skips properly.
 **Action:** When testing location hierarchy traversals, test the missing-parent fallback loops to cover edge case safety blocks by selectively omitting upstream records from the SimState structure.
