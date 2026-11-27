@@ -273,3 +273,6 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-18 - War Theater Production Penalty Testing
 **Learning:** To test the WAR_THEATER_PRODUCTION_PENALTY in production logic (where system ID is checked against a dynamically built HashSet of active war theaters), you must fully construct a `War` entity with `status = active` and manually append the target system ID to its `theaters` list. Otherwise, the penalty branch is entirely skipped.
 **Action:** When testing war modifiers outside the politics module, always inject a dummy active `War` entity with the relevant systems populated in its `theaters` vector.
+## 2025-02-14 - Tested city tax missing hierarchy continue statements
+**Learning:** Testing the defensive `continue` checks inside the `process_city_taxes` loop required creating sparse entity hierarchy setups in `SimState` (e.g. City exists but Body/System/Sector doesn't), verifying that iteration skips properly.
+**Action:** When testing location hierarchy traversals, test the missing-parent fallback loops to cover edge case safety blocks by selectively omitting upstream records from the SimState structure.
