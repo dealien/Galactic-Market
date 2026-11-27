@@ -16,8 +16,9 @@ permissions:
 jobs:
   codspeed:
     name: Run benchmarks
-    runs-on: ubuntu-latest
-
+    # CodSpeed simulation does not yet support Ubuntu 26.04.
+    runs-on: ubuntu-24.04
+    
     steps:
       - uses: actions/checkout@v4
 
