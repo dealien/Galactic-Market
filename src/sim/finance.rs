@@ -945,4 +945,144 @@ mod tests {
         let loan = state.loans.get(&1).unwrap();
         assert_eq!(loan.balance, 1050.0); // 1040 + 10 shortfall
     }
+
+    #[test]
+    fn test_process_city_taxes_skips_missing_hierarchy() {
+        use crate::sim::state::{CelestialBody, City, Sector, StarSystem};
+        let mut state = SimState::new();
+
+        // City 1: Missing Body
+        state.add_city_tax(1, 100.0);
+        state.cities.insert(
+            1,
+            City {
+                id: 1,
+                name: "City1".into(),
+                body_id: 1,
+                population: 10,
+                port_fee_per_unit: 1.0,
+                tax_collected_this_tick: 100.0,
+                population_growth_rate: 0.01,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_max_throughput: 1,
+            },
+        );
+
+        // City 2: Body exists, Missing System
+        state.add_city_tax(2, 100.0);
+        state.cities.insert(
+            2,
+            City {
+                id: 2,
+                name: "City2".into(),
+                body_id: 2,
+                population: 10,
+                port_fee_per_unit: 1.0,
+                tax_collected_this_tick: 100.0,
+                population_growth_rate: 0.01,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_max_throughput: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            2,
+            CelestialBody {
+                id: 2,
+                system_id: 2,
+                name: "b".into(),
+                fertility: 1.0,
+            },
+        );
+
+        // City 3: System exists, Missing Sector
+        state.add_city_tax(3, 100.0);
+        state.cities.insert(
+            3,
+            City {
+                id: 3,
+                name: "City3".into(),
+                body_id: 3,
+                population: 10,
+                port_fee_per_unit: 1.0,
+                tax_collected_this_tick: 100.0,
+                population_growth_rate: 0.01,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_max_throughput: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            3,
+            CelestialBody {
+                id: 3,
+                system_id: 3,
+                name: "c".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            3,
+            StarSystem {
+                id: 3,
+                sector_id: 3,
+                name: "s".into(),
+            },
+        );
+
+        // City 4: Complete hierarchy
+        state.add_city_tax(4, 100.0);
+        state.cities.insert(
+            4,
+            City {
+                id: 4,
+                name: "City4".into(),
+                body_id: 4,
+                population: 10,
+                port_fee_per_unit: 1.0,
+                tax_collected_this_tick: 100.0,
+                population_growth_rate: 0.01,
+                infrastructure_lvl: 1,
+                port_tier: 1,
+                port_max_throughput: 1,
+            },
+        );
+        state.celestial_bodies.insert(
+            4,
+            CelestialBody {
+                id: 4,
+                system_id: 4,
+                name: "d".into(),
+                fertility: 1.0,
+            },
+        );
+        state.star_systems.insert(
+            4,
+            StarSystem {
+                id: 4,
+                sector_id: 4,
+                name: "s".into(),
+            },
+        );
+        state.sectors.insert(
+            4,
+            Sector {
+                id: 4,
+                empire_id: 4,
+                name: "sec".into(),
+            },
+        );
+
+        super::process_city_taxes(&mut state);
+
+        // Empire 4 should have received 100.0
+        assert_eq!(
+            state.empire_treasuries.get(&4).copied().unwrap_or(0.0),
+            100.0
+        );
+
+        // The tax pools should be cleared
+        assert!(state.city_tax_pools.is_empty());
+    }
 }
