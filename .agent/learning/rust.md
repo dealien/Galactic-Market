@@ -281,3 +281,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-10-24 - Unnecessary Allocation Regressions
 **Learning:** When attempting to optimize functions returning complex types (like `Vec<(i32, f64)>`), do not substitute in-place modification of the target type with an intermediate allocation (like a separate `Vec<f64>` followed by zipping/merging). The secondary allocation and iteration loop introduces measurable performance regressions compared to modifying the pre-allocated final structure directly.
 **Action:** When pre-allocating memory for optimizations, ensure you are directly constructing the final return type, rather than an intermediate buffer that requires a subsequent allocation and mapping step.
+
+## 2025-02-14 - Tested city tax missing hierarchy continue statements
+**Learning:** Testing the defensive `continue` checks inside the `process_city_taxes` loop required creating sparse entity hierarchy setups in `SimState` (e.g. City exists but Body/System/Sector doesn't), verifying that iteration skips properly.
+**Action:** When testing location hierarchy traversals, test the missing-parent fallback loops to cover edge case safety blocks by selectively omitting upstream records from the SimState structure.
