@@ -1761,4 +1761,95 @@ mod tests {
         );
         assert_eq!(ema_down, 10.0 * 0.99);
     }
+
+    #[test]
+    fn test_zero_quantity_match_catch_all() {
+        let mut state = SimState::new();
+        let city_id = 101;
+        let res_id = 1;
+        let buy_company_id = 1001;
+        let sell_company_id = 1002;
+
+        // Setup companies
+        state.companies.insert(
+            buy_company_id,
+            Company {
+                id: buy_company_id,
+                home_city_id: city_id,
+                name: "Buyer".to_string(),
+                company_type: "merchant".to_string(),
+                cash: 1000.0,
+                debt: 0.0,
+                status: "active".to_string(),
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+        state.companies.insert(
+            sell_company_id,
+            Company {
+                id: sell_company_id,
+                home_city_id: city_id,
+                name: "Seller".to_string(),
+                company_type: "merchant".to_string(),
+                cash: 1000.0,
+                debt: 0.0,
+                status: "active".to_string(),
+                next_eval_tick: 0,
+                last_trade_tick: 0,
+            },
+        );
+
+        // Add inventory to seller
+        state.inventories.insert(
+            Inventory::key(sell_company_id, city_id, res_id),
+            Inventory {
+                company_id: sell_company_id,
+                city_id,
+                resource_type_id: res_id,
+                quantity: 100, // Explicitly > 0 to avoid lack-of-inventory catch
+            },
+        );
+
+        // Add a 0-quantity buy order
+        state.market_orders.insert(
+            1,
+            MarketOrder {
+                id: 1,
+                company_id: buy_company_id,
+                city_id,
+                resource_type_id: res_id,
+                order_kind: "buy".to_string(),
+                order_type: "market".to_string(),
+                price: 10.0,
+                quantity: 0,
+                created_tick: 1,
+            },
+        );
+
+        // Add a normal sell order that matches the price
+        state.market_orders.insert(
+            2,
+            MarketOrder {
+                id: 2,
+                company_id: sell_company_id,
+                city_id,
+                resource_type_id: res_id,
+                order_kind: "sell".to_string(),
+                order_type: "market".to_string(),
+                price: 10.0,
+                quantity: 5,
+                created_tick: 1,
+            },
+        );
+
+        // Run the market clearing
+        super::clear_orders(&mut state, 2);
+
+        // Verify the 0-quantity buy order was removed / processed
+        assert!(
+            !state.market_orders.contains_key(&1),
+            "0-quantity buy order should be removed"
+        );
+    }
 }

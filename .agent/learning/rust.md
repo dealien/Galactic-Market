@@ -277,3 +277,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-10-17 - Avoid cloning maps inside tick loops
 **Learning:** In the `run_decisions` tick loop hot path, caching mechanism elements such as `state.price_cache` should not be aggressively cloned via `let last_prices = last_known_prices(state);` on every tick. The state is only modified at the very end of the tick (or sequentially after other phases), so directly fetching from the pre-existing structure (`state.price_cache.get(&k)`) maintains semantic correctness while eliminating significant memory allocation overhead.
 **Action:** When working in tick loops, if you need to reference historical or semi-static data structures (like price caches) inside the hot path, do not clone them; instead, use direct references or `.get()` lookups from the existing state struct to avoid O(N) memory allocations per loop iteration.
+
+## 2025-02-14 - Tested city tax missing hierarchy continue statements
+**Learning:** Testing the defensive `continue` checks inside the `process_city_taxes` loop required creating sparse entity hierarchy setups in `SimState` (e.g. City exists but Body/System/Sector doesn't), verifying that iteration skips properly.
+**Action:** When testing location hierarchy traversals, test the missing-parent fallback loops to cover edge case safety blocks by selectively omitting upstream records from the SimState structure.
