@@ -43,8 +43,8 @@ const POPULATION_STARVATION_RATE: f64 = -0.005; // -0.5% per tick
 /// ```
 pub fn run_consumption(state: &mut SimState, current_tick: u64) {
     // Snapshot last known prices for budgeting
-    let last_prices = state.price_cache.clone();
 
+    // ⚡ Bolt: Using direct immutable borrows on state.price_cache instead of cloning the entire HashMap to avoid O(N) allocation overhead in the hot path.
     // Identify target resource types (Refined and Consumer Goods)
     let target_resource_ids: Vec<i32> = state
         .resource_types
@@ -120,7 +120,11 @@ pub fn run_consumption(state: &mut SimState, current_tick: u64) {
 
         for &res_id in &target_resource_ids {
             let res = &state.resource_types[&res_id];
-            let market_price = last_prices.get(&(city_id, res_id)).copied().unwrap_or(20.0);
+            let market_price = state
+                .price_cache
+                .get(&(city_id, res_id))
+                .copied()
+                .unwrap_or(20.0);
 
             // Consumers are willing to pay slightly above market to ensure fulfillment.
             // Spikes significantly during famine for vital resources (food, water).
