@@ -132,6 +132,9 @@ fn eval_interval_range(company_type: &str) -> (u64, u64) {
 /// run_decisions(&mut state, 1, &mut rng);
 /// ```
 pub fn run_decisions(state: &mut SimState, current_tick: u64, rng: &mut impl Rng) {
+    // Snapshot the last known clearing prices for decision-making
+
+    // ⚡ Bolt: Using direct immutable borrows on state.price_cache instead of cloning the entire HashMap to avoid O(N) allocation overhead in the hot path.
     // Collect company IDs that are due for re-evaluation
     let mut due: Vec<i32> = state
         .companies
