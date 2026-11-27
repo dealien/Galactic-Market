@@ -277,3 +277,7 @@ This journal tracks specific, architectural, and systemic learnings from working
 ## 2024-05-19 - Testing `Zero quantity match catch-all` in Market Clearing
 **Learning:** In the Galactic Market Simulator `markets.rs` module, there is a fallback block (`warn!("Zero quantity match catch-all; skipping buyer");`) designed to prevent infinite loops if an order somehow matches but the trade quantity resolves to 0 without triggering the lack-of-cash or lack-of-inventory void cases.
 **Action:** To test this defensive fallback block and improve test coverage, explicitly inject a `MarketOrder` with a strictly `0` quantity. Ensure that the buyer and seller `Company` objects in `state.companies` are fully initialized with sufficient `cash` (and `status="active"`), and the seller has sufficient inventory. This will force the matching loop to evaluate `qty == 0` and execute the catch-all branch. Ensure the test verifies that the 0-quantity order is skipped by the loop but the un-matched counterpart remains in the order book.
+
+## 2025-02-14 - Tested city tax missing hierarchy continue statements
+**Learning:** Testing the defensive `continue` checks inside the `process_city_taxes` loop required creating sparse entity hierarchy setups in `SimState` (e.g. City exists but Body/System/Sector doesn't), verifying that iteration skips properly.
+**Action:** When testing location hierarchy traversals, test the missing-parent fallback loops to cover edge case safety blocks by selectively omitting upstream records from the SimState structure.
